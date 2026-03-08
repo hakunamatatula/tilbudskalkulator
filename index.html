@@ -156,7 +156,7 @@
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
       <div>
         <div class="label">Valutakurs EUR/NOK</div>
-        <input type="number" id="valutakurs" value="" step="0.001" placeholder="Hentes fra Norges Bank" readonly style="background:#111;color:var(--gold);" oninput="calcQuick()" />
+        <input type="number" id="valutakurs" value="" step="0.001" placeholder="Hentes fra Norges Bank" style="background:#111;color:var(--gold);" oninput="calcQuick()" />
       </div>
       <div>
         <div class="label">Faktorpåslag</div>
@@ -298,11 +298,15 @@
     return n.toLocaleString('nb-NO', { minimumFractionDigits:2, maximumFractionDigits:2 });
   }
 
+  function parseNum(val) {
+    return parseFloat(String(val).replace(',', '.'));
+  }
+
   function calcQuick() {
-    const netto  = parseFloat(document.getElementById('qc-eur').value);
-    const rabatt = parseFloat(document.getElementById('qc-rabatt').value);
-    const kurs   = parseFloat(document.getElementById('valutakurs').value);
-    const faktor = parseFloat(document.getElementById('faktor').value);
+    const netto  = parseNum(document.getElementById('qc-eur').value);
+    const rabatt = parseNum(document.getElementById('qc-rabatt').value);
+    const kurs   = parseNum(document.getElementById('valutakurs').value);
+    const faktor = parseNum(document.getElementById('faktor').value);
 
     const resultDiv = document.getElementById('qc-result');
     if (!netto || !rabatt || !kurs || !faktor) { resultDiv.style.display = 'none'; return; }
@@ -352,20 +356,33 @@
     if (f) setFile(f);
   });
   fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
-  }
 
   // ── Valutakurs fra Norges Bank ──
   const RATE_CACHE_KEY = 'norwin_eur_rate';
   const RATE_DATE_KEY  = 'norwin_eur_date';
   let rateIsOfficial = false;
+  let FALLBACK_RATE = 11.20; // Oppdateres automatisk når offisiell kurs hentes
+
+  function saveRate(rate, date) {
+    try { localStorage.setItem(RATE_CACHE_KEY, rate); localStorage.setItem(RATE_DATE_KEY, date); } catch(e) {}
+    try { sessionStorage.setItem(RATE_CACHE_KEY, rate); sessionStorage.setItem(RATE_DATE_KEY, date); } catch(e) {}
+  }
+
+  function loadSavedRate() {
+    try {
+      const r = localStorage.getItem(RATE_CACHE_KEY) || sessionStorage.getItem(RATE_CACHE_KEY);
+      const d = localStorage.getItem(RATE_DATE_KEY)  || sessionStorage.getItem(RATE_DATE_KEY);
+      if (r) return { rate: r, date: d };
+    } catch(e) {}
+    return null;
+  }
 
   async function fetchNorgesBank() {
     const today = new Date().toISOString().split('T')[0];
-    const cachedDate = localStorage.getItem(RATE_DATE_KEY);
-    const cachedRate = localStorage.getItem(RATE_CACHE_KEY);
+    const saved = loadSavedRate();
 
-    if (cachedDate === today && cachedRate) {
-      setRateDisplay(parseFloat(cachedRate), true);
+    if (saved && saved.date === today) {
+      setRateDisplay(parseFloat(saved.rate), true);
       return;
     }
 
@@ -376,8 +393,8 @@
       const obs = data.data.dataSets[0].series['0:0:0:0'].observations;
       const keys = Object.keys(obs).sort((a,b)=>parseInt(a)-parseInt(b));
       const rate = parseFloat(obs[keys[keys.length-1]][0]);
-      localStorage.setItem(RATE_CACHE_KEY, rate);
-      localStorage.setItem(RATE_DATE_KEY, today);
+      saveRate(rate, today);
+      FALLBACK_RATE = rate;
       setRateDisplay(rate, true);
     } catch(e) {
       setRateDisplay(null, false);
@@ -390,51 +407,31 @@
     rateIsOfficial = official;
     if (official && rate) {
       input.value = rate;
-      input.readOnly = true;
       calcQuick();
-      input.style.color = 'var(--gold)';
-      input.style.background = '#111';
-      box.innerHTML = `<div class="rate-box rate-ok"><div class="rate-dot rate-dot-ok"></div><span>Offisiell kurs fra Norges Bank: <strong>${rate}</strong></span><span class="rate-override-link" onclick="openOverride()">Overstyr kurs</span></div>`;
+      box.innerHTML = `<div class="rate-box rate-ok"><div class="rate-dot rate-dot-ok"></div><span>Offisiell kurs fra Norges Bank: <strong>${rate}</strong></span><span class="rate-override-link" onclick="startOverride()">Overstyr</span></div>`;
     } else {
-      // Bruk siste kjente kurs fra localStorage hvis tilgjengelig
-      const lastRate = localStorage.getItem(RATE_CACHE_KEY);
-      const lastDate = localStorage.getItem(RATE_DATE_KEY);
-      if (lastRate) {
-        input.value = parseFloat(lastRate);
-        input.readOnly = false;
-        input.style.color = 'var(--gold)';
-        input.style.background = '#111';
-        calcQuick();
-        box.innerHTML = `<div class="rate-box rate-warn"><div class="rate-dot rate-dot-warn"></div><span>Dagskurs ikke hentet. Viser siste kjente kurs (${lastDate}): <strong>${lastRate}</strong></span><span class="rate-override-link" onclick="openOverride()">Overstyr kurs</span></div>`;
-      } else {
-        input.value = '';
-        input.readOnly = false;
-        input.style.color = 'var(--text)';
-        input.style.background = 'var(--bg2)';
-        box.innerHTML = `<div class="rate-box rate-warn"><div class="rate-dot rate-dot-warn"></div><span>Dagskurs ikke hentet. Fyll inn kursen manuelt eller <span class="rate-override-link" onclick="openOverride()">prøv å hente på nytt</span>.</span></div>`;
-      }
+      const saved = loadSavedRate();
+      const displayRate = saved ? parseFloat(saved.rate) : FALLBACK_RATE;
+      const displayDate = saved ? saved.date : 'ukjent dato';
+      input.value = displayRate;
+      calcQuick();
+      box.innerHTML = `<div class="rate-box rate-warn"><div class="rate-dot rate-dot-warn"></div><span>Dagskurs ikke hentet — viser siste kjente kurs (${displayDate}): <strong>${displayRate}</strong></span><span class="rate-override-link" onclick="startOverride()">Overstyr</span></div>`;
     }
   }
 
-  function openOverride() {
+  function startOverride() {
     const cur = document.getElementById('valutakurs').value;
-    document.getElementById('override-input').value = cur || '';
-    document.getElementById('override-modal').classList.add('show');
-  }
-  function closeOverride() {
-    document.getElementById('override-modal').classList.remove('show');
-  }
-  function confirmOverride() {
-    const val = parseFloat(document.getElementById('override-input').value);
+    const newVal = prompt('Skriv inn valutakurs EUR/NOK:', cur || '');
+    if (newVal === null) return;
+    const val = parseNum(newVal);
     if (!val || isNaN(val)) { alert('Ugyldig kurs'); return; }
     const input = document.getElementById('valutakurs');
     input.value = val;
-    input.readOnly = false;
-    input.style.color = 'var(--text)';
-    input.style.background = 'var(--bg2)';
+    calcQuick();
+    const today = new Date().toISOString().split('T')[0];
+    saveRate(val, today);
     const box = document.getElementById('rate-status-box');
-    box.innerHTML = `<div class="rate-box rate-warn"><div class="rate-dot rate-dot-warn"></div><span>Manuelt overstyrt kurs: <strong>${val}</strong></span><span class="rate-override-link" onclick="openOverride()">Endre</span></div>`;
-    closeOverride();
+    box.innerHTML = `<div class="rate-box rate-warn"><div class="rate-dot rate-dot-warn"></div><span>Manuelt overstyrt kurs: <strong>${val}</strong></span><span class="rate-override-link" onclick="startOverride()">Endre</span></div>`;
   }
 
   fetchNorgesBank();
@@ -480,8 +477,8 @@
     const errEl = document.getElementById('error-msg');
     errEl.textContent = '';
     if (!selectedFile) { errEl.textContent = 'Velg en PDF-fil først.'; return; }
-    const valutakurs = parseFloat(document.getElementById('valutakurs').value);
-    const faktor = parseFloat(document.getElementById('faktor').value);
+    const valutakurs = parseNum(document.getElementById('valutakurs').value);
+    const faktor = parseNum(document.getElementById('faktor').value);
     if (!valutakurs || !faktor) { errEl.textContent = 'Fyll inn valutakurs og faktorpåslag øverst på siden.'; return; }
 
     document.getElementById('form-area').style.display = 'none';
