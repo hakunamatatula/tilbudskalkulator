@@ -262,7 +262,7 @@
 
 
 <script>
-  const NORWIN_API_KEY = window.NORWIN_API_KEY || '';
+  const NORWIN_API_KEY = new URLSearchParams(window.location.search).get('key') || window.NORWIN_API_KEY || '';
 
 
   function setFile(f) {
