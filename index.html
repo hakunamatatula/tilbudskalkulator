@@ -155,8 +155,8 @@
     <div id="rate-status-box" style="margin-bottom:12px;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
       <div>
-        <div class="label">Valutakurs EUR/NOK</div>
-        <input type="number" id="valutakurs" value="" step="0.001" placeholder="Hentes fra Norges Bank" style="background:#111;color:var(--gold);" oninput="calcQuick()" />
+        <div class="label">Valutakurs EUR/NOK <span style="color:var(--dim);font-size:9px;">(redigerbar)</span></div>
+        <input type="number" id="valutakurs" value="11.20" step="0.001" placeholder="f.eks. 11.20" style="background:#111;color:var(--gold);" oninput="calcQuick()" />
       </div>
       <div>
         <div class="label">Faktorpåslag</div>
@@ -259,19 +259,7 @@
   <button class="reset-btn no-print" onclick="resetForm()">← &nbsp;Nytt tilbud</button>
 </div>
 
-<!-- Override modal -->
-<div class="modal-overlay" id="override-modal">
-  <div class="modal">
-    <h3>Overstyr valutakurs</h3>
-    <p>Norges Banks offisielle kurs er ikke hentet ennå i dag. Du kan legge inn kursen manuelt. Vil du fortsette?</p>
-    <div class="label" style="margin-bottom:5px;">EUR/NOK kurs</div>
-    <input type="number" id="override-input" step="0.001" placeholder="f.eks. 11.235" />
-    <div class="modal-btns">
-      <button class="modal-btn-cancel" onclick="closeOverride()">Avbryt</button>
-      <button class="modal-btn-confirm" onclick="confirmOverride()">Bruk denne kursen</button>
-    </div>
-  </div>
-</div>
+
 
 <script>
   const NORWIN_API_KEY = window.NORWIN_API_KEY || '';
