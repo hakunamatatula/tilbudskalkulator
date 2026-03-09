@@ -30,7 +30,7 @@
   .dropzone-icon { font-size:26px; margin-bottom:6px; }
   .dropzone-text { font-size:11px; color:var(--dim); letter-spacing:0.08em; }
   .dropzone.has-file .dropzone-text { color:var(--green); }
-  #file-input { display:none; }
+  #file-input, #file-input2 { display:none; }
   .btn { background:var(--gold); color:#0f0f0f; border:none; padding:13px 28px; font-family:'DM Mono',monospace; font-size:11px; font-weight:500; letter-spacing:0.14em; text-transform:uppercase; cursor:pointer; transition:all 0.2s; width:100%; }
   .btn:hover:not(:disabled) { background:var(--gold-light); }
   .btn:disabled { opacity:0.38; cursor:not-allowed; }
@@ -93,7 +93,7 @@
   .quick-calc-grid { display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end; }
   .quick-calc-grid input { background:#0f0f0f; border:1px solid #333; color:var(--text); padding:9px 12px; font-family:'DM Mono',monospace; font-size:12px; width:100%; outline:none; transition:border-color 0.2s; }
   .quick-calc-grid input:focus { border-color:var(--gold); }
-  .quick-calc-result { margin-top:16px; display:none; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .quick-calc-result { margin-top:16px; display:none; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
   .qc-card { background:#0f0f0f; border:1px solid #2a2a2a; padding:14px 16px; }
   .qc-card.highlight { border-color:var(--gold); }
   .qc-card .qc-label { font-size:9px; letter-spacing:0.2em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
@@ -158,34 +158,67 @@
         <div class="label">Valutakurs EUR/NOK <span style="color:var(--dim);font-size:9px;">(redigerbar)</span></div>
         <input type="number" id="valutakurs" value="11.20" step="0.001" placeholder="f.eks. 11.20" style="background:#111;color:var(--gold);" oninput="calcQuick()" />
       </div>
-      <div>
-        <div class="label">Faktorpåslag</div>
-        <input type="number" id="faktor" value="" step="0.1" placeholder="f.eks. 9" oninput="calcQuick()" />
-      </div>
     </div>
 
     <div class="quick-calc-title" style="margin-top:4px;">Hurtigkalkulator — Fortjeneste</div>
-    <div class="quick-calc-grid">
+
+    <!-- Produsent 1 -->
+    <div style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Tilbud fra produsent 1</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:16px;">
       <div>
         <div class="label">Totalsum fra leverandør (EUR)</div>
         <input type="number" id="qc-eur" placeholder="f.eks. 100 000" step="0.01" oninput="calcQuick()" />
       </div>
       <div>
         <div class="label">Rabatt fra leverandør %</div>
-        <input type="number" id="qc-rabatt" placeholder="f.eks. 45" step="0.1" oninput="calcQuick()" />
+        <input type="number" id="qc-rabatt" placeholder="f.eks. 40" step="0.1" oninput="calcQuick()" />
       </div>
-      <button class="qc-calc-btn" onclick="calcQuick()" style="grid-column:span 1;align-self:end;">Beregn</button>
+      <div>
+        <div class="label">Faktorpåslag</div>
+        <input type="number" id="faktor" placeholder="f.eks. 9" step="0.1" oninput="syncFaktor2(); calcQuick()" />
+      </div>
     </div>
+
+    <!-- Produsent 2 (valgfritt) -->
+    <div style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Tilbud fra produsent 2 <span style="color:var(--dim);font-size:9px;text-transform:none;letter-spacing:0;">(valgfritt)</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:16px;">
+      <div>
+        <div class="label">Totalsum fra leverandør (EUR)</div>
+        <input type="number" id="qc-eur2" placeholder="f.eks. 50 000" step="0.01" oninput="calcQuick()" />
+      </div>
+      <div>
+        <div class="label">Rabatt fra leverandør %</div>
+        <input type="number" id="qc-rabatt2" placeholder="f.eks. 45" step="0.1" oninput="calcQuick()" />
+      </div>
+      <div>
+        <div class="label">Faktorpåslag <span style="color:var(--dim);font-size:9px;">(kan overstyres)</span></div>
+        <input type="number" id="faktor2" placeholder="Som TP1" step="0.1" oninput="faktor2Dirty=true; calcQuick()" />
+      </div>
+    </div>
+
+    <button class="btn" onclick="calcQuick()" style="margin-bottom:16px;">◈ &nbsp;Beregn fortjeneste</button>
+
+    <!-- Resultat -->
     <div class="quick-calc-result" id="qc-result">
       <div class="qc-card">
-        <div class="qc-label">Kostpris NOK</div>
+        <div class="qc-label">Kostpris NOK (P1)</div>
         <div class="qc-val" id="qc-kostpris">—</div>
         <div class="qc-sub">Nettopris EUR × valutakurs</div>
+      </div>
+      <div class="qc-card" id="qc-card-p2" style="display:none;">
+        <div class="qc-label">Kostpris NOK (P2)</div>
+        <div class="qc-val" id="qc-kostpris2">—</div>
+        <div class="qc-sub">Nettopris EUR × valutakurs</div>
+      </div>
+      <div class="qc-card">
+        <div class="qc-label">Kostpris NOK (total)</div>
+        <div class="qc-val" id="qc-kostpris-tot">—</div>
+        <div class="qc-sub" id="qc-kostpris-tot-sub">P1 + P2</div>
       </div>
       <div class="qc-card">
         <div class="qc-label">Salgspris NOK (ekskl. MVA)</div>
         <div class="qc-val" id="qc-salgspris">—</div>
-        <div class="qc-sub">Faktor × listepris EUR (før rabatt)</div>
+        <div class="qc-sub" id="qc-salgspris-sub">Faktor × listepris EUR (P1+P2)</div>
       </div>
       <div class="qc-card highlight">
         <div class="qc-label">Fortjeneste</div>
@@ -198,9 +231,10 @@
   <div class="grid2">
     <!-- Venstre -->
     <div>
-      <div class="section-title">01 — Last opp filer fra produsent</div>
+      <div class="section-title">01 — Last opp tilbud fra produsent</div>
 
-      <div class="label" style="margin-bottom:6px;">Tilbud fra produsent (PDF)</div>
+      <!-- Tilbud 1 -->
+      <div class="label" style="margin-bottom:4px;">Tilbud fra produsent 1 <span style="color:var(--gold);font-size:9px;">(påkrevd)</span></div>
       <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
         <input type="file" id="file-input" accept=".pdf" />
         <div class="dropzone-icon" id="drop-icon">↑</div>
@@ -208,7 +242,14 @@
         <div style="font-size:9px;color:var(--dim);margin-top:2px;">PDF</div>
       </div>
 
-
+      <!-- Tilbud 2 (valgfritt) -->
+      <div class="label" style="margin-bottom:4px;">Tilbud fra produsent 2 <span style="color:var(--dim);font-size:9px;">(valgfritt)</span></div>
+      <div class="dropzone" id="dropzone2" onclick="document.getElementById('file-input2').click()">
+        <input type="file" id="file-input2" accept=".pdf" />
+        <div class="dropzone-icon" id="drop-icon2">↑</div>
+        <div class="dropzone-text" id="drop-text2">Dra og slipp eller klikk</div>
+        <div style="font-size:9px;color:var(--dim);margin-top:2px;">PDF</div>
+      </div>
 
     </div>
 
@@ -272,6 +313,13 @@
     document.getElementById('drop-text').textContent = f.name;
   }
 
+  function setFile2(f) {
+    selectedFile2 = f;
+    dropzone2.classList.add('has-file');
+    document.getElementById('drop-icon2').textContent = '✓';
+    document.getElementById('drop-text2').textContent = f.name;
+  }
+
   function fileToBase64(file) {
     return new Promise((res, rej) => {
       const r = new FileReader();
@@ -290,27 +338,58 @@
     return parseFloat(String(val).replace(',', '.'));
   }
 
+  let faktor2Dirty = false;
+
+  function syncFaktor2() {
+    if (faktor2Dirty) return; // brukeren har overstyrt manuelt
+    const f1 = document.getElementById('faktor').value;
+    document.getElementById('faktor2').value = f1;
+  }
+
   function calcQuick() {
-    const netto  = parseNum(document.getElementById('qc-eur').value);
-    const rabatt = parseNum(document.getElementById('qc-rabatt').value);
-    const kurs   = parseNum(document.getElementById('valutakurs').value);
-    const faktor = parseNum(document.getElementById('faktor').value);
+    const netto   = parseNum(document.getElementById('qc-eur').value);
+    const rabatt  = parseNum(document.getElementById('qc-rabatt').value);
+    const netto2  = parseNum(document.getElementById('qc-eur2').value);
+    const rabatt2 = parseNum(document.getElementById('qc-rabatt2').value);
+    const kurs    = parseNum(document.getElementById('valutakurs').value);
+    const faktor  = parseNum(document.getElementById('faktor').value);
+    const faktor2raw = document.getElementById('faktor2').value.trim();
+    const faktor2 = faktor2raw ? parseNum(faktor2raw) : faktor;
 
     const resultDiv = document.getElementById('qc-result');
-    if (!netto || !rabatt || !kurs || !faktor) { resultDiv.style.display = 'none'; return; }
+    if (!netto || isNaN(rabatt) || !kurs || !faktor) { resultDiv.style.display = 'none'; return; }
 
-    const listeprisEUR = netto;                              // Brutto listepris (før rabatt)
-    const nettoprisEUR = netto * (1 - rabatt / 100);         // Nettopris etter rabatt
-    const kostprisNOK  = nettoprisEUR * kurs;                // Kostpris = nettopris × kurs
-    const salgsprisNOK = faktor * listeprisEUR;              // Salgspris = faktor × listepris
-    const fortjeneste  = salgsprisNOK - kostprisNOK;
-    const fortProsent  = (fortjeneste / salgsprisNOK) * 100;
+    // Produsent 1
+    const nettoprisEUR1  = netto * (1 - (rabatt||0) / 100);
+    const kostprisNOK1   = nettoprisEUR1 * kurs;
+    const salgsprisNOK1  = faktor * netto;
 
-    document.getElementById('qc-kostpris').textContent   = 'kr ' + formatNOK(kostprisNOK);
-    document.getElementById('qc-salgspris').textContent  = 'kr ' + formatNOK(salgsprisNOK);
-    document.getElementById('qc-fortjeneste').textContent = 'kr ' + formatNOK(fortjeneste);
-    document.getElementById('qc-prosent').textContent    = fortProsent.toFixed(1) + ' % margin';
+    // Produsent 2 (valgfri)
+    const harP2 = netto2 && !isNaN(netto2);
+    const nettoprisEUR2  = harP2 ? netto2 * (1 - (rabatt2||0) / 100) : 0;
+    const kostprisNOK2   = harP2 ? nettoprisEUR2 * kurs : 0;
+    const salgsprisNOK2  = harP2 ? faktor2 * netto2 : 0;
 
+    const kostprisTot    = kostprisNOK1 + kostprisNOK2;
+    const salgsprisNOK   = salgsprisNOK1 + salgsprisNOK2;
+    const fortjeneste    = salgsprisNOK - kostprisTot;
+    const fortProsent    = (fortjeneste / salgsprisNOK) * 100;
+
+    // Oppdater subtext for salgspris for å vise faktorer
+    const salgsprisSub = harP2 && faktor2raw
+      ? `Faktor ${faktor} (P1) + faktor ${faktor2} (P2)`
+      : `Faktor ${faktor} × listepris EUR (P1${harP2 ? '+P2' : ''})`;
+
+    document.getElementById('qc-kostpris').textContent         = 'kr ' + formatNOK(kostprisNOK1);
+    document.getElementById('qc-kostpris2').textContent        = 'kr ' + formatNOK(kostprisNOK2);
+    document.getElementById('qc-kostpris-tot').textContent     = 'kr ' + formatNOK(kostprisTot);
+    document.getElementById('qc-kostpris-tot-sub').textContent = harP2 ? 'P1 + P2' : 'Kun P1';
+    document.getElementById('qc-salgspris').textContent        = 'kr ' + formatNOK(salgsprisNOK);
+    document.getElementById('qc-salgspris-sub').textContent    = salgsprisSub;
+    document.getElementById('qc-fortjeneste').textContent      = 'kr ' + formatNOK(fortjeneste);
+    document.getElementById('qc-prosent').textContent          = fortProsent.toFixed(1) + ' % margin';
+
+    document.getElementById('qc-card-p2').style.display = harP2 ? '' : 'none';
     resultDiv.style.display = 'grid';
   }
 
@@ -334,7 +413,10 @@
 
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('file-input');
+  const dropzone2 = document.getElementById('dropzone2');
+  const fileInput2 = document.getElementById('file-input2');
   let selectedFile = null;
+  let selectedFile2 = null;
 
   dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('over'); });
   dropzone.addEventListener('dragleave', () => dropzone.classList.remove('over'));
@@ -344,6 +426,15 @@
     if (f) setFile(f);
   });
   fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+  dropzone2.addEventListener('dragover', e => { e.preventDefault(); dropzone2.classList.add('over'); });
+  dropzone2.addEventListener('dragleave', () => dropzone2.classList.remove('over'));
+  dropzone2.addEventListener('drop', e => {
+    e.preventDefault(); dropzone2.classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f) setFile2(f);
+  });
+  fileInput2.addEventListener('change', () => { if (fileInput2.files[0]) setFile2(fileInput2.files[0]); });
 
   // ── Valutakurs fra Norges Bank ──
   const RATE_CACHE_KEY = 'norwin_eur_rate';
@@ -428,10 +519,16 @@
     document.getElementById('result').style.display = 'none';
     document.getElementById('form-area').style.display = 'block';
     selectedFile = null;
+    selectedFile2 = null;
+    faktor2Dirty = false;
     dropzone.classList.remove('has-file');
+    dropzone2.classList.remove('has-file');
     document.getElementById('drop-icon').textContent = '↑';
     document.getElementById('drop-text').textContent = 'Dra og slipp eller klikk';
+    document.getElementById('drop-icon2').textContent = '↑';
+    document.getElementById('drop-text2').textContent = 'Dra og slipp eller klikk';
     fileInput.value = '';
+    fileInput2.value = '';
     fetchNorgesBank();
   }
 
@@ -461,22 +558,7 @@
     return start > 0 ? fullText.slice(start, end) : fullText;
   }
 
-  async function runAgent() {
-    const errEl = document.getElementById('error-msg');
-    errEl.textContent = '';
-    if (!selectedFile) { errEl.textContent = 'Velg en PDF-fil først.'; return; }
-    const valutakurs = parseNum(document.getElementById('valutakurs').value);
-    const faktor = parseNum(document.getElementById('faktor').value);
-    if (!valutakurs || !faktor) { errEl.textContent = 'Fyll inn valutakurs og faktorpåslag øverst på siden.'; return; }
-
-    document.getElementById('form-area').style.display = 'none';
-    document.getElementById('loading').style.display = 'block';
-
-    try {
-      // Trekk ut tekst fra PDF med PDF.js
-      const pdfText = await extractPdfText(selectedFile);
-
-      const systemPrompt = `Du tolker pristilbud fra vindus-/dørprodusenter for Norwin AS.
+  const systemPrompt = `Du tolker pristilbud fra vindus-/dørprodusenter for Norwin AS.
 
 OVERSETTELSER (alltid norsk): chrome plated=forkrommet, restrictor=barnesikring, hinges=hengsler, handle=håndtak, threshold=terskel, composite=kompositt, Fingerjoint=Fingerskjøtet, white=hvit/hvite, painted=malt, glazing=glassforseglig, frame=ramme, sash=karm, trickle vent=ventil, friction stay=friksjonsstay, espag=espagnolette-lås.
 
@@ -498,17 +580,36 @@ Beregning: Kundepris NOK = Faktorpåslag × EUR listepris (direkte). MVA = NOK �
 Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 {"t":"tilbudsnr","d":"YYYY-MM-DD","r":45,"p":[{"n":1,"dim":"1150x1490mm","m2":1.71,"ant":1,"eur":1234.56,"nok":11111.04,"sum":11111.04,"s":[{"l":"Type","v":"Nord Casement vindu Kitted"},{"l":"Tresort","v":"Fingerskjøtet furu"},{"l":"Maling inne","v":"RAL 9010 Hvit"},{"l":"Maling ute","v":"RAL 9010 Hvit"},{"l":"Glass","v":"4TH/18Ar/4/18Ar/4TH"},{"l":"Beslag","v":"2x sidehengslet"},{"l":"Hengsler","v":"Hvite (Berlinerknop)"},{"l":"Brems","v":"Via håndtak"},{"l":"Barnesikring","v":"MILA 207357/8 (2stk)"},{"l":"Håndtak","v":"WH-T 30 ROCA Björkö forkrommet"},{"l":"Åpningsretning","v":"Utadslående"}]}],"eksMva":35271.18,"mva":8817.80,"tot":44088.98}`;
 
-      const userPrompt = `Analyser dette pristilbudet og konverter det til et kundetilbud.
+  async function runAgent() {
+    const errEl = document.getElementById('error-msg');
+    errEl.textContent = '';
+    if (!selectedFile) { errEl.textContent = 'Velg minst Tilbud fra produsent 1 (PDF).'; return; }
+    const valutakurs = parseNum(document.getElementById('valutakurs').value);
+    const faktor = parseNum(document.getElementById('faktor').value);
+    if (!valutakurs || !faktor) { errEl.textContent = 'Fyll inn valutakurs og faktorpåslag øverst på siden.'; return; }
+
+
+    document.getElementById('form-area').style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
+
+    try {
+      // Trekk ut tekst fra PDF 1
+      const pdfText1 = await extractPdfText(selectedFile);
+      const rabattInstr1 = 'Hent rabattprosenten fra selve dokumentet.';
+
+      // Bygg prompt for P1
+      const userPrompt1 = `Analyser dette pristilbudet (TILBUD FRA PRODUSENT 1) og konverter det til et kundetilbud.
 
 Parametere:
 - Valutakurs EUR/NOK: ${valutakurs}
 - Faktorpåslag: ${faktor}
+- ${rabattInstr1}
 
 Husk: Kundepris NOK = ${faktor} × EUR listepris (direkte).
-Hent rabattprosenten fra selve dokumentet.
 Returner kun JSON.`;
 
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      // Kall API for P1
+      const resp1 = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -521,26 +622,71 @@ Returner kun JSON.`;
           max_tokens: 2500,
           system: systemPrompt,
           messages: [{ role:'user', content:[
-            { type:'text', text: userPrompt + '\n\nTILBUDSTEKST:\n' + pdfText }
+            { type:'text', text: userPrompt1 + '\n\nTILBUDSTEKST:\n' + pdfText1 }
           ]}]
         })
       });
+      const data1 = await resp1.json();
+      if (data1.error) throw new Error(data1.error.message);
+      const raw1 = data1.content.map(i => i.text||'').join('');
+      const res1 = JSON.parse(raw1.replace(/```json|```/g,'').trim());
 
-      const data = await resp.json();
-      if (data.error) throw new Error(data.error.message);
-      const raw = data.content.map(i => i.text||'').join('');
-      const clean = raw.replace(/```json|```/g,'').trim();
-      const res = JSON.parse(clean);
+      let resFinal = res1;
+
+      // Hvis P2 er lastet opp — behandle og slå sammen
+      if (selectedFile2) {
+        const pdfText2 = await extractPdfText(selectedFile2);
+        const rabattInstr2 = 'Hent rabattprosenten fra selve dokumentet.';
+
+        const userPrompt2 = `Analyser dette pristilbudet (TILBUD FRA PRODUSENT 2) og konverter det til et kundetilbud.
+
+Parametere:
+- Valutakurs EUR/NOK: ${valutakurs}
+- Faktorpåslag: ${faktor}
+- ${rabattInstr2}
+
+Husk: Kundepris NOK = ${faktor} × EUR listepris (direkte).
+Returner kun JSON.`;
+
+        const resp2 = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': NORWIN_API_KEY,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 2500,
+            system: systemPrompt,
+            messages: [{ role:'user', content:[
+              { type:'text', text: userPrompt2 + '\n\nTILBUDSTEKST:\n' + pdfText2 }
+            ]}]
+          })
+        });
+        const data2 = await resp2.json();
+        if (data2.error) throw new Error(data2.error.message);
+        const raw2 = data2.content.map(i => i.text||'').join('');
+        const res2 = JSON.parse(raw2.replace(/```json|```/g,'').trim());
+
+        // Slå sammen produkter og summer fra P1 og P2
+        const alleProdukter = [...(res1.p||[]), ...(res2.p||[])];
+        const eksMva = (res1.eksMva||0) + (res2.eksMva||0);
+        const mva    = (res1.mva||0)    + (res2.mva||0);
+        const tot    = (res1.tot||0)    + (res2.tot||0);
+        resFinal = { ...res1, p: alleProdukter, eksMva, mva, tot };
+      }
 
       const selger = getSelger();
-      const kundeNavn = document.getElementById('kunde-navn').value;
+      const kundeNavn    = document.getElementById('kunde-navn').value;
       const kundeAdresse = document.getElementById('kunde-adresse').value;
-      const kundeMob = document.getElementById('kunde-mob').value;
-      const kundeEpost = document.getElementById('kunde-epost').value;
-      const prosjekt = document.getElementById('prosjekt').value;
-      const today = new Date().toLocaleDateString('nb-NO');
+      const kundeMob     = document.getElementById('kunde-mob').value;
+      const kundeEpost   = document.getElementById('kunde-epost').value;
+      const prosjekt     = document.getElementById('prosjekt').value;
+      const today        = new Date().toLocaleDateString('nb-NO');
 
-      renderOffer(res, { kundeNavn, kundeAdresse, kundeMob, kundeEpost, prosjekt, selger, today, imgB64s: [] });
+      renderOffer(resFinal, { kundeNavn, kundeAdresse, kundeMob, kundeEpost, prosjekt, selger, today, imgB64s: [] });
 
       document.getElementById('loading').style.display = 'none';
       document.getElementById('result').style.display = 'block';
