@@ -133,6 +133,40 @@
     body { background:white; padding:0; }
     .no-print { display:none !important; }
     .offer-doc { margin:0; padding:20px; max-width:100%; }
+    .header { display:none !important; }
+    #steps-info { display:none !important; }
+    .editable-val { border-bottom:none !important; outline:none !important; background:none !important; }
+    .edit-indicator { display:none !important; }
+    .edited-mark { display:none !important; }
+  }
+
+  /* Inline redigering */
+  .editable-val {
+    display:inline-block;
+    min-width:40px;
+    border-bottom:1px dashed #aaa;
+    cursor:text;
+    padding:1px 3px;
+    border-radius:2px;
+    transition:background 0.15s;
+  }
+  .editable-val:hover { background:#f0f4ff; }
+  .editable-val:focus { background:#fffbe6; outline:2px solid #1a3a5c; border-bottom:none; }
+  .edited-mark {
+    display:inline-block;
+    width:7px; height:7px;
+    background:#e07040;
+    border-radius:50%;
+    margin-left:5px;
+    vertical-align:middle;
+    flex-shrink:0;
+  }
+  .edit-indicator {
+    font-size:10px;
+    color:#888;
+    letter-spacing:0.05em;
+    margin-bottom:8px;
+    font-family:'DM Mono',monospace;
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -298,7 +332,8 @@
 
 <div id="result">
   <div class="offer-doc" id="offer-doc"></div>
-  <button class="print-btn no-print" onclick="window.print()">↓ &nbsp;Skriv ut / Lagre som PDF</button>
+  <button class="print-btn no-print" onclick="printWithTitle()">↓ &nbsp;Skriv ut / Lagre som PDF</button>
+  <button class="reset-btn no-print" onclick="lastNedLogg()" style="background:#1a1a1a;color:#c8a96e;border:1px solid #c8a96e;margin-top:6px;">↓ &nbsp;Last ned endringslogg</button>
   <button class="reset-btn no-print" onclick="resetForm()">← &nbsp;Nytt tilbud</button>
 </div>
 
@@ -306,6 +341,14 @@
 
 <script>
   const NORWIN_API_KEY = new URLSearchParams(window.location.search).get('key') || window.NORWIN_API_KEY || '';
+
+  function printWithTitle() {
+    const prosjekt = document.getElementById('prosjekt').value.trim();
+    const original = document.title;
+    if (prosjekt) document.title = prosjekt;
+    window.print();
+    document.title = original;
+  }
 
 
   function setFile(f) {
@@ -575,6 +618,7 @@
     selectedFile = null;
     selectedFile2 = null;
     faktor2Dirty = false;
+    endringslogg = [];
     dropzone.classList.remove('has-file');
     dropzone2.classList.remove('has-file');
     document.getElementById('drop-icon').textContent = '↑';
@@ -752,23 +796,82 @@ Returner kun JSON.`;
     }
   }
 
-  function renderSpecs(spek) {
+  // ── Endringslogg ──
+  let endringslogg = [];
+
+  function logEndring(produktNr, felt, fra, til) {
+    const selger = document.getElementById('selger').value.trim() || 'Ukjent';
+    const dato = new Date().toLocaleString('nb-NO');
+    endringslogg.push({ dato, selger, produktNr, felt, fra, til });
+  }
+
+  function lastNedLogg() {
+    if (endringslogg.length === 0) { alert('Ingen endringer er gjort.'); return; }
+    const selger = endringslogg[0].selger;
+    const prosjekt = document.getElementById('prosjekt').value.trim() || 'Ukjent prosjekt';
+    let txt = `ENDRINGSLOGG — ${prosjekt}\n`;
+    txt += `Selger: ${selger}\n`;
+    txt += `Generert: ${new Date().toLocaleString('nb-NO')}\n`;
+    txt += '═'.repeat(60) + '\n\n';
+    endringslogg.forEach(e => {
+      txt += `${e.dato}\n`;
+      txt += `Produkt: ${e.produktNr}  |  Felt: ${e.felt}\n`;
+      txt += `  FØR:   ${e.fra}\n`;
+      txt += `  ETTER: ${e.til}\n\n`;
+    });
+    const blob = new Blob([txt], { type:'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `endringslogg_${prosjekt.replace(/[^a-zA-Z0-9æøåÆØÅ\-_ ]/g,'')}.txt`;
+    a.click();
+  }
+
+  function renderSpecs(spek, produktNr) {
     if (!spek) return '';
+    let rader = [];
     if (Array.isArray(spek)) {
-      // Compact {l,v} format
       if (spek.length > 0 && 'l' in spek[0]) {
-        return spek.filter(s=>s.v).map(s=>
-          `<div class="spec-row"><span class="spec-label">${s.l}:</span><span class="spec-val">${s.v}</span></div>`
-        ).join('');
+        rader = spek.filter(s=>s.v);
+      } else {
+        rader = spek.filter(s=>s.verdi).map(s=>({ l:s.label, v:s.verdi }));
       }
-      // Legacy {label,verdi} format
-      return spek.filter(s=>s.verdi).map(s=>
-        `<div class="spec-row"><span class="spec-label">${s.label}:</span><span class="spec-val">${s.verdi}</span></div>`
-      ).join('');
+    } else {
+      rader = Object.entries(spek).filter(([k,v])=>v).map(([k,v])=>({ l:k, v }));
     }
-    return Object.entries(spek).filter(([k,v])=>v).map(([k,v])=>
-      `<div class="spec-row"><span class="spec-label">${k}:</span><span class="spec-val">${v}</span></div>`
-    ).join('');
+    return rader.map(s => {
+      const id = `spec_${produktNr}_${s.l.replace(/\s+/g,'_')}`;
+      return `<div class="spec-row" style="display:flex;align-items:baseline;gap:4px;">
+        <span class="spec-label">${s.l}:</span>
+        <span class="spec-val editable-val"
+          contenteditable="true"
+          data-original="${s.v.replace(/"/g,'&quot;')}"
+          data-felt="${s.l}"
+          data-produkt="${produktNr}"
+          id="${id}"
+          onblur="sjekkEndring(this)"
+          title="Klikk for å redigere">${s.v}</span>
+        <span class="edited-mark" id="mark_${id}" style="display:none;"></span>
+      </div>`;
+    }).join('');
+  }
+
+  function sjekkEndring(el) {
+    const original = el.getAttribute('data-original');
+    const ny = el.innerText.trim();
+    const markId = 'mark_' + el.id;
+    const markEl = document.getElementById(markId);
+    if (ny !== original && ny !== '') {
+      if (!el.getAttribute('data-logged-from')) {
+        el.setAttribute('data-logged-from', original);
+      }
+      const fra = el.getAttribute('data-logged-from');
+      logEndring(el.getAttribute('data-produkt'), el.getAttribute('data-felt'), fra, ny);
+      el.setAttribute('data-logged-from', ny);
+      if (markEl) markEl.style.display = 'inline-block';
+    } else if (ny === original) {
+      el.removeAttribute('data-logged-from');
+      if (markEl) markEl.style.display = 'none';
+    }
   }
 
   function renderOffer(res, info) {
@@ -795,12 +898,13 @@ Returner kun JSON.`;
       <div class="product-section">
         <div class="product-header">Produkt ${i+1} — ${p.dim||p.dimensjon||''} &nbsp;|&nbsp; ${p.m2||''} m² &nbsp;|&nbsp; Antall: ${p.ant||p.antall||1} stk.</div>
         <div style="border:1px solid #dde2ea;border-top:none;">
-          <div class="product-body">${renderSpecs(p.s||p.spesifikasjoner)}</div>
+          <div class="product-body">${renderSpecs(p.s||p.spesifikasjoner, i+1)}</div>
         </div>
       </div>`;
     }).join('');
 
     document.getElementById('offer-doc').innerHTML = `
+      <div class="edit-indicator no-print" style="margin-bottom:4px;">✎ Klikk på en verdi i tilbudet for å redigere den direkte. Oransje prikk markerer endrede felt.</div>
       <div class="offer-top">
         <div class="offer-logo"><img src="${IMG_LOGO}" alt="Norwin logo" /></div>
         <div class="offer-title-block">
