@@ -53,7 +53,7 @@
   .customer-block .cb-label { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.1em; }
   .customer-block .cb-val { font-size:13px; font-weight:600; color:#111; }
   .product-section { margin-bottom:20px; }
-  .product-header { background:#1a3a5c; color:#fff; padding:8px 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0; }
+  .product-header { background:#1a3a5c; color:#fff; padding:8px 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .product-body { border:1px solid #dde2ea; border-top:none; padding:14px; font-size:12px; display:grid; grid-template-columns:1fr 1fr; gap:6px; }
   .product-body .spec-row { display:flex; gap:6px; }
   .product-body .spec-label { color:#888; min-width:100px; }
@@ -177,12 +177,60 @@
     flex-shrink:0;
   }
   /* Alternativ posisjon - grå/inaktiv */
-  .product-header-alt { background:#9aa5b4; color:#fff; padding:8px 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; }
-  .alt-badge { display:inline-block; background:#6b7a8d; color:#fff; font-size:9px; font-weight:700; letter-spacing:0.15em; padding:2px 7px; margin-left:8px; vertical-align:middle; }
-  .alt-note { background:#f0f2f5; border:1px solid #c0c8d4; color:#6b7a8d; font-size:11px; padding:6px 10px; font-style:italic; }
-  .product-section-alt { opacity:0.7; }
-  /* Kommentarfelt */
-  .comment-field { border-top:1px dashed #dde2ea; padding:8px 14px 10px; }
+  .product-header-alt { background:#9aa5b4; color:#fff; padding:8px 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .alt-badge { display:inline-block; background:#6b7a8d; color:#fff; font-size:9px; font-weight:700; letter-spacing:0.15em; padding:2px 7px; margin-left:8px; vertical-align:middle; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .alt-note { background:#f0f2f5; border:1px solid #c0c8d4; color:#6b7a8d; font-size:11px; padding:6px 10px; font-style:italic; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .product-section-alt { opacity:0.7; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  /* Fane-navigasjon */
+  .tab-nav {
+    display:flex; gap:0;
+    border-bottom:2px solid var(--accent);
+    margin-bottom:0;
+  }
+  .tab-btn {
+    padding:11px 28px;
+    font-family:'Source Sans 3',sans-serif;
+    font-size:14px; font-weight:700;
+    letter-spacing:0.06em; text-transform:uppercase;
+    border:none; border-bottom:none;
+    cursor:pointer;
+    background:var(--bg3);
+    color:var(--muted);
+    border-radius:6px 6px 0 0;
+    margin-right:4px;
+    transition:background 0.15s, color 0.15s;
+  }
+  .tab-btn.active {
+    background:var(--accent);
+    color:#fff;
+  }
+  .tab-btn:not(.active):hover {
+    background:#dde4ef;
+    color:var(--accent);
+  }
+  .product-layout { display:flex; align-items:flex-start; gap:0; }
+  .product-skisse {
+    width:210px; min-width:210px; max-width:210px;
+    padding:10px 8px;
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    border-right:1px solid #dde2ea;
+    background:#fafbfc;
+  }
+  .product-skisse.alt-skisse { border-right-color:#c0c8d4; background:#f4f5f7; }
+  .product-skisse img { width:100%; height:185px; display:block; object-fit:contain; object-position:center center; }
+  .skisse-override-btn {
+    font-size:10px; color:#888; background:none; border:1px dashed #ccc;
+    border-radius:3px; padding:3px 7px; cursor:pointer; width:100%;
+    font-family:'Source Sans 3',sans-serif;
+  }
+  .skisse-override-btn:hover { color:#1a3a5c; border-color:#1a3a5c; }
+  .skisse-missing {
+    width:100%; aspect-ratio:3/4; background:#f0f2f5;
+    border:1px dashed #ccc; border-radius:4px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:9px; color:#aaa; text-align:center; padding:4px;
+  }
+  .product-content { flex:1; min-width:0; }
   .comment-label { font-size:9px; letter-spacing:0.15em; text-transform:uppercase; color:#aaa; margin-bottom:3px; }
   .comment-val { min-height:22px; font-size:12px; color:#555; font-style:italic; }
   .comment-val:empty::before { content:'Klikk for å legge til kommentar...'; color:#ccc; font-style:italic; }
@@ -250,7 +298,7 @@
     border-radius:4px;
   }
   @media print {
-    body { background:white; padding:0; margin:0; }
+    body { background:white; padding:0; margin:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .no-print { display:none !important; }
     #run-btn { display:none !important; }
     .btn { display:none !important; }
@@ -270,6 +318,10 @@
     .hide-prices .sum-col { display:none !important; }
     .hide-prices .totals-block { display:none !important; }
     .margin-panel { display:none !important; }
+    /* Skisse-kolonne i print: skjul override-knapp, behold layout */
+    .skisse-override-btn { display:none !important; }
+    .product-skisse { border-right-color:#ddd !important; background:#fff !important; padding:6px 6px; }
+    .product-skisse.alt-skisse { background:#f8f9fb !important; }
     /* Fjern nettleserens automatiske URL og sidetall i topp/bunn */
     @page {
       size: A4;
@@ -338,146 +390,149 @@
 
 <div class="no-print" id="form-area">
 
-  <!-- Felles parametere + Hurtigkalkulator -->
-  <div class="quick-calc">
-    <div class="quick-calc-title">Beregningsparametere</div>
+  <!-- Fane-navigasjon -->
+  <div class="tab-nav">
+    <button class="tab-btn active" id="tab-btn-tilbud" onclick="byttFane('tilbud')">Tilbudskalkulator</button>
+    <button class="tab-btn" id="tab-btn-hurtig" onclick="byttFane('hurtig')">Hurtigkalkulator</button>
+  </div>
+
+  <!-- Felles: Valutakurs (alltid synlig) -->
+  <div class="quick-calc" style="border-radius:0 0 6px 6px;margin-top:0;">
     <div id="rate-status-box" style="margin-bottom:12px;"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+    <div style="display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:end;">
       <div>
         <div class="label">Valutakurs EUR/NOK <span style="color:var(--muted);font-size:12px;font-weight:400;">(redigerbar)</span></div>
         <input type="number" id="valutakurs" value="11.20" step="0.001" placeholder="f.eks. 11.20" style="font-weight:700;color:var(--accent);font-size:18px;" oninput="calcQuick()" />
       </div>
     </div>
+  </div>
 
-    <div class="quick-calc-title" style="margin-top:4px;">Hurtigkalkulator — Fortjeneste</div>
-
-    <!-- Produsent 1 -->
-    <div style="font-size:13px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:0.08em;">Tilbud fra produsent 1</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:16px;">
+  <!-- FANE: Tilbudskalkulator -->
+  <div id="fane-tilbud">
+    <div class="grid2" style="margin-top:0;">
+      <!-- Venstre -->
       <div>
-        <div class="label">Totalsum fra leverandør (EUR)</div>
-        <input type="number" id="qc-eur" placeholder="f.eks. 100 000" step="0.01" oninput="calcQuick()" />
+        <div class="section-title">01 — Last opp tilbud fra produsent</div>
+        <div class="label" style="margin-bottom:4px;">Tilbud fra produsent 1 <span style="color:var(--gold);font-size:9px;">(påkrevd)</span></div>
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+          <input type="file" id="file-input" accept=".pdf" />
+          <div class="dropzone-icon" id="drop-icon">↑</div>
+          <div class="dropzone-text" id="drop-text">Dra og slipp eller klikk</div>
+          <div style="font-size:9px;color:var(--dim);margin-top:2px;">PDF</div>
+        </div>
+        <div class="label" style="margin-bottom:4px;">Tilbud fra produsent 2 <span style="color:var(--dim);font-size:9px;">(valgfritt)</span></div>
+        <div class="dropzone" id="dropzone2" onclick="document.getElementById('file-input2').click()">
+          <input type="file" id="file-input2" accept=".pdf" />
+          <div class="dropzone-icon" id="drop-icon2">↑</div>
+          <div class="dropzone-text" id="drop-text2">Dra og slipp eller klikk</div>
+          <div style="font-size:9px;color:var(--dim);margin-top:2px;">PDF</div>
+        </div>
       </div>
+      <!-- Høyre -->
       <div>
-        <div class="label">Rabatt fra leverandør %</div>
-        <input type="number" id="qc-rabatt" placeholder="f.eks. 40" step="0.1" oninput="calcQuick()" />
-      </div>
-      <div>
-        <div class="label">Faktorpåslag (kun hurtigkalk.)</div>
-        <input type="number" id="faktor" placeholder="f.eks. 9" step="0.1" oninput="syncFaktor2(); calcQuick()" />
+        <div class="section-title">02 — Kundeinformasjon</div>
+        <div class="field"><div class="label">Kundenavn</div><input type="text" id="kunde-navn" placeholder="" /></div>
+        <div class="field"><div class="label">Adresse</div><input type="text" id="kunde-adresse" placeholder="" /></div>
+        <div class="field"><div class="label">Mobil</div><input type="text" id="kunde-mob" placeholder="" /></div>
+        <div class="field"><div class="label">E-post</div><input type="email" id="kunde-epost" placeholder="" /></div>
+        <div class="field"><div class="label">Prosjektnavn</div><input type="text" id="prosjekt" placeholder="" /></div>
+        <div class="field" style="margin-top:6px;">
+          <div class="label">Selger</div>
+          <div class="datalist-wrap" style="position:relative;display:flex;">
+            <input type="text" id="selger" placeholder="Velg eller skriv navn" autocomplete="off"
+              style="flex:1;"
+              oninput="filterSelger(this.value, false)"
+              onblur="setTimeout(()=>document.getElementById('selger-dropdown').style.display='none',150)"
+              onfocus="filterSelger(this.value, true)"
+              onkeydown="selgerKeyNav(event)" />
+            <button type="button"
+              style="background:var(--bg3);border:2px solid var(--border);border-left:none;color:var(--muted);padding:0 12px;cursor:pointer;font-size:14px;border-radius:0 4px 4px 0;"
+              onmousedown="event.preventDefault(); const i=document.getElementById('selger'); i.focus(); filterSelger(i.value, true);">▾</button>
+            <div id="selger-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:2px solid var(--accent);z-index:100;border-radius:0 0 4px 4px;box-shadow:0 4px 12px rgba(0,0,0,0.12);"></div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Produsent 2 (valgfritt) -->
-    <div style="font-size:13px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:0.08em;">Tilbud fra produsent 2 <span style="color:var(--dim);font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;">(valgfritt)</span></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:16px;">
-      <div>
-        <div class="label">Totalsum fra leverandør (EUR)</div>
-        <input type="number" id="qc-eur2" placeholder="f.eks. 50 000" step="0.01" oninput="calcQuick()" />
-      </div>
-      <div>
-        <div class="label">Rabatt fra leverandør %</div>
-        <input type="number" id="qc-rabatt2" placeholder="f.eks. 45" step="0.1" oninput="calcQuick()" />
-      </div>
-      <div>
-        <div class="label">Faktorpåslag <span style="color:var(--dim);font-size:12px;">(kan overstyres)</span></div>
-        <input type="number" id="faktor2" placeholder="Som TP1" step="0.1" oninput="faktor2Dirty=true; calcQuick()" />
-      </div>
-    </div>
+    <button class="btn" id="run-btn" onclick="runAgent()">→ &nbsp;Generer kundetilbud</button>
+    <div class="error" id="error-msg"></div>
 
-    <button class="btn" onclick="calcQuick()" style="margin-bottom:16px;">◈ &nbsp;Beregn fortjeneste</button>
-
-    <!-- Resultat -->
-    <div class="quick-calc-result" id="qc-result">
-      <div class="qc-card">
-        <div class="qc-label">Kostpris NOK (P1)</div>
-        <div class="qc-val" id="qc-kostpris">—</div>
-        <div class="qc-sub">Nettopris EUR × valutakurs</div>
-      </div>
-      <div class="qc-card" id="qc-card-p2" style="display:none;">
-        <div class="qc-label">Kostpris NOK (P2)</div>
-        <div class="qc-val" id="qc-kostpris2">—</div>
-        <div class="qc-sub">Nettopris EUR × valutakurs</div>
-      </div>
-      <div class="qc-card">
-        <div class="qc-label">Kostpris NOK (total)</div>
-        <div class="qc-val" id="qc-kostpris-tot">—</div>
-        <div class="qc-sub" id="qc-kostpris-tot-sub">P1 + P2</div>
-      </div>
-      <div class="qc-card">
-        <div class="qc-label">Salgspris NOK (ekskl. MVA)</div>
-        <div class="qc-val" id="qc-salgspris">—</div>
-        <div class="qc-sub" id="qc-salgspris-sub">Faktor × listepris EUR (P1+P2)</div>
-      </div>
-      <div class="qc-card highlight">
-        <div class="qc-label">Fortjeneste</div>
-        <div class="qc-val" id="qc-fortjeneste">—</div>
-        <div class="qc-sub" id="qc-prosent">— %</div>
-      </div>
+    <div class="steps" id="steps-info">
+      <div><div class="step-num">01</div><div class="step-title">Last opp</div><div class="step-desc">Last opp tilbudet fra produsenten som PDF</div></div>
+      <div><div class="step-num">02</div><div class="step-title">Kundeinformasjon</div><div class="step-desc">Fyll inn kunde, prosjekt og velg selger</div></div>
+      <div><div class="step-num">03</div><div class="step-title">Generer</div><div class="step-desc">Analyserer tilbudet og beregner kundepriser automatisk</div></div>
     </div>
   </div>
 
-  <div class="grid2">
-    <!-- Venstre -->
-    <div>
-      <div class="section-title">01 — Last opp tilbud fra produsent</div>
+  <!-- FANE: Hurtigkalkulator -->
+  <div id="fane-hurtig" style="display:none;">
+    <div class="quick-calc" style="margin-top:16px;">
+      <div class="quick-calc-title">Hurtigkalkulator — Fortjeneste</div>
 
-      <!-- Tilbud 1 -->
-      <div class="label" style="margin-bottom:4px;">Tilbud fra produsent 1 <span style="color:var(--gold);font-size:9px;">(påkrevd)</span></div>
-      <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
-        <input type="file" id="file-input" accept=".pdf" />
-        <div class="dropzone-icon" id="drop-icon">↑</div>
-        <div class="dropzone-text" id="drop-text">Dra og slipp eller klikk</div>
-        <div style="font-size:9px;color:var(--dim);margin-top:2px;">PDF</div>
+      <div style="font-size:13px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:0.08em;">Tilbud fra produsent 1</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:16px;">
+        <div>
+          <div class="label">Totalsum fra leverandør (EUR)</div>
+          <input type="number" id="qc-eur" placeholder="f.eks. 100 000" step="0.01" oninput="calcQuick()" />
+        </div>
+        <div>
+          <div class="label">Rabatt fra leverandør %</div>
+          <input type="number" id="qc-rabatt" placeholder="f.eks. 40" step="0.1" oninput="calcQuick()" />
+        </div>
+        <div>
+          <div class="label">Faktorpåslag</div>
+          <input type="number" id="faktor" placeholder="f.eks. 9" step="0.1" oninput="syncFaktor2(); calcQuick()" />
+        </div>
       </div>
 
-      <!-- Tilbud 2 (valgfritt) -->
-      <div class="label" style="margin-bottom:4px;">Tilbud fra produsent 2 <span style="color:var(--dim);font-size:9px;">(valgfritt)</span></div>
-      <div class="dropzone" id="dropzone2" onclick="document.getElementById('file-input2').click()">
-        <input type="file" id="file-input2" accept=".pdf" />
-        <div class="dropzone-icon" id="drop-icon2">↑</div>
-        <div class="dropzone-text" id="drop-text2">Dra og slipp eller klikk</div>
-        <div style="font-size:9px;color:var(--dim);margin-top:2px;">PDF</div>
+      <div style="font-size:13px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:0.08em;">Tilbud fra produsent 2 <span style="color:var(--dim);font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;">(valgfritt)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:16px;">
+        <div>
+          <div class="label">Totalsum fra leverandør (EUR)</div>
+          <input type="number" id="qc-eur2" placeholder="f.eks. 50 000" step="0.01" oninput="calcQuick()" />
+        </div>
+        <div>
+          <div class="label">Rabatt fra leverandør %</div>
+          <input type="number" id="qc-rabatt2" placeholder="f.eks. 45" step="0.1" oninput="calcQuick()" />
+        </div>
+        <div>
+          <div class="label">Faktorpåslag <span style="color:var(--dim);font-size:12px;">(kan overstyres)</span></div>
+          <input type="number" id="faktor2" placeholder="Som TP1" step="0.1" oninput="faktor2Dirty=true; calcQuick()" />
+        </div>
       </div>
 
-    </div>
+      <button class="btn" onclick="calcQuick()" style="margin-bottom:16px;">◈ &nbsp;Beregn fortjeneste</button>
 
-    <!-- Høyre -->
-    <div>
-      <div class="section-title">02 — Kundeinformasjon</div>
-      <div class="field"><div class="label">Kundenavn</div><input type="text" id="kunde-navn" placeholder="" /></div>
-      <div class="field"><div class="label">Adresse</div><input type="text" id="kunde-adresse" placeholder="" /></div>
-      <div class="field"><div class="label">Mobil</div><input type="text" id="kunde-mob" placeholder="" /></div>
-      <div class="field"><div class="label">E-post</div><input type="email" id="kunde-epost" placeholder="" /></div>
-      <div class="field"><div class="label">Prosjektnavn</div><input type="text" id="prosjekt" placeholder="" /></div>
-      <div class="field" style="margin-top:6px;">
-        <div class="label">Selger</div>
-        <div class="datalist-wrap" style="position:relative;display:flex;">
-          <input type="text" id="selger" placeholder="Velg eller skriv navn" autocomplete="off"
-            style="flex:1;"
-            oninput="filterSelger(this.value, false)"
-            onblur="setTimeout(()=>document.getElementById('selger-dropdown').style.display='none',150)"
-            onfocus="filterSelger(this.value, true)"
-            onkeydown="selgerKeyNav(event)" />
-          <button type="button"
-            style="background:var(--bg3);border:2px solid var(--border);border-left:none;color:var(--muted);padding:0 12px;cursor:pointer;font-size:14px;border-radius:0 4px 4px 0;"
-            onmousedown="event.preventDefault(); const i=document.getElementById('selger'); i.focus(); filterSelger(i.value, true);">▾</button>
-          <div id="selger-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:2px solid var(--accent);z-index:100;border-radius:0 0 4px 4px;box-shadow:0 4px 12px rgba(0,0,0,0.12);"></div>
+      <div class="quick-calc-result" id="qc-result">
+        <div class="qc-card">
+          <div class="qc-label">Kostpris NOK (P1)</div>
+          <div class="qc-val" id="qc-kostpris">—</div>
+          <div class="qc-sub">Nettopris EUR × valutakurs</div>
+        </div>
+        <div class="qc-card" id="qc-card-p2" style="display:none;">
+          <div class="qc-label">Kostpris NOK (P2)</div>
+          <div class="qc-val" id="qc-kostpris2">—</div>
+          <div class="qc-sub">Nettopris EUR × valutakurs</div>
+        </div>
+        <div class="qc-card">
+          <div class="qc-label">Kostpris NOK (total)</div>
+          <div class="qc-val" id="qc-kostpris-tot">—</div>
+          <div class="qc-sub" id="qc-kostpris-tot-sub">P1 + P2</div>
+        </div>
+        <div class="qc-card">
+          <div class="qc-label">Salgspris NOK (ekskl. MVA)</div>
+          <div class="qc-val" id="qc-salgspris">—</div>
+          <div class="qc-sub" id="qc-salgspris-sub">Faktor × listepris EUR</div>
+        </div>
+        <div class="qc-card highlight">
+          <div class="qc-label">Fortjeneste</div>
+          <div class="qc-val" id="qc-fortjeneste">—</div>
+          <div class="qc-sub" id="qc-prosent">— %</div>
         </div>
       </div>
     </div>
   </div>
 
-  </div><!-- end grid2 -->
-
-  <button class="btn" id="run-btn" onclick="runAgent()">→ &nbsp;Generer kundetilbud</button>
-  <div class="error" id="error-msg"></div>
-
-  <div class="steps" id="steps-info">
-    <div><div class="step-num">01</div><div class="step-title">Last opp</div><div class="step-desc">Last opp tilbudet fra produsenten som PDF</div></div>
-    <div><div class="step-num">02</div><div class="step-title">Kundeinformasjon</div><div class="step-desc">Fyll inn kunde, prosjekt og velg selger</div></div>
-    <div><div class="step-num">03</div><div class="step-title">Generer</div><div class="step-desc">Analyserer tilbudet og beregner kundepriser automatisk</div></div>
-  </div>
 </div>
 
 <div class="loading no-print" id="loading">
@@ -948,24 +1003,78 @@ ${klon.outerHTML}
     return start > 0 ? fullText.slice(start, end) : fullText;
   }
 
-  // Rendrer hver PDF-side til canvas og returnerer base64-bilder (én per side)
-  async function extractPdfPageImages(file, scale = 1.5) {
+  // Rendrer hver PDF-side og klipper ut skissen fra venstre marg (~30% av sidebredden)
+  // Deretter trimmes hvit/tom kantplass automatisk slik at skissen fyller bildet
+  async function extractPdfSkisser(file, scale = 2.0) {
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const images = [];
+    const skisser = [];
     for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale });
-      const canvas = document.createElement('canvas');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext('2d');
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      images.push(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      try {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width  = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        // Grov crop: venstre 30%, hopp over topp 32% og bunn 32%
+        // Side 1 har kundeinformasjonsblokk øverst som tar ekstra plass
+        // Øvrige sider starter direkte med produktnummer
+        const erFørsteSide = (i === 1);
+        let cropX, cropY, cropW, cropH;
+        if (erFørsteSide) {
+          cropX = 0;
+          cropY = Math.floor(viewport.height * 0.32);
+          cropW = Math.floor(viewport.width  * 0.30);
+          cropH = Math.floor(viewport.height * 0.36);
+        } else {
+          // Side 2+: snevert crop rundt kun selve vindustegningen
+          // Basert på HCTC PDF-layout: skissen sitter ca. 13-48% av sidens høyde
+          cropX = 0;
+          cropY = Math.floor(viewport.height * 0.13);
+          cropW = Math.floor(viewport.width  * 0.26);
+          cropH = Math.floor(viewport.height * 0.35);
+        }
+
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width  = cropW;
+        cropCanvas.height = cropH;
+        const cropCtx = cropCanvas.getContext('2d');
+        cropCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+        // Auto-trim: fjern hvit kant rundt skissen
+        const imgData = cropCtx.getImageData(0, 0, cropW, cropH);
+        const d = imgData.data;
+        const isNearWhite = (r, g, b) => r > 235 && g > 235 && b > 235;
+        let top = 0, bottom = cropH - 1, left = 0, right = cropW - 1;
+        outer:  for (let y = 0; y < cropH; y++) { for (let x = 0; x < cropW; x++) { const idx=(y*cropW+x)*4; if(!isNearWhite(d[idx],d[idx+1],d[idx+2])){top=y;break outer;}}}
+        outer2: for (let y = cropH-1; y >= 0; y--) { for (let x = 0; x < cropW; x++) { const idx=(y*cropW+x)*4; if(!isNearWhite(d[idx],d[idx+1],d[idx+2])){bottom=y;break outer2;}}}
+        outer3: for (let x = 0; x < cropW; x++) { for (let y = 0; y < cropH; y++) { const idx=(y*cropW+x)*4; if(!isNearWhite(d[idx],d[idx+1],d[idx+2])){left=x;break outer3;}}}
+        outer4: for (let x = cropW-1; x >= 0; x--) { for (let y = 0; y < cropH; y++) { const idx=(y*cropW+x)*4; if(!isNearWhite(d[idx],d[idx+1],d[idx+2])){right=x;break outer4;}}}
+        const pad = 8;
+        const trimX = Math.max(0, left - pad);
+        const trimY = Math.max(0, top - pad);
+        const trimW = Math.min(cropW, right - left + 1 + pad * 2);
+        const trimH = Math.min(cropH, bottom - top + 1 + pad * 2);
+
+        const normSize = 400;
+        const normCanvas = document.createElement('canvas');
+        normCanvas.width = normSize; normCanvas.height = normSize;
+        const normCtx = normCanvas.getContext('2d');
+        normCtx.fillStyle = '#ffffff'; normCtx.fillRect(0,0,normSize,normSize);
+        const fs = Math.min((normSize*0.90)/trimW, (normSize*0.90)/trimH);
+        const dw = trimW*fs, dh = trimH*fs;
+        normCtx.drawImage(cropCanvas, trimX, trimY, trimW, trimH, (normSize-dw)/2, (normSize-dh)/2, dw, dh);
+        skisser.push(normCanvas.toDataURL('image/png').split(',')[1]);
+      } catch(e) {
+        skisser.push(null);
+      }
     }
-    return images; // array av base64 JPEG strings
+    return skisser;
   }
 
   const systemPrompt = `Du tolker pristilbud fra vindus-/dørprodusenter for Norwin AS.
@@ -1113,7 +1222,11 @@ Returner kun JSON.`;
       window._valutakurs   = valutakurs;
       window._faktorTilbud = faktorTilbud;
 
-      renderOffer(resFinal, { kundeNavn, kundeAdresse, kundeMob, kundeEpost, prosjekt, selger, today, imgB64s: [] });
+      // Hent skisser fra P1-PDF (én per side = én per produkt)
+      let skisser = [];
+      try { skisser = await extractPdfSkisser(selectedFile); } catch(e) {}
+
+      renderOffer(resFinal, { kundeNavn, kundeAdresse, kundeMob, kundeEpost, prosjekt, selger, today, skisser });
 
       document.getElementById('loading').style.display = 'none';
       document.getElementById('result').style.display = 'block';
@@ -1127,7 +1240,39 @@ Returner kun JSON.`;
     }
   }
 
-  // ── Endringslogg ──
+  function byttFane(fane) {
+    document.getElementById('fane-tilbud').style.display = fane === 'tilbud' ? '' : 'none';
+    document.getElementById('fane-hurtig').style.display = fane === 'hurtig' ? '' : 'none';
+    document.getElementById('tab-btn-tilbud').classList.toggle('active', fane === 'tilbud');
+    document.getElementById('tab-btn-hurtig').classList.toggle('active', fane === 'hurtig');
+  }
+
+  // ── Skisse-override: selger kan erstatte automatisk hentet skisse med eget bilde ──
+  function byttSkisse(idx, input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const container = document.getElementById('skisse_container_' + idx);
+      if (!container) return;
+      // Finn eller opprett img-element
+      let img = document.getElementById('skisse_' + idx);
+      if (!img) {
+        // Erstatt "Ingen skisse"-div med img
+        const missing = container.querySelector('.skisse-missing');
+        if (missing) missing.remove();
+        img = document.createElement('img');
+        img.id = 'skisse_' + idx;
+        img.alt = 'Teknisk skisse produkt ' + (idx+1);
+        img.style.width = '100%';
+        img.style.height = 'auto';
+        img.style.display = 'block';
+        container.insertBefore(img, container.querySelector('label'));
+      }
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
   let endringslogg = [];
 
   function logEndring(produktNr, felt, fra, til) {
@@ -1146,7 +1291,7 @@ Returner kun JSON.`;
     txt += '═'.repeat(60) + '\n\n';
     endringslogg.forEach(e => {
       txt += `${e.dato}\n`;
-      txt += `Produkt: ${e.produktNr}  |  Felt: ${e.felt}\n`;
+      txt += `Posisjon: ${e.produktNr}  |  Felt: ${e.felt}\n`;
       txt += `  FØR:   ${e.fra}\n`;
       txt += `  ETTER: ${e.til}\n\n`;
     });
@@ -1361,39 +1506,56 @@ Returner kun JSON.`;
       const prisLinje = `
         <div style="border-top:1px solid ${erAlt?'#d0d5dd':'#eee'};padding:8px 14px;display:flex;gap:24px;font-size:12px;background:${erAlt?'#f4f5f7':'#f9fbff'};" class="price-col">
           <span><span style="color:#888;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Enhetspris</span><br>
-            ${erAlt
-              ? `<strong style="color:#6b7a8d;">kr ${formatNOK(nokVal)}</strong>`
-              : `kr <span class="editable-val pris-val" contenteditable="true" data-original="${nokVal}" data-ant="${ant}" data-eur="${p.eur||0}" data-alt="${erAlt}" data-produkt="Produkt ${i+1}" data-felt="Pris NOK" id="pris_${i}" title="Klikk for å endre pris" onblur="oppdaterPris(${i}, this)">${formatNOK(nokVal)}</span><span class="edited-mark" id="mark_pris_${i}" style="display:none;"></span>`
-            }
+            kr <span class="editable-val pris-val" contenteditable="true" data-original="${nokVal}" data-ant="${ant}" data-eur="${p.eur||0}" data-alt="${erAlt}" data-produkt="Posisjon ${i+1}" data-felt="Pris NOK" id="pris_${i}" title="Klikk for å endre pris" onblur="oppdaterPris(${i}, this)" style="${erAlt?'color:#6b7a8d;':''}">${formatNOK(nokVal)}</span><span class="edited-mark" id="mark_pris_${i}" style="display:none;"></span>
           </span>
           <span><span style="color:#888;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Totalpris (${ant} stk.)</span><br>
             <strong style="${erAlt?'color:#6b7a8d;':''}" id="${erAlt ? 'altsum_'+i : 'sum_'+i}">kr ${formatNOK(nokVal * ant)}</strong>
             ${erAlt ? '<span style="font-size:9px;color:#9aa5b4;margin-left:4px;">ikke i sluttsum</span>' : ''}
           </span>
-          ${!erAlt ? `<span class="no-print" style="margin-left:auto;"><span style="color:#888;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Faktor</span><br>
-            <span class="faktor-val" contenteditable="true" id="faktor_${i}" data-eur="${p.eur||0}" data-ant="${ant}" data-alt="false" data-produkt="Produkt ${i+1}" title="Endre faktor" onblur="oppdaterFaktor(${i}, this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">${faktorGlobal}</span>
-          </span>` : ''}
+          <span class="no-print" style="margin-left:auto;"><span style="color:#888;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Faktor</span><br>
+            <span class="faktor-val" contenteditable="true" id="faktor_${i}" data-eur="${p.eur||0}" data-ant="${ant}" data-alt="${erAlt}" data-produkt="Posisjon ${i+1}" title="Endre faktor" onblur="oppdaterFaktor(${i}, this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" style="${erAlt?'color:#6b7a8d;':''}">${faktorGlobal}</span>
+          </span>
         </div>`;
+      const skisseB64 = (info.skisser || [])[i] || null;
+      const skisseId  = `skisse_${i}`;
+      const skisseHTML = `
+        <div class="product-skisse${erAlt?' alt-skisse':''}" id="skisse_container_${i}">
+          ${skisseB64
+            ? `<img id="${skisseId}" src="data:image/png;base64,${skisseB64}" alt="Teknisk skisse produkt ${i+1}" />`
+            : `<div class="skisse-missing">Ingen skisse</div>`
+          }
+          <label class="skisse-override-btn no-print" title="Last opp eget bilde">
+            ↑ Bytt bilde
+            <input type="file" accept="image/*" style="display:none"
+              onchange="byttSkisse(${i}, this)">
+          </label>
+        </div>`;
+
       return `
       <div class="product-section${erAlt?' product-section-alt':''}">
         <div class="${headerKlasse}">
-          Produkt ${i+1} — ${p.dim||p.dimensjon||''} &nbsp;|&nbsp; ${p.m2||''} m² &nbsp;|&nbsp; Antall: ${ant} stk.
+          Posisjon ${i+1} — ${p.dim||p.dimensjon||''} &nbsp;|&nbsp; ${p.m2||''} m² &nbsp;|&nbsp; Antall: ${ant} stk.
           ${erAlt ? '<span class="alt-badge" style="margin-left:8px;">ALTERNATIV</span>' : ''}
         </div>
         ${altBanner}
         <div style="border:1px solid ${erAlt?'#c0c8d4':'#dde2ea'};border-top:none;${erAlt?'background:#f8f9fb;':''}">
-          <div class="product-body">${renderSpecs(p.s||p.spesifikasjoner, i+1)}</div>
-          ${prisLinje}
-          <div class="comment-field">
-            <div class="comment-label no-print">Kommentar</div>
-            <div class="comment-val editable-val"
-              contenteditable="true"
-              data-produkt="Produkt ${i+1}"
-              data-felt="Kommentar"
-              data-original=""
-              id="kommentar_${i}"
-              onblur="sjekkEndring(this)"
-              title="Klikk for å legge til kommentar"></div>
+          <div class="product-layout">
+            ${skisseHTML}
+            <div class="product-content">
+              <div class="product-body">${renderSpecs(p.s||p.spesifikasjoner, i+1)}</div>
+              ${prisLinje}
+              <div class="comment-field">
+                <div class="comment-label no-print">Kommentar</div>
+                <div class="comment-val editable-val"
+                  contenteditable="true"
+                  data-produkt="Posisjon ${i+1}"
+                  data-felt="Kommentar"
+                  data-original=""
+                  id="kommentar_${i}"
+                  onblur="sjekkEndring(this)"
+                  title="Klikk for å legge til kommentar"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>`;
@@ -1422,7 +1584,7 @@ Returner kun JSON.`;
               data-eur="${p.eur||0}"
               data-ant="${ant}"
               data-alt="false"
-              data-produkt="Produkt ${origIdx+1}"
+              data-produkt="Posisjon ${origIdx+1}"
               title="Endre faktorpåslag"
               onblur="oppdaterFaktor(${origIdx}, this)"
               onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
@@ -1437,7 +1599,7 @@ Returner kun JSON.`;
             data-ant="${ant}"
             data-eur="${p.eur||0}"
             data-alt="false"
-            data-produkt="Produkt ${origIdx+1}"
+            data-produkt="Posisjon ${origIdx+1}"
             data-felt="Pris NOK"
             id="pris_${origIdx}"
             title="Klikk for å endre NOK-pris"
