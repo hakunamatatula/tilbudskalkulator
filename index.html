@@ -54,10 +54,10 @@
   .customer-block .cb-val { font-size:13px; font-weight:600; color:#111; }
   .product-section { margin-bottom:20px; }
   .product-header { background:#1a3a5c; color:#fff; padding:8px 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .product-body { border:1px solid #dde2ea; border-top:none; padding:14px; font-size:12px; display:grid; grid-template-columns:1fr 1fr; gap:6px; }
-  .product-body .spec-row { display:flex; gap:6px; }
-  .product-body .spec-label { color:#888; min-width:100px; }
-  .product-body .spec-val { color:#111; font-weight:500; }
+  .product-body { border:1px solid #dde2ea; border-top:none; padding:14px; font-size:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; }
+  .product-body .spec-row { display:flex; gap:6px; align-items:baseline; min-width:0; }
+  .product-body .spec-label { color:#888; min-width:90px; max-width:90px; flex-shrink:0; font-size:11px; }
+  .product-body .spec-val { color:#111; font-weight:500; word-break:break-word; overflow-wrap:break-word; min-width:0; }
   .product-img { border:1px solid #dde2ea; border-top:none; padding:10px; text-align:center; }
   .product-img img { max-height:120px; max-width:200px; object-fit:contain; }
   .price-table { width:100%; border-collapse:collapse; margin-bottom:20px; font-size:12px; }
@@ -1102,12 +1102,12 @@ KUNDEINFORMASJON: Hent følgende fra dokumentet og legg i JSON-rotnivå:
 
 TILBUDSNUMMER: Hent tilbudsnummeret fra dokumentet (f.eks. "TILBUD Nr. 322529-1" eller "322529-1" øverst). Legg i feltet "t".
 
-ALTERNATIVPOSISJONER: Hvis en posisjon er merket "Alternative position (not included in total sum of the offer)" eller tilsvarende, sett "alt":true på den posisjonen. Disse posisjonene skal IKKE inkluderes i eksMva/mva/tot — kun hovedposisjonene telles med. Eur/nok/sum skal likevel beregnes og returneres for alternativposisjonene.
+ALTERNATIVPOSISJONER: Hvis en posisjon er merket "Alternative position (not included in total sum of the offer)" eller tilsvarende, sett "alt":true på den posisjonen. Disse posisjonene skal IKKE inkluderes i eksMva/mva/tot — kun hovedposisjonene telles med. Eur/nok/sum skal likevel beregnes og returneres for alternativposisjonene. VIKTIG: Alternativposisjoner skal ha FULLSTENDIG spesifikasjonsliste "s" — samme detaljer som ikke-alternative posisjoner. Ikke forkorte eller utelate spesifikasjoner for alternativposisjoner.
 
 BEREGNING: Kundepris NOK = Faktorpåslag × EUR listepris (direkte, ingen rabatt trekkes fra NOK-beregningen). MVA = NOK × 0.25. eksMva/mva/tot = kun sum av ikke-alternative posisjoner.
 
 Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
-{"t":"322529-1","d":"2026-03-13","r":40,"kunde":"Norwin AS","kontakt":"Per Schiotz","kadr":"Hortensveien 273, 3157 BARKÅKER","mob":"90583823","epost":"per@norwin.no","prosjekt":"Nordbø Einar Eikje","p":[{"n":1,"dim":"800x1100mm","m2":0.88,"ant":2,"eur":960.07,"nok":8640.63,"sum":17281.26,"alt":false,"s":[{"l":"Type","v":"Casement vindu kitted (45x115)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 9010 Hvit"},{"l":"Maling ute","v":"RAL 9010 Hvit"},{"l":"Glass","v":"4/20Ar/4TH"},{"l":"Beslag","v":"2x sidehengslet"},{"l":"Hengsler","v":"Hvite hengsler (RAL9010)"},{"l":"Brems","v":"Via håndtak"},{"l":"Håndtak","v":"WH-T 30 ROCA Björkö forkrommet"},{"l":"Sprosser","v":"24mm limt (duplex) UT: kitt INN: rund"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Nosis","v":"Nosis 30x40mm 800mm, festet til rammen"}]},{"n":2,"dim":"800x1100mm","m2":0.88,"ant":2,"eur":1123.07,"nok":10107.63,"sum":20215.26,"alt":true,"s":[{"l":"Type","v":"Nord Casement vindu kitted (48x115)"},{"l":"Glass","v":"4/18Ar/4ESG.TH/18Ar/4TH (3-lags)"}]}],"eksMva":17281.26,"mva":4320.32,"tot":21601.58}`;
+{"t":"322529-1","d":"2026-03-13","r":40,"kunde":"Norwin AS","kontakt":"Per Schiotz","kadr":"Hortensveien 273, 3157 BARKÅKER","mob":"90583823","epost":"per@norwin.no","prosjekt":"Nordbø Einar Eikje","p":[{"n":1,"dim":"800x1100mm","m2":0.88,"ant":2,"eur":960.07,"nok":8640.63,"sum":17281.26,"alt":false,"s":[{"l":"Type","v":"Casement vindu kitted (45x115)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 9010 Hvit"},{"l":"Maling ute","v":"RAL 9010 Hvit"},{"l":"Glass","v":"4/20Ar/4TH"},{"l":"Beslag","v":"2x sidehengslet"},{"l":"Hengsler","v":"Hvite hengsler (RAL9010)"},{"l":"Brems","v":"Via håndtak"},{"l":"Håndtak","v":"WH-T 30 ROCA Björkö forkrommet"},{"l":"Sprosser","v":"24mm limt (duplex) UT: kitt INN: rund"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Nosis","v":"Nosis 30x40mm 800mm, festet til rammen"}]},{"n":2,"dim":"800x1100mm","m2":0.88,"ant":2,"eur":1123.07,"nok":10107.63,"sum":20215.26,"alt":true,"s":[{"l":"Type","v":"Nord Casement vindu kitted (48x115)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 9010 Hvit"},{"l":"Maling ute","v":"RAL 9010 Hvit"},{"l":"Glass","v":"4/18Ar/4ESG.TH/18Ar/4TH (3-lags)"},{"l":"Beslag","v":"2x sidehengslet"},{"l":"Hengsler","v":"Hvite hengsler (RAL9010)"},{"l":"Brems","v":"Via håndtak"},{"l":"Håndtak","v":"WH-T 30 ROCA Björkö forkrommet"},{"l":"Sprosser","v":"24mm limt (duplex) UT: kitt INN: rund"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Nosis","v":"Nosis 30x40mm 800mm, festet til rammen"}]}],"eksMva":17281.26,"mva":4320.32,"tot":21601.58}`;
 
   async function runAgent() {
     const errEl = document.getElementById('error-msg');
@@ -1150,7 +1150,7 @@ Returner kun JSON.`;
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 2500,
+          max_tokens: 4000,
           system: systemPrompt,
           messages: [{ role:'user', content:[
             { type:'text', text: userPrompt1 + '\n\nTILBUDSTEKST:\n' + pdfText1 }
@@ -1188,7 +1188,7 @@ Returner kun JSON.`;
           },
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
-            max_tokens: 2500,
+            max_tokens: 4000,
             system: systemPrompt,
             messages: [{ role:'user', content:[
               { type:'text', text: userPrompt2 + '\n\nTILBUDSTEKST:\n' + pdfText2 }
