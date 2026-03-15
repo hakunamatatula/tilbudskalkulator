@@ -54,10 +54,10 @@
   .customer-block .cb-val { font-size:13px; font-weight:600; color:#111; }
   .product-section { margin-bottom:20px; }
   .product-header { background:#1a3a5c; color:#fff; padding:8px 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .product-body { border:1px solid #dde2ea; border-top:none; padding:14px; font-size:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; }
-  .product-body .spec-row { display:flex; gap:6px; align-items:baseline; min-width:0; }
-  .product-body .spec-label { color:#888; min-width:90px; max-width:90px; flex-shrink:0; font-size:11px; }
-  .product-body .spec-val { color:#111; font-weight:500; word-break:break-word; overflow-wrap:break-word; min-width:0; }
+  .product-body { border:1px solid #dde2ea; border-top:none; padding:10px 12px; font-size:12px; display:grid; grid-template-columns:1fr 1fr; gap:5px 12px; }
+  .product-body .spec-row { display:flex; gap:4px; align-items:baseline; min-width:0; }
+  .product-body .spec-label { color:#888; min-width:76px; max-width:76px; flex-shrink:0; font-size:10.5px; }
+  .product-body .spec-val { color:#111; font-weight:500; word-break:break-word; overflow-wrap:break-word; min-width:0; font-size:12px; }
   .product-img { border:1px solid #dde2ea; border-top:none; padding:10px; text-align:center; }
   .product-img img { max-height:120px; max-width:200px; object-fit:contain; }
   .price-table { width:100%; border-collapse:collapse; margin-bottom:20px; font-size:12px; }
@@ -302,7 +302,7 @@
     .no-print { display:none !important; }
     #run-btn { display:none !important; }
     .btn { display:none !important; }
-    .offer-doc { margin:0; padding:15mm; max-width:100%; box-shadow:none !important; }
+    .offer-doc { margin:0; padding:10mm 12mm; max-width:100%; box-shadow:none !important; }
     .header { display:none !important; }
     #steps-info { display:none !important; }
     #form-area { display:none !important; }
@@ -320,7 +320,7 @@
     .margin-panel { display:none !important; }
     /* Skisse-kolonne i print: skjul override-knapp, behold layout */
     .skisse-override-btn { display:none !important; }
-    .product-skisse { border-right-color:#ddd !important; background:#fff !important; padding:6px 6px; }
+    .product-skisse { border-right-color:#ddd !important; background:#fff !important; padding:4px 4px; }
     .product-skisse.alt-skisse { background:#f8f9fb !important; }
     /* Fjern nettleserens automatiske URL og sidetall i topp/bunn */
     @page {
@@ -329,7 +329,7 @@
     }
     /* Siden trenger egne marger siden @page margin er 0 */
     .offer-doc {
-      padding: 15mm 18mm !important;
+      padding: 8mm 11mm !important;
     }
     /* Unngå sideskift inne i produktseksjoner og alle underelementer */
     .product-section {
