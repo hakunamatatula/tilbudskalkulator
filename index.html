@@ -210,14 +210,24 @@
   }
   .product-layout { display:flex; align-items:flex-start; gap:0; }
   .product-skisse {
-    width:210px; min-width:210px; max-width:210px;
+    width:210px; min-width:140px; max-width:210px;
+    flex-shrink:0;
     padding:10px 8px;
     display:flex; flex-direction:column; align-items:center; gap:6px;
     border-right:1px solid #dde2ea;
     background:#fafbfc;
+    box-sizing:border-box;
+    overflow:hidden;
   }
   .product-skisse.alt-skisse { border-right-color:#c0c8d4; background:#f4f5f7; }
-  .product-skisse img { width:100%; height:185px; display:block; object-fit:contain; object-position:center center; }
+  .product-skisse img {
+    width:100%;
+    height:auto;
+    max-height:220px;
+    display:block;
+    object-fit:contain;
+    object-position:center center;
+  }
   .skisse-override-btn {
     font-size:10px; color:#888; background:none; border:1px dashed #ccc;
     border-radius:3px; padding:3px 7px; cursor:pointer; width:100%;
@@ -671,12 +681,14 @@ ${klon.outerHTML}
   function printWithTitle() {
     const prosjekt = window._prosjektNavn || 'Norwin-tilbud';
     lagreLoggTilGitHub(true);
+    lagreSelgerEndringerLokalt();
     apneUtskriftsvindu(prosjekt, false);
   }
 
   function printUtenPriser() {
     const prosjekt = (window._prosjektNavn || 'Norwin-tilbud') + ' (uten priser)';
     lagreLoggTilGitHub(false);
+    lagreSelgerEndringerLokalt();
     apneUtskriftsvindu(prosjekt, true);
   }
 
@@ -974,6 +986,10 @@ ${klon.outerHTML}
     window._valutakurs = null;
     window._faktorTilbud = null;
     window._produkter = [];
+    window._tilbudsNr = '';
+    window._lagretSelgerData = null;
+    const banner = document.getElementById('versjon-banner');
+    if (banner) banner.remove();
     fetchNorgesBank();
   }
 
@@ -1003,76 +1019,172 @@ ${klon.outerHTML}
     return start > 0 ? fullText.slice(start, end) : fullText;
   }
 
-  // Rendrer hver PDF-side og klipper ut skissen fra venstre marg (~30% av sidebredden)
-  // Deretter trimmes hvit/tom kantplass automatisk slik at skissen fyller bildet
+  // Rendrer PDF og henter skisser med presise crop-koordinater basert på tekstlag
+  // Start: produktnummeret ("1", "2" etc.) i venstre hjørne
+  // Slutt: "N (Xstk.)" teksten under skissen
   async function extractPdfSkisser(file, scale = 2.0) {
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    // Steg 1: Scan alle sider og finn ankerpunkter for hvert produkt
+    // Anker-start: produktnummer (enkelt tall langt til venstre)
+    // Anker-slutt: "N (Xstk.)" tekst (f.eks. "1 (2stk.)")
+    const ankere = []; // [{prodNr, pageIdx, yStart, yEnd}]
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const vp0   = page.getViewport({ scale: 1.0 });
+      const tc    = await page.getTextContent();
+
+      // Samle alle tekstelementer med posisjon
+      const items = tc.items.map(it => ({
+        str:  it.str.trim(),
+        x:    it.transform[4] / vp0.width,         // 0-1 fra venstre
+        yTop: 1 - (it.transform[5] / vp0.height)   // 0-1 fra topp
+      }));
+
+      // Finn produktnummer-ankere (enkelt tall, x < 12%, y > 0%)
+      const startAnkere = items.filter(it => {
+        const n = parseInt(it.str);
+        return !isNaN(n) && n >= 1 && n <= 30 && it.str === String(n) && it.x < 0.12;
+      }).map(it => ({ ...it, prodNr: parseInt(it.str) }));
+
+      // Finn slutt-ankere: "N (Xstk.)" — x < 0.25, passer mønsteret
+      const alleSluttAnkere = items.filter(it => {
+        // Matcher "1 (1stk.)", "2 (3stk.)", "3 (1stk.)" etc.
+        return /^\d+\s*\(\d+\s*stk\.?\)$/i.test(it.str) && it.x < 0.25;
+      });
+
+      // Match start og slutt per produktnummer
+      startAnkere.forEach(start => {
+        // Finn tilhørende slutt: same page, y under start, prodNr matcher
+        const n = start.prodNr || parseInt(start.str);
+
+        // Finn neste start-anker (for å begrense søket)
+        const nesteStart = startAnkere.find(s => s.prodNr > n);
+        const yMax = nesteStart ? nesteStart.yTop : 1.0;
+
+        // Finn nærmeste slutt-anker ("N (Xstk.)") mellom dette og neste produkt
+        let slutt = alleSluttAnkere
+          .filter(s => s.yTop > start.yTop + 0.02 && s.yTop < yMax)
+          .sort((a, b) => a.yTop - b.yTop)[0];
+
+        // Fallback: finn "V1", "V2", "VD1" etc. som slutt-anker (brukes i 322529/322361-format)
+        if (!slutt) {
+          slutt = items
+            .filter(it => /^V[D]?\d+$/i.test(it.str) && it.x < 0.15 && it.yTop > start.yTop + 0.05 && it.yTop < yMax)
+            .sort((a, b) => a.yTop - b.yTop)[0];
+        }
+
+        ankere.push({
+          prodNr:   n,
+          pageIdx:  i,
+          yStart:   start.yTop,
+          yEnd:     slutt ? slutt.yTop + 0.012 : start.yTop + 0.55,
+          pageH:    vp0.height,
+          pageW:    vp0.width
+        });
+      });
+    }
+
+    ankere.sort((a, b) => a.prodNr - b.prodNr);
+
+    // Fallback hvis ingen ankere funnet
+    if (ankere.length === 0) {
+      return extractPdfSkisserFallback(pdf, scale);
+    }
+
+    // Steg 2: Render og crop per produkt
+    const skisser = new Array(ankere.length).fill(null);
+    const sideCache = {};
+
+    for (let pi = 0; pi < ankere.length; pi++) {
+      try {
+        const { pageIdx, yStart, yEnd } = ankere[pi];
+
+        if (!sideCache[pageIdx]) {
+          const page     = await pdf.getPage(pageIdx);
+          const viewport = page.getViewport({ scale });
+          const canvas   = document.createElement('canvas');
+          canvas.width   = viewport.width;
+          canvas.height  = viewport.height;
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+          sideCache[pageIdx] = { canvas, viewport };
+        }
+        const { canvas, viewport } = sideCache[pageIdx];
+
+        // Crop-koordinater i piksler — stoler 100% på tekstanker-koordinatene
+        // yStart = produktnummerets y, yEnd = "N (Xstk.)" eller "V1" sin y + litt
+        // Ingen auto-trim — vi bruker ankerne direkte
+        const cropX = 0;
+        const cropY = Math.max(0, Math.floor(viewport.height * (yStart - 0.03)));
+        const cropW = Math.floor(viewport.width  * 0.30);
+        const rawH  = Math.floor(viewport.height * (yEnd - yStart + 0.03));
+        const cropH = Math.min(rawH, viewport.height - cropY);
+
+        if (cropH < 10 || cropW < 10) { continue; }
+
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width  = cropW;
+        cropCanvas.height = cropH;
+        cropCanvas.getContext('2d').drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+        // Trim kun venstre og høyre hvit kant — ALDRI bunn (styres av yEnd)
+        const imgData = cropCanvas.getContext('2d').getImageData(0, 0, cropW, cropH);
+        const d = imgData.data;
+        const isW = (r, g, b) => r > 235 && g > 235 && b > 235;
+        let lft = 0, rgt = cropW - 1;
+        outer3: for (let x=0;x<cropW;x++) for (let y=0;y<cropH;y++) { const idx=(y*cropW+x)*4; if(!isW(d[idx],d[idx+1],d[idx+2])){lft=x;break outer3;}}
+        outer4: for (let x=cropW-1;x>=0;x--) for (let y=0;y<cropH;y++) { const idx=(y*cropW+x)*4; if(!isW(d[idx],d[idx+1],d[idx+2])){rgt=x;break outer4;}}
+
+        const pad  = 6;
+        const tX   = Math.max(0, lft - pad);
+        const tY   = 0;
+        const tW   = Math.min(cropW, rgt - lft + 1 + pad*2);
+        const tH   = cropH;
+        if (tW < 10 || tH < 10) { continue; }
+
+        // Normaliser — bevar aspect ratio, maks 500px
+        const maxSide = 500;
+        const aspect  = tW / tH;
+        const nW = aspect >= 1 ? maxSide : Math.round(maxSide * aspect);
+        const nH = aspect >= 1 ? Math.round(maxSide / aspect) : maxSide;
+        const nc = document.createElement('canvas');
+        nc.width = nW; nc.height = nH;
+        const nCtx = nc.getContext('2d');
+        nCtx.fillStyle = '#ffffff'; nCtx.fillRect(0, 0, nW, nH);
+        const p2 = 10;
+        const fs = Math.min((nW-p2*2)/tW, (nH-p2*2)/tH);
+        nCtx.drawImage(cropCanvas, tX, tY, tW, tH, (nW-tW*fs)/2, (nH-tH*fs)/2, tW*fs, tH*fs);
+        skisser[pi] = nc.toDataURL('image/png').split(',')[1];
+      } catch(e) {
+        skisser[pi] = null;
+      }
+    }
+    return skisser;
+  }
+
+  // Fallback: én skisse per side med faste koordinater
+  async function extractPdfSkisserFallback(pdf, scale = 2.0) {
     const skisser = [];
     for (let i = 1; i <= pdf.numPages; i++) {
       try {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale });
         const canvas = document.createElement('canvas');
-        canvas.width  = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext('2d');
-        await page.render({ canvasContext: ctx, viewport }).promise;
-
-        // Grov crop: venstre 30%, hopp over topp 32% og bunn 32%
-        // Side 1 har kundeinformasjonsblokk øverst som tar ekstra plass
-        // Øvrige sider starter direkte med produktnummer
+        canvas.width = viewport.width; canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
         const erFørsteSide = (i === 1);
-        let cropX, cropY, cropW, cropH;
-        if (erFørsteSide) {
-          cropX = 0;
-          cropY = Math.floor(viewport.height * 0.32);
-          cropW = Math.floor(viewport.width  * 0.30);
-          cropH = Math.floor(viewport.height * 0.36);
-        } else {
-          // Side 2+: snevert crop rundt kun selve vindustegningen
-          // Basert på HCTC PDF-layout: skissen sitter ca. 13-48% av sidens høyde
-          cropX = 0;
-          cropY = Math.floor(viewport.height * 0.13);
-          cropW = Math.floor(viewport.width  * 0.26);
-          cropH = Math.floor(viewport.height * 0.35);
-        }
-
-        const cropCanvas = document.createElement('canvas');
-        cropCanvas.width  = cropW;
-        cropCanvas.height = cropH;
-        const cropCtx = cropCanvas.getContext('2d');
-        cropCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-
-        // Auto-trim: fjern hvit kant rundt skissen
-        const imgData = cropCtx.getImageData(0, 0, cropW, cropH);
-        const d = imgData.data;
-        const isNearWhite = (r, g, b) => r > 235 && g > 235 && b > 235;
-        let top = 0, bottom = cropH - 1, left = 0, right = cropW - 1;
-        outer:  for (let y = 0; y < cropH; y++) { for (let x = 0; x < cropW; x++) { const idx=(y*cropW+x)*4; if(!isNearWhite(d[idx],d[idx+1],d[idx+2])){top=y;break outer;}}}
-        outer2: for (let y = cropH-1; y >= 0; y--) { for (let x = 0; x < cropW; x++) { const idx=(y*cropW+x)*4; if(!isNearWhite(d[idx],d[idx+1],d[idx+2])){bottom=y;break outer2;}}}
-        outer3: for (let x = 0; x < cropW; x++) { for (let y = 0; y < cropH; y++) { const idx=(y*cropW+x)*4; if(!isNearWhite(d[idx],d[idx+1],d[idx+2])){left=x;break outer3;}}}
-        outer4: for (let x = cropW-1; x >= 0; x--) { for (let y = 0; y < cropH; y++) { const idx=(y*cropW+x)*4; if(!isNearWhite(d[idx],d[idx+1],d[idx+2])){right=x;break outer4;}}}
-        const pad = 8;
-        const trimX = Math.max(0, left - pad);
-        const trimY = Math.max(0, top - pad);
-        const trimW = Math.min(cropW, right - left + 1 + pad * 2);
-        const trimH = Math.min(cropH, bottom - top + 1 + pad * 2);
-
-        const normSize = 400;
-        const normCanvas = document.createElement('canvas');
-        normCanvas.width = normSize; normCanvas.height = normSize;
-        const normCtx = normCanvas.getContext('2d');
-        normCtx.fillStyle = '#ffffff'; normCtx.fillRect(0,0,normSize,normSize);
-        const fs = Math.min((normSize*0.90)/trimW, (normSize*0.90)/trimH);
-        const dw = trimW*fs, dh = trimH*fs;
-        normCtx.drawImage(cropCanvas, trimX, trimY, trimW, trimH, (normSize-dw)/2, (normSize-dh)/2, dw, dh);
-        skisser.push(normCanvas.toDataURL('image/png').split(',')[1]);
-      } catch(e) {
-        skisser.push(null);
-      }
+        const cropY = Math.floor(viewport.height * (erFørsteSide ? 0.32 : 0.13));
+        const cropH = Math.floor(viewport.height * (erFørsteSide ? 0.36 : 0.55));
+        const cropW = Math.floor(viewport.width * 0.35);
+        const cc = document.createElement('canvas');
+        cc.width = cropW; cc.height = cropH;
+        cc.getContext('2d').drawImage(canvas, 0, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        skisser.push(cc.toDataURL('image/png').split(',')[1]);
+      } catch(e) { skisser.push(null); }
     }
     return skisser;
   }
@@ -1221,6 +1333,7 @@ Returner kun JSON.`;
       window._prosjektNavn = prosjekt;
       window._valutakurs   = valutakurs;
       window._faktorTilbud = faktorTilbud;
+      window._tilbudsNr    = resFinal.t || '';
 
       // Hent skisser fra P1-PDF (én per side = én per produkt)
       let skisser = [];
@@ -1232,6 +1345,13 @@ Returner kun JSON.`;
       document.getElementById('result').style.display = 'block';
 
       oppdaterMarginPanel();
+
+      // Sjekk om det finnes lagrede endringer fra tidligere versjon av samme ordre
+      const lagret = hentLagredeEndringer(window._tilbudsNr);
+      if (lagret && lagret.tilbudsNr !== window._tilbudsNr) {
+        window._lagretSelgerData = lagret;
+        visOverforingsBanner(lagret, window._tilbudsNr);
+      }
 
     } catch(err) {
       document.getElementById('loading').style.display = 'none';
@@ -1247,7 +1367,185 @@ Returner kun JSON.`;
     document.getElementById('tab-btn-hurtig').classList.toggle('active', fane === 'hurtig');
   }
 
-  // ── Skisse-override: selger kan erstatte automatisk hentet skisse med eget bilde ──
+  // ── Versjonsoverføring: lagre selgerendringer per ordrenummer i localStorage ──
+
+  function hentOrdreNr(tilbudsNr) {
+    // "322529-1" → "322529", "322529-2" → "322529"
+    if (!tilbudsNr) return null;
+    const match = tilbudsNr.match(/^(\d+)/);
+    return match ? match[1] : tilbudsNr;
+  }
+
+  function lagreSelgerEndringerLokalt() {
+    const tilbudsNr = window._tilbudsNr || '';
+    const ordreNr = hentOrdreNr(tilbudsNr);
+    if (!ordreNr) return;
+
+    // Samle alle selgerendringer fra DOM
+    const selgerData = {
+      dato: new Date().toISOString(),
+      tilbudsNr,
+      // Faktor per posisjon (indeks → faktorverdi)
+      faktorer: {},
+      // Redigerte speksverdier: posisjon → felt → ny verdi
+      spekser: {},
+      // Kommentarer per posisjon
+      kommentarer: {},
+      // Informasjonstekst til kunden
+      infoTilKunde: ''
+    };
+
+    // Hent faktorer
+    (window._produkter || []).forEach((p, i) => {
+      const el = document.getElementById('faktor_' + i);
+      if (el) selgerData.faktorer[i] = el.innerText.trim();
+    });
+
+    // Hent redigerte speksverdier (har data-logged-from = er endret)
+    document.querySelectorAll('.spec-val.editable-val').forEach(el => {
+      if (el.getAttribute('data-logged-from')) {
+        const posNr = el.getAttribute('data-produkt'); // "Posisjon 1"
+        const felt  = el.getAttribute('data-felt');
+        if (!selgerData.spekser[posNr]) selgerData.spekser[posNr] = {};
+        selgerData.spekser[posNr][felt] = el.innerText.trim();
+      }
+    });
+
+    // Hent kommentarer
+    (window._produkter || []).forEach((p, i) => {
+      const el = document.getElementById('kommentar_' + i);
+      if (el && el.innerText.trim()) {
+        selgerData.kommentarer[i] = el.innerText.trim();
+      }
+    });
+
+    // Hent infotekst
+    const infoEl = document.getElementById('info-til-kunde');
+    if (infoEl) selgerData.infoTilKunde = infoEl.innerText.trim();
+
+    localStorage.setItem('norwin_ordre_' + ordreNr, JSON.stringify(selgerData));
+    console.log('Selgerendringer lagret for ordre', ordreNr);
+  }
+
+  function hentLagredeEndringer(tilbudsNr) {
+    const ordreNr = hentOrdreNr(tilbudsNr);
+    if (!ordreNr) return null;
+    const raw = localStorage.getItem('norwin_ordre_' + ordreNr);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch(e) { return null; }
+  }
+
+  function visOverforingsBanner(lagret, nyTilbudsNr) {
+    // Fjern evt. gammelt banner
+    const gammelt = document.getElementById('versjon-banner');
+    if (gammelt) gammelt.remove();
+
+    const banner = document.createElement('div');
+    banner.id = 'versjon-banner';
+    banner.style.cssText = `
+      background:#fffbe6; border:2px solid #c8a96e; border-radius:6px;
+      padding:14px 18px; margin-bottom:16px; font-family:'Source Sans 3',sans-serif;
+      font-size:14px; color:#1a2233; display:flex; align-items:center; gap:16px;
+      flex-wrap:wrap;
+    `;
+    banner.innerHTML = `
+      <div style="flex:1;">
+        <strong style="color:#1a3a5c;">Tidligere endringer funnet</strong> —
+        Versjon ${lagret.tilbudsNr} inneholder ${Object.keys(lagret.faktorer).length} faktorendringer
+        og ${Object.values(lagret.spekser).reduce((a,b)=>a+Object.keys(b).length,0)} tekstendringer.
+        Vil du overføre disse til ${nyTilbudsNr}?
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;">
+        <button onclick="overforEndringer()" style="
+          background:#1a3a5c;color:#fff;border:none;padding:8px 18px;
+          font-family:'Source Sans 3',sans-serif;font-size:13px;font-weight:700;
+          border-radius:4px;cursor:pointer;">
+          ✓ Overfør endringer
+        </button>
+        <button onclick="document.getElementById('versjon-banner').remove()" style="
+          background:#fff;color:#888;border:2px solid #dde2ea;padding:8px 14px;
+          font-family:'Source Sans 3',sans-serif;font-size:13px;
+          border-radius:4px;cursor:pointer;">
+          Hopp over
+        </button>
+      </div>
+    `;
+
+    const resultDiv = document.getElementById('result');
+    const marginPanel = document.getElementById('margin-panel');
+    resultDiv.insertBefore(banner, marginPanel.nextSibling);
+  }
+
+  function overforEndringer() {
+    const banner = document.getElementById('versjon-banner');
+    const lagret = window._lagretSelgerData;
+    if (!lagret) return;
+
+    let antallOverfort = 0;
+
+    // Overfør faktorer
+    Object.entries(lagret.faktorer).forEach(([idx, faktorVal]) => {
+      const el = document.getElementById('faktor_' + idx);
+      if (el) {
+        el.innerText = faktorVal;
+        // Trigger faktor-oppdatering
+        oppdaterFaktor(parseInt(idx), el);
+        antallOverfort++;
+      }
+    });
+
+    // Overfør redigerte speksverdier
+    Object.entries(lagret.spekser).forEach(([posNr, felter]) => {
+      Object.entries(felter).forEach(([felt, nyVerdi]) => {
+        // Finn riktig spec-val element
+        document.querySelectorAll('.spec-val.editable-val').forEach(el => {
+          if (el.getAttribute('data-produkt') === posNr && el.getAttribute('data-felt') === felt) {
+            const original = el.getAttribute('data-original');
+            if (el.innerText.trim() === original || el.innerText.trim() !== nyVerdi) {
+              el.innerText = nyVerdi;
+              // Marker som endret
+              if (!el.getAttribute('data-logged-from')) {
+                el.setAttribute('data-logged-from', original);
+              }
+              const markId = 'mark_' + el.id;
+              const markEl = document.getElementById(markId);
+              if (markEl) markEl.style.display = 'inline-block';
+              antallOverfort++;
+            }
+          }
+        });
+      });
+    });
+
+    // Overfør kommentarer
+    Object.entries(lagret.kommentarer).forEach(([idx, tekst]) => {
+      const el = document.getElementById('kommentar_' + idx);
+      if (el && !el.innerText.trim()) {
+        el.innerText = tekst;
+        antallOverfort++;
+      }
+    });
+
+    // Overfør infotekst
+    if (lagret.infoTilKunde) {
+      const infoEl = document.getElementById('info-til-kunde');
+      if (infoEl && !infoEl.innerText.trim()) {
+        infoEl.innerText = lagret.infoTilKunde;
+        antallOverfort++;
+      }
+    }
+
+    // Oppdater totaler etter faktorendringer
+    oppdaterTotaler();
+
+    // Erstatt banner med bekreftelse
+    if (banner) {
+      banner.style.background = '#f0faf4';
+      banner.style.borderColor = '#2d6a4f';
+      banner.innerHTML = `<span style="color:#2d6a4f;font-weight:700;">✓ ${antallOverfort} endringer overført fra versjon ${lagret.tilbudsNr}</span>`;
+      setTimeout(() => { if (banner.parentNode) banner.remove(); }, 4000);
+    }
+  }
   function byttSkisse(idx, input) {
     const file = input.files[0];
     if (!file) return;
