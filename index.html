@@ -1045,17 +1045,42 @@ ${klon.outerHTML}
         yTop: 1 - (it.transform[5] / vp0.height)   // 0-1 fra topp
       }));
 
-      // Finn produktnummer-ankere (enkelt tall, x < 12%, y > 0%)
+      // Finn produktnummer-ankere (enkelt tall, x < 15%)
+      // Strategi: et tall er et ekte produktnummer dersom det finnes et slutt-anker
+      // ("N (Xstk.)") eller V-anker (V1, V2 etc.) et sted under det på siden.
+      // Tegningsetiketter (som "1","2" i V5-glassseksjoner) har ingen slike ankere under seg.
+      const alleSluttAnkereTmp = items.filter(it =>
+        /^\d+\s*\(\d+\s*stk\.?\)$/i.test(it.str) && it.x < 0.40
+      );
+      const alleVAnkereTmp = items.filter(it =>
+        /^V[D]?\d+[a-z]?$/i.test(it.str) && it.x < 0.15
+      );
       const startAnkere = items.filter(it => {
         const n = parseInt(it.str);
-        return !isNaN(n) && n >= 1 && n <= 30 && it.str === String(n) && it.x < 0.12;
+        if (isNaN(n) || n < 1 || n > 30 || it.str !== String(n) || it.x >= 0.15) return false;
+        // Krev at det finnes et slutt-anker ELLER et V-anker under dette punktet
+        const harSluttAnker = alleSluttAnkereTmp.some(s => s.yTop > it.yTop + 0.02);
+        const harVAnker = alleVAnkereTmp.some(v => v.yTop > it.yTop + 0.03);
+        return harSluttAnker || harVAnker;
       }).map(it => ({ ...it, prodNr: parseInt(it.str) }));
 
-      // Finn slutt-ankere: "N (Xstk.)" — x < 0.25, passer mønsteret
+      // Finn slutt-ankere: "N (Xstk.)" — x < 0.35, passer mønsteret
       const alleSluttAnkere = items.filter(it => {
         // Matcher "1 (1stk.)", "2 (3stk.)", "3 (1stk.)" etc.
-        return /^\d+\s*\(\d+\s*stk\.?\)$/i.test(it.str) && it.x < 0.25;
+        return /^\d+\s*\(\d+\s*stk\.?\)$/i.test(it.str) && it.x < 0.35;
       });
+
+      // Finn spesifikasjonskolonnens x-start for denne siden
+      // Bruker "Type:"-etikettens x-posisjon — alltid til høyre for skissen i HCTC-format
+      const specLabels = ['Type', 'Tresort', 'Glass', 'Malingfarge', 'Rammer', 'Sprosser',
+                          'Bunnglasslist', 'Pakninger', 'Glassforsegling', 'Håndtak', 'Hengsler', 'Beslag'];
+      const specItemsSide = items.filter(it =>
+        it.x > 0.15 && specLabels.some(l => it.str === l || it.str === l + ':' ||
+          it.str.startsWith(l + ':') || it.str.startsWith(l + ' '))
+      );
+      const sideSpecXMin = specItemsSide.length > 0
+        ? Math.min(...specItemsSide.map(it => it.x))
+        : null;
 
       // Match start og slutt per produktnummer
       startAnkere.forEach(start => {
@@ -1084,25 +1109,35 @@ ${klon.outerHTML}
           yStart:   start.yTop,
           yEnd:     slutt ? slutt.yTop + 0.012 : start.yTop + 0.55,
           pageH:    vp0.height,
-          pageW:    vp0.width
+          pageW:    vp0.width,
+          specXMin: sideSpecXMin   // fast høyre grense for hele siden
         });
       });
     }
 
     ankere.sort((a, b) => a.prodNr - b.prodNr);
 
+    // Fjern duplikate prodNr — behold første forekomst (laveste pageIdx = riktig produkt)
+    const sett = new Set();
+    const ankereUnike = ankere.filter(a => {
+      if (sett.has(a.prodNr)) return false;
+      sett.add(a.prodNr);
+      return true;
+    });
+
     // Fallback hvis ingen ankere funnet
-    if (ankere.length === 0) {
+    if (ankereUnike.length === 0) {
       return extractPdfSkisserFallback(pdf, scale);
     }
 
     // Steg 2: Render og crop per produkt
-    const skisser = new Array(ankere.length).fill(null);
+    // Returnerer et objekt {prodNr: base64} i stedet for array
+    const skisser = {};
     const sideCache = {};
 
-    for (let pi = 0; pi < ankere.length; pi++) {
+    for (let pi = 0; pi < ankereUnike.length; pi++) {
       try {
-        const { pageIdx, yStart, yEnd } = ankere[pi];
+        const { pageIdx, yStart, yEnd, prodNr } = ankereUnike[pi];
 
         if (!sideCache[pageIdx]) {
           const page     = await pdf.getPage(pageIdx);
@@ -1120,7 +1155,12 @@ ${klon.outerHTML}
         // Ingen auto-trim — vi bruker ankerne direkte
         const cropX = 0;
         const cropY = Math.max(0, Math.floor(viewport.height * (yStart - 0.03)));
-        const cropW = Math.floor(viewport.width  * 0.30);
+        // cropW: høyre grense er spec-kolonnens venstre kant (Type:-etikett)
+        // Dette fungerer for alle formater siden HCTC alltid har fast kolonneplassering
+        const cropXFrac = (ankereUnike[pi].specXMin != null)
+          ? ankereUnike[pi].specXMin - 0.01
+          : 0.45;
+        const cropW = Math.floor(viewport.width * cropXFrac);
         const rawH  = Math.floor(viewport.height * (yEnd - yStart + 0.03));
         const cropH = Math.min(rawH, viewport.height - cropY);
 
@@ -1131,19 +1171,21 @@ ${klon.outerHTML}
         cropCanvas.height = cropH;
         cropCanvas.getContext('2d').drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
-        // Trim kun venstre og høyre hvit kant — ALDRI bunn (styres av yEnd)
+        // Auto-trim alle fire kanter
         const imgData = cropCanvas.getContext('2d').getImageData(0, 0, cropW, cropH);
         const d = imgData.data;
         const isW = (r, g, b) => r > 235 && g > 235 && b > 235;
-        let lft = 0, rgt = cropW - 1;
+        let lft = 0, rgt = cropW - 1, top = 0, bot = cropH - 1;
         outer3: for (let x=0;x<cropW;x++) for (let y=0;y<cropH;y++) { const idx=(y*cropW+x)*4; if(!isW(d[idx],d[idx+1],d[idx+2])){lft=x;break outer3;}}
         outer4: for (let x=cropW-1;x>=0;x--) for (let y=0;y<cropH;y++) { const idx=(y*cropW+x)*4; if(!isW(d[idx],d[idx+1],d[idx+2])){rgt=x;break outer4;}}
+        outer5: for (let y=0;y<cropH;y++) for (let x=0;x<cropW;x++) { const idx=(y*cropW+x)*4; if(!isW(d[idx],d[idx+1],d[idx+2])){top=y;break outer5;}}
+        outer6: for (let y=cropH-1;y>=0;y--) for (let x=0;x<cropW;x++) { const idx=(y*cropW+x)*4; if(!isW(d[idx],d[idx+1],d[idx+2])){bot=y;break outer6;}}
 
         const pad  = 6;
         const tX   = Math.max(0, lft - pad);
-        const tY   = 0;
-        const tW   = Math.min(cropW, rgt - lft + 1 + pad*2);
-        const tH   = cropH;
+        const tY   = Math.max(0, top - pad);
+        const tW   = Math.min(cropW - tX, rgt - lft + 1 + pad*2);
+        const tH   = Math.min(cropH - tY, bot - top + 1 + pad*2);
         if (tW < 10 || tH < 10) { continue; }
 
         // Normaliser — bevar aspect ratio, maks 500px
@@ -1158,9 +1200,9 @@ ${klon.outerHTML}
         const p2 = 10;
         const fs = Math.min((nW-p2*2)/tW, (nH-p2*2)/tH);
         nCtx.drawImage(cropCanvas, tX, tY, tW, tH, (nW-tW*fs)/2, (nH-tH*fs)/2, tW*fs, tH*fs);
-        skisser[pi] = nc.toDataURL('image/png').split(',')[1];
+        skisser[prodNr] = nc.toDataURL('image/png').split(',')[1];
       } catch(e) {
-        skisser[pi] = null;
+        skisser[prodNr] = null;
       }
     }
     return skisser;
@@ -1262,7 +1304,7 @@ Returner kun JSON.`;
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 4000,
+          max_tokens: 8000,
           system: systemPrompt,
           messages: [{ role:'user', content:[
             { type:'text', text: userPrompt1 + '\n\nTILBUDSTEKST:\n' + pdfText1 }
@@ -1300,7 +1342,7 @@ Returner kun JSON.`;
           },
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
-            max_tokens: 4000,
+            max_tokens: 8000,
             system: systemPrompt,
             messages: [{ role:'user', content:[
               { type:'text', text: userPrompt2 + '\n\nTILBUDSTEKST:\n' + pdfText2 }
@@ -1814,7 +1856,11 @@ Returner kun JSON.`;
             <span class="faktor-val" contenteditable="true" id="faktor_${i}" data-eur="${p.eur||0}" data-ant="${ant}" data-alt="${erAlt}" data-produkt="Posisjon ${i+1}" title="Endre faktor" onblur="oppdaterFaktor(${i}, this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" style="${erAlt?'color:#6b7a8d;':''}">${faktorGlobal}</span>
           </span>
         </div>`;
-      const skisseB64 = (info.skisser || [])[i] || null;
+      const skisseB64 = info.skisser
+        ? (typeof info.skisser === 'object' && !Array.isArray(info.skisser)
+            ? (info.skisser[p.n] || info.skisser[i+1] || null)   // Map: slå opp på prodNr
+            : (info.skisser[i] || null))                          // Fallback array
+        : null;
       const skisseId  = `skisse_${i}`;
       const skisseHTML = `
         <div class="product-skisse${erAlt?' alt-skisse':''}" id="skisse_container_${i}">
