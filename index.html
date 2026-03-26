@@ -1247,18 +1247,47 @@ ${klon.outerHTML}
 
   const systemPrompt = `Du tolker pristilbud fra vindus-/dørprodusenter for Norwin AS.
 
-OVERSETTELSER (alltid norsk): chrome plated=forkrommet, restrictor=barnesikring, hinges=hengsler, handle=håndtak, threshold=terskel, composite=kompositt, Fingerjoint=Fingerskjøtet, white=hvit/hvite, painted=malt, glazing=glassforseglig, frame=ramme, sash=karm, trickle vent=ventil, friction stay=friksjonsstay, espag=espagnolette-lås, Friksjonsbrems=Friksjonsstay.
+OVERSETTELSER (alltid norsk): chrome plated=forkrommet, restrictor=barnesikring, hinges=hengsler, handle=håndtak, threshold=terskel, composite=kompositt, Fingerjoint=Fingerskjøtet, white=hvit/hvite, painted=malt, glazing=glassforseglig, frame=ramme, sash=karm, trickle vent=ventil, friction stay=friksjonsstay, espag=espagnolette-lås, Friksjonsbrems=Friksjonsstay, lock=lås, cylinder=sylinder.
+
+FRITEKST-OVERSETTELSER (bold/uthevet tekst etter spesifikasjonsfeltene i HCTC-dør-tilbud):
+- "One radius arc" = "One radius arc" (beholdes)
+- "VX 7729/160 hinges" = "VX 7729/160 hengsler"
+- "With 1 point lock ASSA 562" = "1 punkt lås ASSA 562"
+- "With cable in frame - frame prepared for SOLID 75" = "Med kabel i karm – karm er klargjort for SOLID 75 (SOLID 75 + SOLID 731/20)"
+- "1pcs Adjufix in the top (center)" = inkluderes i "Huller til montering"-feltet som "MS14+ADJUFIX 4 på hver side og 1 i topp senter"
+- "Without any lock" = "Uten lås"
+- "Both sashes just with hinges (no locks and other fittings)" = "Begge dørblad kun med hengsler (ingen lås eller beslag)"
+- "Without holes for handles and cylinders" = "Forborede hull for håndtak og sylinder" (NB: dette betyr hullet ER boret)
+- "Sashes will be packed separately" = "Dørblad pakkes separat"
+- "Decorations: without" = "Uten profilering"
+- "No warranty" = utelates
+- "Standard hinges" = "Standard hengsler"
+- "Striking plate ASSA 1889-12" = "Sluttstykke ASSA 1889-12"
+- "VX 7729/160 hinges" = "VX 7729/160 hengsler"
+- "Both frame sides: 115x60mm" = "Begge karmflanker: 115x60mm"
+- "With standard espagnolette" = "Med standard espagnolette-lås"
+- "M5019 front door 3 point lock" = "M5019 trepunkts inngangslås"
 
 FORENKLINGSREGLER FOR SPESIFIKASJONER (følg alltid):
-- Rammer/beslag: Fjern "Rammer" og "med" — skriv kun antall og type, f.eks. "2x sidehengslet" eller "1x fast ramme, 2x sidehengslet"
+- Rammer/beslag VINDUER: Fjern "Rammer" og "med" — skriv kun antall og type, f.eks. "2x sidehengslet" eller "1x fast ramme, 2x sidehengslet"
+- Rammer/beslag DØRER: Ta med DØR-type (f.eks. "1x Høyre utadslående dør") som felt "Beslag". Hengsler (f.eks. "Dør hengsler N3248") legges i eget felt "Hengsler". Lås (f.eks. "M5019 front door 3 point lock") legges i eget felt "Låsesystem".
 - Brems: "Brems via håndtak" = "Via håndtak". "Friksjonsbrems (2stk.)" = "Friksjonsstay (2stk.)"
-- Håndtak: Fjern "Window handle" og modellprefiks — skriv f.eks. "WH-T 30 ROCA Björkö forkrommet"
+- Håndtak: Fjern "Window handle" og modellprefiks — skriv f.eks. "WH-T 30 ROCA Björkö forkrommet". "Uten håndtak (hull boret)" = "Uten håndtak (hull boret)"
 - Dørhåndtak: Fjern "window handle" — skriv f.eks. "Björkö WH-B 301T forkrommet"
-- Åpningsretning: "Sett fra utsiden, slår ut" = "Utadslående" / "Sett fra utsiden, slår inn" = "Innadslående"
-- Hengsler: "Lakkerte hengsler RAL9010" = "Hvite hengsler (RAL9010)"
+- Åpningsretning: "Sett fra utsiden, slår ut" = "Utadslående" / "Sett fra utsiden, slår inn" = "Innadslående" / "Sett fra insiden, slår in" = "Innadslående (innside)"
+- Hengsler: "Lakkerte hengsler RAL9010" = "Hvite hengsler (RAL9010)". "ZINI (match RAL9006) hengsler" = "ZINI hengsler (RAL9006)"
 - Låsesystem: Forkortes til modellnavn, f.eks. "ASSA Espagnolette S1312/S3117"
 - Kietmedbio/nosis/"nose": Skriv "Nosis [mål]mm, festet til rammen"
+- Terskel: "Dørterskel: alu DAFA 68/62" = "Alu DAFA 68/62"
+- Huller til montering: "Huller till montage: MS14+ADJUFIX" = felt "Huller til montering" med verdi "MS14+ADJUFIX". Hvis det i tillegg finnes "1pcs Adjufix in the top (center)" i friteksten, skriv "MS14+ADJUFIX 4 på hver side og 1 i topp senter".
+- Fritekst-noter som VX-hengsler, kabel i karm, SOLID 75, radius arc, Adjufix osv. (se FRITEKST-OVERSETTELSER over) samles i ett felt "Øvrig" med komma-separerte norske verdier. Utelat "No warranty" og "Decorations: without"→ "Uten profilering" legges i Øvrig.
 - Generelt: Fjern overflødige ord, hold verdiene korte og presise
+
+FELTREKKEFØLGE FOR DØRER (bruk denne rekkefølgen i "s"-arrayen):
+Type, Tresort, Maling inne, Maling ute, Glass, Beslag, Hengsler, Håndtak, Låsesystem, Terskel, Åpningsretning, Huller til montering, Øvrig
+
+FELTREKKEFØLGE FOR VINDUER (bruk denne rekkefølgen i "s"-arrayen):
+Type, Tresort, Maling inne, Maling ute, Glass, Beslag, Hengsler, Brems, Håndtak, Sprosser, Bunnglasslist, Åpningsretning, Nosis, Huller til montering
 
 KUNDEINFORMASJON: Hent følgende fra dokumentet og legg i JSON-rotnivå:
 - "kunde": kundenavn (f.eks. "Norwin AS" er kjøper, se "Kunde:" eller tilsvarende felt)
@@ -1275,7 +1304,7 @@ ALTERNATIVPOSISJONER: Hvis en posisjon er merket "Alternative position (not incl
 BEREGNING: Kundepris NOK = Faktorpåslag × EUR listepris (direkte, ingen rabatt trekkes fra NOK-beregningen). MVA = NOK × 0.25. eksMva/mva/tot = kun sum av ikke-alternative posisjoner.
 
 Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
-{"t":"322529-1","d":"2026-03-13","r":40,"kunde":"Norwin AS","kontakt":"Per Schiotz","kadr":"Hortensveien 273, 3157 BARKÅKER","mob":"90583823","epost":"per@norwin.no","prosjekt":"Nordbø Einar Eikje","p":[{"n":1,"dim":"800x1100mm","m2":0.88,"ant":2,"eur":960.07,"nok":8640.63,"sum":17281.26,"alt":false,"s":[{"l":"Type","v":"Casement vindu kitted (45x115)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 9010 Hvit"},{"l":"Maling ute","v":"RAL 9010 Hvit"},{"l":"Glass","v":"4/20Ar/4TH"},{"l":"Beslag","v":"2x sidehengslet"},{"l":"Hengsler","v":"Hvite hengsler (RAL9010)"},{"l":"Brems","v":"Via håndtak"},{"l":"Håndtak","v":"WH-T 30 ROCA Björkö forkrommet"},{"l":"Sprosser","v":"24mm limt (duplex) UT: kitt INN: rund"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Nosis","v":"Nosis 30x40mm 800mm, festet til rammen"}]},{"n":2,"dim":"800x1100mm","m2":0.88,"ant":2,"eur":1123.07,"nok":10107.63,"sum":20215.26,"alt":true,"s":[{"l":"Type","v":"Nord Casement vindu kitted (48x115)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 9010 Hvit"},{"l":"Maling ute","v":"RAL 9010 Hvit"},{"l":"Glass","v":"4/18Ar/4ESG.TH/18Ar/4TH (3-lags)"},{"l":"Beslag","v":"2x sidehengslet"},{"l":"Hengsler","v":"Hvite hengsler (RAL9010)"},{"l":"Brems","v":"Via håndtak"},{"l":"Håndtak","v":"WH-T 30 ROCA Björkö forkrommet"},{"l":"Sprosser","v":"24mm limt (duplex) UT: kitt INN: rund"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Nosis","v":"Nosis 30x40mm 800mm, festet til rammen"}]}],"eksMva":17281.26,"mva":4320.32,"tot":21601.58}`;
+{"t":"322529-1","d":"2026-03-13","r":40,"kunde":"Norwin AS","kontakt":"Per Schiotz","kadr":"Hortensveien 273, 3157 BARKÅKER","mob":"90583823","epost":"per@norwin.no","prosjekt":"Nordbø Einar Eikje","p":[{"n":1,"dim":"800x1100mm","m2":0.88,"ant":2,"eur":960.07,"nok":8640.63,"sum":17281.26,"alt":false,"s":[{"l":"Type","v":"Casement vindu kitted (45x115)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 9010 Hvit"},{"l":"Maling ute","v":"RAL 9010 Hvit"},{"l":"Glass","v":"4/20Ar/4TH"},{"l":"Beslag","v":"2x sidehengslet"},{"l":"Hengsler","v":"Hvite hengsler (RAL9010)"},{"l":"Brems","v":"Via håndtak"},{"l":"Håndtak","v":"WH-T 30 ROCA Björkö forkrommet"},{"l":"Sprosser","v":"24mm limt (duplex) UT: kitt INN: rund"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Nosis","v":"Nosis 30x40mm 800mm, festet til rammen"}]},{"n":2,"dim":"1210x2180mm","m2":2.48,"ant":1,"eur":1954.56,"nok":17562.63,"sum":17562.63,"alt":false,"s":[{"l":"Type","v":"Nord 2 utadslående inngangsdør (53x115 / alu dørterskel)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"1x Fylling F12 15mdf/36pur/15mdf, Spor på fyllinger på begge sider"},{"l":"Beslag","v":"1x Høyre utadslående dør"},{"l":"Hengsler","v":"VX 7729/160 hengsler"},{"l":"Håndtak","v":"Uten håndtak (hull boret)"},{"l":"Låsesystem","v":"1 punkt lås ASSA 562"},{"l":"Terskel","v":"Alu DAFA 68/62"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Huller til montering","v":"MS14+ADJUFIX 4 på hver side og 1 i topp senter"},{"l":"Øvrig","v":"One radius arc, Med kabel i karm – karm er klargjort for SOLID 75 (SOLID 75 + SOLID 731/20), Forborede hull for håndtak og sylinder, Uten profilering"}]}],"eksMva":35124.89,"mva":8781.22,"tot":43906.11}`;
 
   async function runAgent() {
     const errEl = document.getElementById('error-msg');
