@@ -218,8 +218,16 @@
     background:#fafbfc;
     box-sizing:border-box;
     overflow:hidden;
+    position:relative;
+    transition:background 0.15s, border-color 0.15s;
   }
   .product-skisse.alt-skisse { border-right-color:#c0c8d4; background:#f4f5f7; }
+  .product-skisse.skisse-drag-over {
+    background:#e8eef6 !important;
+    border-color:#1a3a5c !important;
+    outline:2px dashed #1a3a5c;
+    outline-offset:-3px;
+  }
   .product-skisse img {
     width:100%;
     height:auto;
@@ -442,6 +450,7 @@
       <div>
         <div class="section-title">02 — Kundeinformasjon</div>
         <div class="field"><div class="label">Kundenavn</div><input type="text" id="kunde-navn" placeholder="" /></div>
+        <div class="field"><div class="label">Kontaktperson</div><input type="text" id="kunde-kontakt" placeholder="" /></div>
         <div class="field"><div class="label">Adresse</div><input type="text" id="kunde-adresse" placeholder="" /></div>
         <div class="field"><div class="label">Mobil</div><input type="text" id="kunde-mob" placeholder="" /></div>
         <div class="field"><div class="label">E-post</div><input type="email" id="kunde-epost" placeholder="" /></div>
@@ -781,11 +790,11 @@ ${klon.outerHTML}
   }
 
   const SELGERE = {
-    'Grete':  { fornavn:'Grete',   navn:'Grete Holt',             mob:'47910660',  epost:'grete@norwin.no' },
     'Bente':  { fornavn:'Bente',   navn:'Bente Jul-Larsen',        mob:'98653255',  epost:'bente@norwin.no' },
+    'Grete':  { fornavn:'Grete',   navn:'Grete Holt',             mob:'47910660',  epost:'grete@norwin.no' },
+    'Marius': { fornavn:'Marius',  navn:'Marius Nielsen Matatula', mob:'48355995',  epost:'marius@norwin.no'},
     'Per':    { fornavn:'Per',     navn:'Per Schiøtz',             mob:'90583823',  epost:'per@norwin.no'   },
     'Tom':    { fornavn:'Tom',     navn:'Tom Ektvedt',             mob:'98826002',  epost:'tom@norwin.no'   },
-    'Marius': { fornavn:'Marius',  navn:'Marius Nielsen Matatula', mob:'48355995',  epost:'marius@norwin.no'}
   };
 
   function filterSelger(val, showAll) {
@@ -976,7 +985,7 @@ ${klon.outerHTML}
     fileInput.value = '';
     fileInput2.value = '';
     // Nullstill kundeinformasjon
-    ['kunde-navn','kunde-adresse','kunde-mob','kunde-epost','prosjekt'].forEach(id => {
+    ['kunde-navn','kunde-kontakt','kunde-adresse','kunde-mob','kunde-epost','prosjekt'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
     // Skjul marginpanel
@@ -1369,6 +1378,7 @@ Returner kun JSON.`;
 
       // Kundeinformasjon fra skjema (selger fyller inn)
       const kundeNavn    = document.getElementById('kunde-navn').value;
+      const kundeKontakt = document.getElementById('kunde-kontakt').value;
       const kundeAdresse = document.getElementById('kunde-adresse').value;
       const kundeMob     = document.getElementById('kunde-mob').value;
       const kundeEpost   = document.getElementById('kunde-epost').value;
@@ -1383,10 +1393,13 @@ Returner kun JSON.`;
       let skisser = [];
       try { skisser = await extractPdfSkisser(selectedFile); } catch(e) {}
 
-      renderOffer(resFinal, { kundeNavn, kundeAdresse, kundeMob, kundeEpost, prosjekt, selger, today, skisser });
+      renderOffer(resFinal, { kundeNavn, kundeKontakt, kundeAdresse, kundeMob, kundeEpost, prosjekt, selger, today, skisser });
 
       document.getElementById('loading').style.display = 'none';
       document.getElementById('result').style.display = 'block';
+
+      // Aktiver drag+drop og paste for alle skisse-containere
+      (resFinal.p || resFinal.produkter || []).forEach((p, i) => initSkisseDragDrop(i));
 
       oppdaterMarginPanel();
 
@@ -1593,27 +1606,57 @@ Returner kun JSON.`;
   function byttSkisse(idx, input) {
     const file = input.files[0];
     if (!file) return;
+    settSkisseFraBlobEllerFil(idx, file);
+  }
+
+  function settSkisseFraBlobEllerFil(idx, blob) {
     const reader = new FileReader();
     reader.onload = (e) => {
       const container = document.getElementById('skisse_container_' + idx);
       if (!container) return;
-      // Finn eller opprett img-element
       let img = document.getElementById('skisse_' + idx);
       if (!img) {
-        // Erstatt "Ingen skisse"-div med img
         const missing = container.querySelector('.skisse-missing');
         if (missing) missing.remove();
         img = document.createElement('img');
         img.id = 'skisse_' + idx;
         img.alt = 'Teknisk skisse produkt ' + (idx+1);
-        img.style.width = '100%';
-        img.style.height = 'auto';
-        img.style.display = 'block';
-        container.insertBefore(img, container.querySelector('label'));
+        container.insertBefore(img, container.querySelector('.skisse-override-btn'));
       }
       img.src = e.target.result;
+      container.classList.remove('skisse-drag-over');
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
+  }
+
+  function initSkisseDragDrop(idx) {
+    const container = document.getElementById('skisse_container_' + idx);
+    if (!container) return;
+
+    container.addEventListener('dragover', e => {
+      e.preventDefault();
+      container.classList.add('skisse-drag-over');
+    });
+    container.addEventListener('dragleave', e => {
+      if (!container.contains(e.relatedTarget)) container.classList.remove('skisse-drag-over');
+    });
+    container.addEventListener('drop', e => {
+      e.preventDefault();
+      container.classList.remove('skisse-drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) settSkisseFraBlobEllerFil(idx, file);
+    });
+    container.addEventListener('paste', e => {
+      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          settSkisseFraBlobEllerFil(idx, item.getAsFile());
+          break;
+        }
+      }
+    });
+    // Gjør container fokuserbar for paste-events
+    container.setAttribute('tabindex', '0');
   }
   let endringslogg = [];
 
@@ -1898,10 +1941,10 @@ Returner kun JSON.`;
         <div class="product-skisse${erAlt?' alt-skisse':''}" id="skisse_container_${i}">
           ${skisseB64
             ? `<img id="${skisseId}" src="data:image/png;base64,${skisseB64}" alt="Teknisk skisse produkt ${i+1}" />`
-            : `<div class="skisse-missing">Ingen skisse</div>`
+            : `<div class="skisse-missing">Dra bilde hit<br>eller klikk ↓</div>`
           }
-          <label class="skisse-override-btn no-print" title="Last opp eget bilde">
-            ↑ Bytt bilde
+          <label class="skisse-override-btn no-print" title="Last opp, dra eller lim inn bilde (Ctrl+V)">
+            ↑ Bytt bilde / lim inn
             <input type="file" accept="image/*" style="display:none"
               onchange="byttSkisse(${i}, this)">
           </label>
@@ -2003,6 +2046,7 @@ Returner kun JSON.`;
 
       <div class="customer-block">
         <div><div class="cb-label">Kunde</div><div class="cb-val">${info.kundeNavn||'–'}</div></div>
+        ${info.kundeKontakt ? `<div><div class="cb-label">Kontaktperson</div><div class="cb-val">${info.kundeKontakt}</div></div>` : ''}
         <div><div class="cb-label">Prosjekt</div><div class="cb-val">${info.prosjekt||'–'}</div></div>
         <div><div class="cb-label">Adresse</div><div class="cb-val">${info.kundeAdresse||'–'}</div></div>
         <div><div class="cb-label">Leveringsadresse</div><div class="cb-val">Hortensveien 273, 3157 BARKÅKER</div></div>
@@ -2053,7 +2097,7 @@ Returner kun JSON.`;
 
       <div class="offer-footer">
         <div class="seller-block">
-          <div class="seller-name">${info.selger.fornavn || info.selger.navn}</div>
+          <div class="seller-name">${info.selger.navn || info.selger.fornavn}</div>
           ${info.selger.mob ? `<div class="seller-info">Tlf: ${info.selger.mob}</div>` : ''}
           ${info.selger.epost ? `<div class="seller-info">E-post: ${info.selger.epost}</div>` : ''}
         </div>
