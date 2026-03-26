@@ -1643,20 +1643,84 @@ Returner kun JSON.`;
     container.addEventListener('drop', e => {
       e.preventDefault();
       container.classList.remove('skisse-drag-over');
-      const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith('image/')) settSkisseFraBlobEllerFil(idx, file);
+      const dt = e.dataTransfer;
+
+      // 1. Fil-drop (fra filutforsker)
+      if (dt.files && dt.files.length > 0) {
+        const file = dt.files[0];
+        if (file.type.startsWith('image/')) { settSkisseFraBlobEllerFil(idx, file); return; }
+      }
+
+      // 2. DataTransfer items — fanger image/png fra Word og andre apper
+      if (dt.items) {
+        for (const item of dt.items) {
+          if (item.kind === 'file' && item.type.startsWith('image/')) {
+            const f = item.getAsFile();
+            if (f) { settSkisseFraBlobEllerFil(idx, f); return; }
+          }
+        }
+        // 3. HTML fra Word: <img src="file:///..."> eller data-URI
+        for (const item of dt.items) {
+          if (item.kind === 'string' && item.type === 'text/html') {
+            item.getAsString(html => {
+              const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+              if (!m) return;
+              const src = m[1];
+              if (src.startsWith('data:image')) {
+                // Data-URI — sett direkte
+                settSkisseFraDataURI(idx, src);
+              } else if (src.startsWith('file:///')) {
+                // Lokal filsti — les via fetch (fungerer i Chrome-utvidelse / Electron)
+                fetch(src).then(r => r.blob()).then(b => settSkisseFraBlobEllerFil(idx, b)).catch(() => {});
+              } else if (src.startsWith('http')) {
+                fetch(src).then(r => r.blob()).then(b => settSkisseFraBlobEllerFil(idx, b)).catch(() => {});
+              }
+            });
+            return;
+          }
+        }
+      }
+
+      // 4. Fallback: URL (bilde dratt fra nettleser)
+      const url = dt.getData('URL') || dt.getData('text/uri-list');
+      if (url && url.match(/\.(png|jpg|jpeg|gif|webp)/i)) {
+        fetch(url).then(r => r.blob()).then(b => settSkisseFraBlobEllerFil(idx, b)).catch(() => {});
+      }
     });
+
     container.addEventListener('paste', e => {
       const items = (e.clipboardData || e.originalEvent.clipboardData).items;
       for (const item of items) {
         if (item.type.startsWith('image/')) {
           settSkisseFraBlobEllerFil(idx, item.getAsFile());
-          break;
+          return;
         }
       }
+      // Paste av HTML med img (kopiert fra Word)
+      const html = e.clipboardData.getData('text/html');
+      if (html) {
+        const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+        if (m && m[1].startsWith('data:image')) settSkisseFraDataURI(idx, m[1]);
+      }
     });
-    // Gjør container fokuserbar for paste-events
+
     container.setAttribute('tabindex', '0');
+  }
+
+  function settSkisseFraDataURI(idx, dataURI) {
+    const container = document.getElementById('skisse_container_' + idx);
+    if (!container) return;
+    let img = document.getElementById('skisse_' + idx);
+    if (!img) {
+      const missing = container.querySelector('.skisse-missing');
+      if (missing) missing.remove();
+      img = document.createElement('img');
+      img.id = 'skisse_' + idx;
+      img.alt = 'Teknisk skisse produkt ' + (idx+1);
+      container.insertBefore(img, container.querySelector('.skisse-override-btn'));
+    }
+    img.src = dataURI;
+    container.classList.remove('skisse-drag-over');
   }
   let endringslogg = [];
 
