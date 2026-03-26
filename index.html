@@ -1791,41 +1791,30 @@ Returner kun JSON.`;
 
   // ── Admin-logg: lagrer alle tekstendringer på tvers av tilbud i localStorage ──
   // Nøkkel: norwin_admin_logg — array av {dato, selger, tilbudsNr, prosjekt, felt, fra, til, dim}
+  // ── Admin-logg: lagrer alle endringer per tilbud, kilde er endringslogg-arrayen ──
   function loggEndringerTilAdmin(selgerData) {
+    if (endringslogg.length === 0) return;
     const ADMIN_KEY = 'norwin_admin_logg';
     let logg = [];
     try { logg = JSON.parse(localStorage.getItem(ADMIN_KEY) || '[]'); } catch(e) {}
 
-    const selger   = document.getElementById('selger').value.trim() || 'Ukjent';
-    const prosjekt = window._prosjektNavn || '';
-    const tilbudsNr = selgerData.tilbudsNr || '';
-    const dato = new Date().toISOString();
+    const selger    = document.getElementById('selger').value.trim() || 'Ukjent';
+    const prosjekt  = window._prosjektNavn || '';
+    const tilbudsNr = selgerData.tilbudsNr || window._tilbudsNr || '';
+    const dato      = new Date().toISOString();
 
-    // Legg til alle speksendringer
-    const nokler = selgerData.posisjonNokler || {};
-    Object.entries(nokler).forEach(([nk, data]) => {
-      if (!data.spekser) return;
-      Object.entries(data.spekser).forEach(([felt, nyVerdi]) => {
-        // Finn original verdi fra DOM
-        const original = (() => {
-          let orig = '';
-          document.querySelectorAll('.spec-val.editable-val').forEach(el => {
-            if (el.getAttribute('data-felt') === felt && el.getAttribute('data-logged-from')) {
-              orig = el.getAttribute('data-logged-from');
-            }
-          });
-          return orig;
-        })();
-        // Unngå duplikater: sjekk om samme felt+fra+til allerede finnes
-        const finnes = logg.some(e => e.felt === felt && e.til === nyVerdi && e.nk === nk);
-        if (!finnes) {
-          logg.push({ dato, selger, tilbudsNr, prosjekt, nk, felt, fra: original, til: nyVerdi });
-        }
-      });
+    const gruppe = { dato, selger, tilbudsNr, prosjekt, endringer: [] };
+
+    endringslogg.forEach(e => {
+      if (!e.felt || !e.fra || !e.til || e.fra.trim() === e.til.trim()) return;
+      gruppe.endringer.push({ produkt: e.produktNr, felt: e.felt, fra: e.fra, til: e.til });
     });
 
-    // Behold maks 2000 oppføringer (nyeste sist)
-    if (logg.length > 2000) logg = logg.slice(logg.length - 2000);
+    if (gruppe.endringer.length === 0) return;
+
+    logg = logg.filter(g => !(g.tilbudsNr === tilbudsNr && g.dato === dato));
+    logg.push(gruppe);
+    if (logg.length > 500) logg = logg.slice(logg.length - 500);
     localStorage.setItem(ADMIN_KEY, JSON.stringify(logg));
   }
 
@@ -1835,69 +1824,136 @@ Returner kun JSON.`;
     try { logg = JSON.parse(localStorage.getItem(ADMIN_KEY) || '[]'); } catch(e) {}
 
     if (logg.length === 0) {
-      alert('Ingen oversettelseslogg funnet ennå. Gjør endringer i tilbud og lagre/skriv ut for å bygge loggen.');
+      alert('Ingen endringslogg funnet ennå.\nGjør endringer i et tilbud og lagre/skriv ut for å bygge loggen.');
       return;
     }
 
-    // Gruppert visning: felt → {original → [oversettelser]}
-    const gruppert = {};
-    logg.forEach(e => {
-      if (!e.felt || !e.til || !e.fra) return;
-      if (!gruppert[e.felt]) gruppert[e.felt] = {};
-      const fra = e.fra.trim();
-      if (!gruppert[e.felt][fra]) gruppert[e.felt][fra] = {};
-      gruppert[e.felt][fra][e.til] = (gruppert[e.felt][fra][e.til] || 0) + 1;
-    });
+    const S = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-    const feltSortert = Object.keys(gruppert).sort();
-    let html = `
-      <div style="font-family:'Source Sans 3',sans-serif;max-width:900px;margin:0 auto;padding:20px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:3px solid #1a3a5c;padding-bottom:12px;">
-          <h2 style="color:#1a3a5c;font-size:20px;margin:0;">Admin: Oversettelseslogg</h2>
-          <div style="display:flex;gap:8px;">
-            <button onclick="lastNedAdminLogg()" style="background:#1a3a5c;color:#fff;border:none;padding:8px 16px;font-size:13px;font-weight:700;border-radius:4px;cursor:pointer;">⬇ Last ned JSON</button>
-            <button onclick="document.getElementById('admin-panel').remove()" style="background:#fff;color:#888;border:2px solid #dde2ea;padding:8px 14px;font-size:13px;border-radius:4px;cursor:pointer;">Lukk</button>
+    const tilbudHTML = [...logg].reverse().map(gruppe => {
+      const dato = new Date(gruppe.dato).toLocaleString('nb-NO', {
+        day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'
+      });
+      const rader = (gruppe.endringer||[]).map((e, i) => `
+        <tr style="border-top:1px solid #eee;${i%2===0?'background:#fafbfc;':''}">
+          <td style="padding:6px 12px;color:#555;font-size:12px;">${S(e.produkt)}</td>
+          <td style="padding:6px 12px;font-weight:600;font-size:12px;color:#1a2233;">${S(e.felt)}</td>
+          <td style="padding:6px 12px;color:#888;font-size:12px;font-style:italic;max-width:240px;">${S(e.fra)}</td>
+          <td style="padding:6px 12px;color:#1a3a5c;font-weight:600;font-size:12px;max-width:240px;">${S(e.til)}</td>
+        </tr>`).join('');
+      return `
+      <div style="margin-bottom:16px;border:1px solid #dde2ea;border-radius:6px;overflow:hidden;">
+        <div style="background:#1a3a5c;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div>
+            <span style="font-weight:700;font-size:14px;">Tilbud ${S(gruppe.tilbudsNr||'–')}</span>
+            ${gruppe.prosjekt?`<span style="font-size:12px;opacity:0.7;margin-left:10px;">${S(gruppe.prosjekt)}</span>`:''}
+          </div>
+          <div style="font-size:12px;opacity:0.85;display:flex;gap:16px;align-items:center;">
+            <span>👤 ${S(gruppe.selger||'Ukjent')}</span>
+            <span>🕐 ${dato}</span>
+            <span style="background:rgba(255,255,255,0.18);padding:2px 8px;border-radius:3px;">${(gruppe.endringer||[]).length} endringer</span>
           </div>
         </div>
-        <p style="font-size:12px;color:#888;margin-bottom:16px;">${logg.length} loggoppføringer. Viser unike oversettelser gruppert per felt.</p>`;
-
-    feltSortert.forEach(felt => {
-      const fraMap = gruppert[felt];
-      const antFra = Object.keys(fraMap).length;
-      html += `<div style="margin-bottom:16px;border:1px solid #e0e5ee;border-radius:6px;overflow:hidden;">
-        <div style="background:#1a3a5c;color:#fff;padding:8px 14px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">${felt} <span style="font-weight:400;opacity:0.7;">(${antFra} unike originaler)</span></div>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <table style="width:100%;border-collapse:collapse;">
           <thead><tr style="background:#f5f7fa;">
-            <th style="padding:7px 12px;text-align:left;color:#888;font-size:11px;letter-spacing:0.05em;">ORIGINAL</th>
-            <th style="padding:7px 12px;text-align:left;color:#888;font-size:11px;letter-spacing:0.05em;">OVERSATT TIL</th>
-            <th style="padding:7px 12px;text-align:center;color:#888;font-size:11px;letter-spacing:0.05em;">ANTALL</th>
-          </tr></thead><tbody>`;
-      Object.entries(fraMap).forEach(([fra, tilMap], ri) => {
-        Object.entries(tilMap).sort((a,b)=>b[1]-a[1]).forEach(([til, antall], ti) => {
-          html += `<tr style="border-top:1px solid #eee;${(ri+ti)%2===0?'background:#fafbfc;':''}">
-            <td style="padding:7px 12px;color:#666;font-style:italic;">${ti===0 ? fra : ''}</td>
-            <td style="padding:7px 12px;color:#1a2233;font-weight:500;">${til}</td>
-            <td style="padding:7px 12px;text-align:center;color:#1a3a5c;font-weight:700;">${antall}</td>
-          </tr>`;
-        });
-      });
-      html += `</tbody></table></div>`;
-    });
+            <th style="padding:6px 12px;text-align:left;color:#aaa;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap;">Posisjon</th>
+            <th style="padding:6px 12px;text-align:left;color:#aaa;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap;">Felt</th>
+            <th style="padding:6px 12px;text-align:left;color:#aaa;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;">Original (fra produsent)</th>
+            <th style="padding:6px 12px;text-align:left;color:#aaa;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;">Endret til</th>
+          </tr></thead>
+          <tbody>${rader}</tbody>
+        </table>
+      </div>`;
+    }).join('');
 
-    html += `</div>`;
+    const feltMap = {};
+    logg.forEach(gruppe => {
+      (gruppe.endringer||[]).forEach(e => {
+        if (!e.felt||!e.fra||!e.til||e.fra.trim()===e.til.trim()) return;
+        if (!feltMap[e.felt]) feltMap[e.felt] = {};
+        const fra = e.fra.trim();
+        if (!feltMap[e.felt][fra]) feltMap[e.felt][fra] = {};
+        feltMap[e.felt][fra][e.til] = (feltMap[e.felt][fra][e.til]||0)+1;
+      });
+    });
+    const feltSortert = Object.keys(feltMap).sort();
+    const mønsterHTML = feltSortert.length === 0
+      ? '<p style="color:#888;font-size:13px;padding:16px;">Ingen endringer med avvik mellom original og ny verdi ennå.</p>'
+      : feltSortert.map(felt => {
+          const fraMap = feltMap[felt];
+          const rader = Object.entries(fraMap).flatMap(([fra, tilMap], ri) =>
+            Object.entries(tilMap).sort((a,b)=>b[1]-a[1]).map(([til, ant], ti) => `
+              <tr style="border-top:1px solid #eee;${(ri+ti)%2===0?'background:#fafbfc;':''}">
+                <td style="padding:6px 12px;color:#888;font-style:italic;font-size:12px;max-width:220px;">${ti===0?S(fra):''}</td>
+                <td style="padding:6px 12px;color:#1a3a5c;font-weight:600;font-size:12px;max-width:220px;">${S(til)}</td>
+                <td style="padding:6px 12px;text-align:center;font-weight:700;color:#1a3a5c;font-size:12px;">${ant}</td>
+              </tr>`)
+          ).join('');
+          return `
+          <div style="margin-bottom:12px;border:1px solid #dde2ea;border-radius:6px;overflow:hidden;">
+            <div style="background:#2d4a6e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">${S(felt)}</div>
+            <table style="width:100%;border-collapse:collapse;">
+              <thead><tr style="background:#f5f7fa;">
+                <th style="padding:5px 12px;text-align:left;color:#aaa;font-size:10px;">ORIGINAL</th>
+                <th style="padding:5px 12px;text-align:left;color:#aaa;font-size:10px;">ENDRET TIL</th>
+                <th style="padding:5px 12px;text-align:center;color:#aaa;font-size:10px;">ANTALL</th>
+              </tr></thead>
+              <tbody>${rader}</tbody>
+            </table>
+          </div>`;
+        }).join('');
+
+    const totalEndringer = logg.reduce((s,g)=>s+(g.endringer||[]).length,0);
+
+    const html = `
+      <div style="font-family:'Source Sans 3',sans-serif;max-width:960px;margin:0 auto;padding:24px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:3px solid #1a3a5c;padding-bottom:12px;">
+          <h2 style="color:#1a3a5c;font-size:20px;margin:0;">⚙ Admin: Endringslogg</h2>
+          <div style="display:flex;gap:8px;">
+            <button onclick="lastNedAdminLogg()" style="background:#1a3a5c;color:#fff;border:none;padding:8px 16px;font-size:13px;font-weight:700;border-radius:4px;cursor:pointer;">⬇ Last ned JSON</button>
+            <button onclick="document.getElementById('admin-panel').remove()" style="background:#fff;color:#888;border:2px solid #dde2ea;padding:8px 14px;font-size:13px;border-radius:4px;cursor:pointer;">Lukk ✕</button>
+          </div>
+        </div>
+        <p style="font-size:12px;color:#888;margin-bottom:20px;">${logg.length} tilbud logget &nbsp;·&nbsp; ${totalEndringer} endringer totalt</p>
+        <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #dde2ea;">
+          <button id="adm-tab-tilbud" onclick="admByttFane('tilbud')"
+            style="padding:8px 20px;border:none;border-bottom:3px solid #1a3a5c;margin-bottom:-2px;background:none;font-family:'Source Sans 3',sans-serif;font-size:13px;font-weight:700;color:#1a3a5c;cursor:pointer;">
+            Per tilbud
+          </button>
+          <button id="adm-tab-felt" onclick="admByttFane('felt')"
+            style="padding:8px 20px;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;background:none;font-family:'Source Sans 3',sans-serif;font-size:13px;color:#888;cursor:pointer;">
+            Oversettelsesmønster
+          </button>
+        </div>
+        <div id="adm-pane-tilbud">${tilbudHTML}</div>
+        <div id="adm-pane-felt" style="display:none;">${mønsterHTML}</div>
+      </div>`;
 
     const panel = document.createElement('div');
     panel.id = 'admin-panel';
     panel.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:9999;overflow-y:auto;padding:20px;';
     const inner = document.createElement('div');
-    inner.style.cssText = 'background:#fff;border-radius:8px;max-width:960px;margin:0 auto;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
+    inner.style.cssText = 'background:#fff;border-radius:8px;max-width:980px;margin:0 auto;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
     inner.innerHTML = html;
     panel.appendChild(inner);
     panel.addEventListener('click', e => { if (e.target === panel) panel.remove(); });
     document.body.appendChild(panel);
   }
 
-  function lastNedAdminLogg() {
+  function admByttFane(fane) {
+    ['tilbud','felt'].forEach(f => {
+      const btn = document.getElementById('adm-tab-'+f);
+      const pane = document.getElementById('adm-pane-'+f);
+      if (!btn||!pane) return;
+      const active = f === fane;
+      pane.style.display = active ? 'block' : 'none';
+      btn.style.borderBottomColor = active ? '#1a3a5c' : 'transparent';
+      btn.style.color = active ? '#1a3a5c' : '#888';
+      btn.style.fontWeight = active ? '700' : '400';
+    });
+  }
+
+    function lastNedAdminLogg() {
     const logg = JSON.parse(localStorage.getItem('norwin_admin_logg') || '[]');
     const blob = new Blob([JSON.stringify(logg, null, 2)], { type:'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
