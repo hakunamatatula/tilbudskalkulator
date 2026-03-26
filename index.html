@@ -403,7 +403,10 @@
     <div class="logo-name">NORWIN</div>
     <div class="logo-sub">Tilbudsverktøy</div>
   </div>
-  <div id="today-date" style="font-size:15px;color:var(--muted);font-weight:600;"></div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div id="today-date" style="font-size:15px;color:var(--muted);font-weight:600;"></div>
+    <button onclick="visAdminPanel()" title="Admin: se oversettelseslogg" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;font-family:'Source Sans 3',sans-serif;letter-spacing:0.06em;text-transform:uppercase;">⚙ Admin</button>
+  </div>
 </div>
 
 <div class="no-print" id="form-area">
@@ -1438,50 +1441,62 @@ Returner kun JSON.`;
     const ordreNr = hentOrdreNr(tilbudsNr);
     if (!ordreNr) return;
 
-    // Samle alle selgerendringer fra DOM
     const selgerData = {
       dato: new Date().toISOString(),
       tilbudsNr,
-      // Faktor per posisjon (indeks → faktorverdi)
       faktorer: {},
-      // Redigerte speksverdier: posisjon → felt → ny verdi
       spekser: {},
-      // Kommentarer per posisjon
       kommentarer: {},
-      // Informasjonstekst til kunden
-      infoTilKunde: ''
+      infoTilKunde: '',
+      // Nøkkelbasert matching på dim|type — overlever posisjonsnummer-endringer mellom versjoner
+      posisjonNokler: {}
     };
 
-    // Hent faktorer
     (window._produkter || []).forEach((p, i) => {
       const el = document.getElementById('faktor_' + i);
-      if (el) selgerData.faktorer[i] = el.innerText.trim();
+      if (!el) return;
+      const v = el.innerText.trim();
+      selgerData.faktorer[i] = v;
+      const nk = lagPosisjonNokkel(p);
+      if (nk) { selgerData.posisjonNokler[nk] = selgerData.posisjonNokler[nk] || {}; selgerData.posisjonNokler[nk].faktor = v; }
     });
 
-    // Hent redigerte speksverdier (har data-logged-from = er endret)
     document.querySelectorAll('.spec-val.editable-val').forEach(el => {
-      if (el.getAttribute('data-logged-from')) {
-        const posNr = el.getAttribute('data-produkt'); // "Posisjon 1"
-        const felt  = el.getAttribute('data-felt');
-        if (!selgerData.spekser[posNr]) selgerData.spekser[posNr] = {};
-        selgerData.spekser[posNr][felt] = el.innerText.trim();
+      if (!el.getAttribute('data-logged-from')) return;
+      const posNr = el.getAttribute('data-produkt');
+      const felt  = el.getAttribute('data-felt');
+      if (!selgerData.spekser[posNr]) selgerData.spekser[posNr] = {};
+      selgerData.spekser[posNr][felt] = el.innerText.trim();
+      const idx = parseInt(posNr.replace('Posisjon ','')) - 1;
+      const p = (window._produkter || [])[idx];
+      const nk = p ? lagPosisjonNokkel(p) : null;
+      if (nk) {
+        selgerData.posisjonNokler[nk] = selgerData.posisjonNokler[nk] || {};
+        selgerData.posisjonNokler[nk].spekser = selgerData.posisjonNokler[nk].spekser || {};
+        selgerData.posisjonNokler[nk].spekser[felt] = el.innerText.trim();
       }
     });
 
-    // Hent kommentarer
     (window._produkter || []).forEach((p, i) => {
       const el = document.getElementById('kommentar_' + i);
-      if (el && el.innerText.trim()) {
-        selgerData.kommentarer[i] = el.innerText.trim();
-      }
+      if (!el || !el.innerText.trim()) return;
+      selgerData.kommentarer[i] = el.innerText.trim();
+      const nk = lagPosisjonNokkel(p);
+      if (nk) { selgerData.posisjonNokler[nk] = selgerData.posisjonNokler[nk] || {}; selgerData.posisjonNokler[nk].kommentar = el.innerText.trim(); }
     });
 
-    // Hent infotekst
     const infoEl = document.getElementById('info-til-kunde');
     if (infoEl) selgerData.infoTilKunde = infoEl.innerText.trim();
 
     localStorage.setItem('norwin_ordre_' + ordreNr, JSON.stringify(selgerData));
-    console.log('Selgerendringer lagret for ordre', ordreNr);
+    loggEndringerTilAdmin(selgerData);
+  }
+
+  // Unik nøkkel per posisjon basert på dimensjon og type — brukes for matching på tvers av versjoner
+  function lagPosisjonNokkel(p) {
+    const dim  = (p.dim || p.dimensjon || '').trim().toLowerCase();
+    const type = (p.s && p.s.find(s => s.l === 'Type')) ? p.s.find(s => s.l === 'Type').v.slice(0,40).toLowerCase() : '';
+    return dim ? (dim + (type ? '|' + type : '')) : null;
   }
 
   function hentLagredeEndringer(tilbudsNr) {
@@ -1539,33 +1554,41 @@ Returner kun JSON.`;
     if (!lagret) return;
 
     let antallOverfort = 0;
+    const nokler = lagret.posisjonNokler || {};
 
-    // Overfør faktorer
-    Object.entries(lagret.faktorer).forEach(([idx, faktorVal]) => {
-      const el = document.getElementById('faktor_' + idx);
-      if (el) {
-        el.innerText = faktorVal;
-        // Trigger faktor-oppdatering
-        oppdaterFaktor(parseInt(idx), el);
-        antallOverfort++;
-      }
+    // Overfør faktorer — prøv nøkkel-matching først, fallback til indeks
+    (window._produkter || []).forEach((p, i) => {
+      const nk = lagPosisjonNokkel(p);
+      let faktorVal = null;
+
+      // 1. Match på dim|type-nøkkel
+      if (nk && nokler[nk] && nokler[nk].faktor) faktorVal = nokler[nk].faktor;
+      // 2. Fallback: samme posisjonsnummer
+      else if (lagret.faktorer[i]) faktorVal = lagret.faktorer[i];
+
+      if (!faktorVal) return;
+      const el = document.getElementById('faktor_' + i);
+      if (el) { el.innerText = faktorVal; oppdaterFaktor(i, el); antallOverfort++; }
     });
 
-    // Overfør redigerte speksverdier
-    Object.entries(lagret.spekser).forEach(([posNr, felter]) => {
+    // Overfør speksverdier — nøkkelbasert
+    (window._produkter || []).forEach((p, i) => {
+      const nk = lagPosisjonNokkel(p);
+      const posNr = 'Posisjon ' + (i + 1);
+
+      // Hent felter fra nøkkel-match eller indeks-match
+      let felter = (nk && nokler[nk] && nokler[nk].spekser) ? nokler[nk].spekser
+                 : (lagret.spekser[posNr] || null);
+      if (!felter) return;
+
       Object.entries(felter).forEach(([felt, nyVerdi]) => {
-        // Finn riktig spec-val element
         document.querySelectorAll('.spec-val.editable-val').forEach(el => {
           if (el.getAttribute('data-produkt') === posNr && el.getAttribute('data-felt') === felt) {
             const original = el.getAttribute('data-original');
-            if (el.innerText.trim() === original || el.innerText.trim() !== nyVerdi) {
+            if (el.innerText.trim() !== nyVerdi) {
               el.innerText = nyVerdi;
-              // Marker som endret
-              if (!el.getAttribute('data-logged-from')) {
-                el.setAttribute('data-logged-from', original);
-              }
-              const markId = 'mark_' + el.id;
-              const markEl = document.getElementById(markId);
+              if (!el.getAttribute('data-logged-from')) el.setAttribute('data-logged-from', original);
+              const markEl = document.getElementById('mark_' + el.id);
               if (markEl) markEl.style.display = 'inline-block';
               antallOverfort++;
             }
@@ -1574,28 +1597,23 @@ Returner kun JSON.`;
       });
     });
 
-    // Overfør kommentarer
-    Object.entries(lagret.kommentarer).forEach(([idx, tekst]) => {
-      const el = document.getElementById('kommentar_' + idx);
-      if (el && !el.innerText.trim()) {
-        el.innerText = tekst;
-        antallOverfort++;
-      }
+    // Overfør kommentarer — nøkkelbasert
+    (window._produkter || []).forEach((p, i) => {
+      const nk = lagPosisjonNokkel(p);
+      const tekst = (nk && nokler[nk] && nokler[nk].kommentar) ? nokler[nk].kommentar
+                  : (lagret.kommentarer[i] || null);
+      if (!tekst) return;
+      const el = document.getElementById('kommentar_' + i);
+      if (el && !el.innerText.trim()) { el.innerText = tekst; antallOverfort++; }
     });
 
-    // Overfør infotekst
     if (lagret.infoTilKunde) {
       const infoEl = document.getElementById('info-til-kunde');
-      if (infoEl && !infoEl.innerText.trim()) {
-        infoEl.innerText = lagret.infoTilKunde;
-        antallOverfort++;
-      }
+      if (infoEl && !infoEl.innerText.trim()) { infoEl.innerText = lagret.infoTilKunde; antallOverfort++; }
     }
 
-    // Oppdater totaler etter faktorendringer
     oppdaterTotaler();
 
-    // Erstatt banner med bekreftelse
     if (banner) {
       banner.style.background = '#f0faf4';
       banner.style.borderColor = '#2d6a4f';
@@ -1728,6 +1746,122 @@ Returner kun JSON.`;
     const selger = document.getElementById('selger').value.trim() || 'Ukjent';
     const dato = new Date().toLocaleString('nb-NO');
     endringslogg.push({ dato, selger, produktNr, felt, fra, til });
+  }
+
+  // ── Admin-logg: lagrer alle tekstendringer på tvers av tilbud i localStorage ──
+  // Nøkkel: norwin_admin_logg — array av {dato, selger, tilbudsNr, prosjekt, felt, fra, til, dim}
+  function loggEndringerTilAdmin(selgerData) {
+    const ADMIN_KEY = 'norwin_admin_logg';
+    let logg = [];
+    try { logg = JSON.parse(localStorage.getItem(ADMIN_KEY) || '[]'); } catch(e) {}
+
+    const selger   = document.getElementById('selger').value.trim() || 'Ukjent';
+    const prosjekt = window._prosjektNavn || '';
+    const tilbudsNr = selgerData.tilbudsNr || '';
+    const dato = new Date().toISOString();
+
+    // Legg til alle speksendringer
+    const nokler = selgerData.posisjonNokler || {};
+    Object.entries(nokler).forEach(([nk, data]) => {
+      if (!data.spekser) return;
+      Object.entries(data.spekser).forEach(([felt, nyVerdi]) => {
+        // Finn original verdi fra DOM
+        const original = (() => {
+          let orig = '';
+          document.querySelectorAll('.spec-val.editable-val').forEach(el => {
+            if (el.getAttribute('data-felt') === felt && el.getAttribute('data-logged-from')) {
+              orig = el.getAttribute('data-logged-from');
+            }
+          });
+          return orig;
+        })();
+        // Unngå duplikater: sjekk om samme felt+fra+til allerede finnes
+        const finnes = logg.some(e => e.felt === felt && e.til === nyVerdi && e.nk === nk);
+        if (!finnes) {
+          logg.push({ dato, selger, tilbudsNr, prosjekt, nk, felt, fra: original, til: nyVerdi });
+        }
+      });
+    });
+
+    // Behold maks 2000 oppføringer (nyeste sist)
+    if (logg.length > 2000) logg = logg.slice(logg.length - 2000);
+    localStorage.setItem(ADMIN_KEY, JSON.stringify(logg));
+  }
+
+  function visAdminPanel() {
+    const ADMIN_KEY = 'norwin_admin_logg';
+    let logg = [];
+    try { logg = JSON.parse(localStorage.getItem(ADMIN_KEY) || '[]'); } catch(e) {}
+
+    if (logg.length === 0) {
+      alert('Ingen oversettelseslogg funnet ennå. Gjør endringer i tilbud og lagre/skriv ut for å bygge loggen.');
+      return;
+    }
+
+    // Gruppert visning: felt → {original → [oversettelser]}
+    const gruppert = {};
+    logg.forEach(e => {
+      if (!e.felt || !e.til || !e.fra) return;
+      if (!gruppert[e.felt]) gruppert[e.felt] = {};
+      const fra = e.fra.trim();
+      if (!gruppert[e.felt][fra]) gruppert[e.felt][fra] = {};
+      gruppert[e.felt][fra][e.til] = (gruppert[e.felt][fra][e.til] || 0) + 1;
+    });
+
+    const feltSortert = Object.keys(gruppert).sort();
+    let html = `
+      <div style="font-family:'Source Sans 3',sans-serif;max-width:900px;margin:0 auto;padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:3px solid #1a3a5c;padding-bottom:12px;">
+          <h2 style="color:#1a3a5c;font-size:20px;margin:0;">Admin: Oversettelseslogg</h2>
+          <div style="display:flex;gap:8px;">
+            <button onclick="lastNedAdminLogg()" style="background:#1a3a5c;color:#fff;border:none;padding:8px 16px;font-size:13px;font-weight:700;border-radius:4px;cursor:pointer;">⬇ Last ned JSON</button>
+            <button onclick="document.getElementById('admin-panel').remove()" style="background:#fff;color:#888;border:2px solid #dde2ea;padding:8px 14px;font-size:13px;border-radius:4px;cursor:pointer;">Lukk</button>
+          </div>
+        </div>
+        <p style="font-size:12px;color:#888;margin-bottom:16px;">${logg.length} loggoppføringer. Viser unike oversettelser gruppert per felt.</p>`;
+
+    feltSortert.forEach(felt => {
+      const fraMap = gruppert[felt];
+      const antFra = Object.keys(fraMap).length;
+      html += `<div style="margin-bottom:16px;border:1px solid #e0e5ee;border-radius:6px;overflow:hidden;">
+        <div style="background:#1a3a5c;color:#fff;padding:8px 14px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">${felt} <span style="font-weight:400;opacity:0.7;">(${antFra} unike originaler)</span></div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:#f5f7fa;">
+            <th style="padding:7px 12px;text-align:left;color:#888;font-size:11px;letter-spacing:0.05em;">ORIGINAL</th>
+            <th style="padding:7px 12px;text-align:left;color:#888;font-size:11px;letter-spacing:0.05em;">OVERSATT TIL</th>
+            <th style="padding:7px 12px;text-align:center;color:#888;font-size:11px;letter-spacing:0.05em;">ANTALL</th>
+          </tr></thead><tbody>`;
+      Object.entries(fraMap).forEach(([fra, tilMap], ri) => {
+        Object.entries(tilMap).sort((a,b)=>b[1]-a[1]).forEach(([til, antall], ti) => {
+          html += `<tr style="border-top:1px solid #eee;${(ri+ti)%2===0?'background:#fafbfc;':''}">
+            <td style="padding:7px 12px;color:#666;font-style:italic;">${ti===0 ? fra : ''}</td>
+            <td style="padding:7px 12px;color:#1a2233;font-weight:500;">${til}</td>
+            <td style="padding:7px 12px;text-align:center;color:#1a3a5c;font-weight:700;">${antall}</td>
+          </tr>`;
+        });
+      });
+      html += `</tbody></table></div>`;
+    });
+
+    html += `</div>`;
+
+    const panel = document.createElement('div');
+    panel.id = 'admin-panel';
+    panel.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:9999;overflow-y:auto;padding:20px;';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'background:#fff;border-radius:8px;max-width:960px;margin:0 auto;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
+    inner.innerHTML = html;
+    panel.appendChild(inner);
+    panel.addEventListener('click', e => { if (e.target === panel) panel.remove(); });
+    document.body.appendChild(panel);
+  }
+
+  function lastNedAdminLogg() {
+    const logg = JSON.parse(localStorage.getItem('norwin_admin_logg') || '[]');
+    const blob = new Blob([JSON.stringify(logg, null, 2)], { type:'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `norwin_oversettelseslogg_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
   }
 
   function lastNedLogg() {
