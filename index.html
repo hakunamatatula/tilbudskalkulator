@@ -2446,6 +2446,34 @@ Returner kun JSON.`;
       </div>
     `;
   }
+
+  // ── Global paste-interceptor: alltid lim inn som ren tekst ──
+  // Fjerner all formatering (font, størrelse, farge, bold etc.) fra tekst
+  // limt inn i alle contenteditable-felt i tilbudet
+  document.addEventListener('paste', function(e) {
+    const target = e.target;
+    // Kun håndter contenteditable-felt
+    if (!target.isContentEditable) return;
+    // Ikke interferere med skisse-containernes bildelim
+    if (target.classList.contains('product-skisse') || target.closest('.product-skisse')) return;
+
+    e.preventDefault();
+    const tekst = (e.clipboardData || window.clipboardData).getData('text/plain');
+    if (!tekst) return;
+
+    // Lim inn ren tekst på markørposisjonen
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    sel.deleteFromDocument();
+    const node = document.createTextNode(tekst);
+    sel.getRangeAt(0).insertNode(node);
+    // Flytt markør til slutten av innsatt tekst
+    const range = document.createRange();
+    range.setStartAfter(node);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }, true); // capture-fase: kjør før andre handlers
 </script>
 </body>
 </html>
