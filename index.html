@@ -1700,23 +1700,38 @@ Returner kun JSON.`;
       el.innerText = formatNOK(parseFloat(original));
       return;
     }
-    // Oppdater sum i pristabellen (kun ikke-alt)
+
+    // Synkroniser priscellen i BEGGE visninger
+    const prisKort   = document.getElementById('pris_' + idx);
+    const prisTabell = document.getElementById('t_pris_' + idx);
+    [prisKort, prisTabell].forEach(prisEl => {
+      if (!prisEl || prisEl === el) return;
+      prisEl.innerText = formatNOK(nyPris);
+    });
+
+    // Oppdater sum i begge visninger (kun ikke-alt)
     if (!erAlt) {
-      const sumEl = document.getElementById('sum_' + idx);
-      if (sumEl) sumEl.textContent = 'kr ' + formatNOK(nyPris * ant);
+      const sumKort   = document.getElementById('sum_' + idx);
+      const sumTabell = document.getElementById('t_sum_' + idx);
+      if (sumKort)   sumKort.textContent   = 'kr ' + formatNOK(nyPris * ant);
+      if (sumTabell) sumTabell.textContent = 'kr ' + formatNOK(nyPris * ant);
     }
-    // Vis/skjul endringsmarkering
-    const markEl = document.getElementById('mark_pris_' + idx);
+
+    // Vis/skjul endringsmarkering i begge
+    const markKort   = document.getElementById('mark_pris_' + idx);
+    const markTabell = document.getElementById('t_mark_pris_' + idx);
     if (nyPris !== parseFloat(original)) {
       if (!el.getAttribute('data-logged-from')) el.setAttribute('data-logged-from', 'kr ' + formatNOK(parseFloat(original)));
       const fra = el.getAttribute('data-logged-from');
       const tilTekst = 'kr ' + formatNOK(nyPris);
       logEndring(el.getAttribute('data-produkt'), 'Pris NOK', fra, tilTekst);
       el.setAttribute('data-logged-from', tilTekst);
-      if (markEl) markEl.style.display = 'inline-block';
+      if (markKort)   markKort.style.display   = 'inline-block';
+      if (markTabell) markTabell.style.display = 'inline-block';
     } else {
       el.removeAttribute('data-logged-from');
-      if (markEl) markEl.style.display = 'none';
+      if (markKort)   markKort.style.display   = 'none';
+      if (markTabell) markTabell.style.display = 'none';
     }
     el.innerText = formatNOK(nyPris);
     oppdaterTotaler();
@@ -1730,23 +1745,38 @@ Returner kun JSON.`;
     const ant = parseInt(el.getAttribute('data-ant')) || 1;
     const erAlt = el.getAttribute('data-alt') === 'true';
     const nyPris = eur * nyFaktor;
-    // Oppdater NOK-priscellen
-    const prisEl = document.getElementById('pris_' + idx);
-    if (prisEl) {
-      const gammelPris = prisEl.innerText.trim();
+
+    // Synkroniser faktor-feltet i BEGGE visninger (posisjonskort + pristabellrad)
+    const faktorKort  = document.getElementById('faktor_' + idx);
+    const faktorTabell = document.getElementById('t_faktor_' + idx);
+    if (faktorKort && faktorKort !== el)   faktorKort.innerText   = String(nyFaktor).replace('.',',');
+    if (faktorTabell && faktorTabell !== el) faktorTabell.innerText = String(nyFaktor).replace('.',',');
+
+    // Oppdater NOK-priscelle i begge visninger
+    const prisKort   = document.getElementById('pris_' + idx);
+    const prisTabell = document.getElementById('t_pris_' + idx);
+    [prisKort, prisTabell].forEach(prisEl => {
+      if (!prisEl) return;
+      if (!prisEl.getAttribute('data-logged-from')) prisEl.setAttribute('data-logged-from', 'kr ' + prisEl.innerText.trim());
       prisEl.innerText = formatNOK(nyPris);
-      if (!prisEl.getAttribute('data-logged-from')) prisEl.setAttribute('data-logged-from', 'kr ' + gammelPris);
-      const fra = prisEl.getAttribute('data-logged-from');
+      prisEl.setAttribute('data-logged-from', 'kr ' + formatNOK(nyPris));
+    });
+    if (prisKort) {
+      const fra = prisKort.getAttribute('data-logged-from') || '';
       const til = 'kr ' + formatNOK(nyPris) + ' (faktor ' + nyFaktor + ')';
       logEndring(el.getAttribute('data-produkt'), 'Faktorpåslag/Pris NOK', fra, til);
-      prisEl.setAttribute('data-logged-from', 'kr ' + formatNOK(nyPris));
       const markEl = document.getElementById('mark_pris_' + idx);
       if (markEl) markEl.style.display = 'inline-block';
+      const markTabell = document.getElementById('t_mark_pris_' + idx);
+      if (markTabell) markTabell.style.display = 'inline-block';
     }
-    // Oppdater sumcelle (kun for ikke-alternativ)
+
+    // Oppdater sumcelle i begge visninger (kun ikke-alternativ)
     if (!erAlt) {
-      const sumEl = document.getElementById('sum_' + idx);
-      if (sumEl) sumEl.textContent = 'kr ' + formatNOK(nyPris * ant);
+      const sumKort   = document.getElementById('sum_' + idx);
+      const sumTabell = document.getElementById('t_sum_' + idx);
+      if (sumKort)   sumKort.textContent   = 'kr ' + formatNOK(nyPris * ant);
+      if (sumTabell) sumTabell.textContent = 'kr ' + formatNOK(nyPris * ant);
     }
     oppdaterTotaler();
   }
@@ -1924,7 +1954,7 @@ Returner kun JSON.`;
             <span style="font-size:10px;color:#bbb;">f:</span>
             <span class="faktor-val"
               contenteditable="true"
-              id="faktor_${origIdx}"
+              id="t_faktor_${origIdx}"
               data-eur="${p.eur||0}"
               data-ant="${ant}"
               data-alt="false"
@@ -1945,13 +1975,13 @@ Returner kun JSON.`;
             data-alt="false"
             data-produkt="Posisjon ${origIdx+1}"
             data-felt="Pris NOK"
-            id="pris_${origIdx}"
+            id="t_pris_${origIdx}"
             title="Klikk for å endre NOK-pris"
             onblur="oppdaterPris(${origIdx}, this)"
           >${formatNOK(nokVal)}</span>
-          <span class="edited-mark" id="mark_pris_${origIdx}" style="display:none;"></span>
+          <span class="edited-mark" id="t_mark_pris_${origIdx}" style="display:none;"></span>
         </td>
-        <td style="font-weight:600;text-align:right;" class="sum-col" id="sum_${origIdx}">kr ${formatNOK(sumVal)}</td>
+        <td style="font-weight:600;text-align:right;" class="sum-col" id="t_sum_${origIdx}">kr ${formatNOK(sumVal)}</td>
       </tr>`;
     }).join('');
 
