@@ -1070,21 +1070,16 @@ ${klon.outerHTML}
         return /^\d+\s*\(\d+\s*stk\.?\)$/i.test(it.str) && it.x < 0.35;
       });
 
-      // Finn spesifikasjonskolonnens x-start for denne siden
-      // Bruker "Type:"-etikettens x-posisjon — alltid til høyre for skissen i HCTC-format
+      // Spec-labels brukes til å finne høyre grense per produkt (beregnes per produkt nedenfor)
       const specLabels = ['Type', 'Tresort', 'Glass', 'Malingfarge', 'Rammer', 'Sprosser',
                           'Bunnglasslist', 'Pakninger', 'Glassforsegling', 'Håndtak', 'Hengsler', 'Beslag'];
       const specItemsSide = items.filter(it =>
         it.x > 0.15 && specLabels.some(l => it.str === l || it.str === l + ':' ||
           it.str.startsWith(l + ':') || it.str.startsWith(l + ' '))
       );
-      const sideSpecXMin = specItemsSide.length > 0
-        ? Math.min(...specItemsSide.map(it => it.x))
-        : null;
 
       // Match start og slutt per produktnummer
       startAnkere.forEach(start => {
-        // Finn tilhørende slutt: same page, y under start, prodNr matcher
         const n = start.prodNr || parseInt(start.str);
 
         // Finn neste start-anker (for å begrense søket)
@@ -1103,6 +1098,13 @@ ${klon.outerHTML}
             .sort((a, b) => a.yTop - b.yTop)[0];
         }
 
+        // specXMin per produkt: finn spec-labels innenfor dette produktets y-range
+        // Dette sikrer riktig cropW selv når to produkter på samme side har ulik bredde
+        const specIProd = specItemsSide.filter(it => it.yTop >= start.yTop && it.yTop < yMax);
+        const prodSpecXMin = specIProd.length > 0
+          ? Math.min(...specIProd.map(it => it.x))
+          : null;
+
         ankere.push({
           prodNr:   n,
           pageIdx:  i,
@@ -1110,7 +1112,7 @@ ${klon.outerHTML}
           yEnd:     slutt ? slutt.yTop + 0.012 : start.yTop + 0.55,
           pageH:    vp0.height,
           pageW:    vp0.width,
-          specXMin: sideSpecXMin   // fast høyre grense for hele siden
+          specXMin: prodSpecXMin   // per-produkt høyre grense
         });
       });
     }
