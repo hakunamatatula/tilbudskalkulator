@@ -1803,17 +1803,33 @@ Returner kun JSON.`;
     const tilbudsNr = selgerData.tilbudsNr || window._tilbudsNr || '';
     const dato      = new Date().toISOString();
 
-    const gruppe = { dato, selger, tilbudsNr, prosjekt, endringer: [] };
-
+    // Nye endringer fra denne sesjonen
+    const nyeEndringer = [];
     endringslogg.forEach(e => {
       if (!e.felt || !e.fra || !e.til || e.fra.trim() === e.til.trim()) return;
-      gruppe.endringer.push({ produkt: e.produktNr, felt: e.felt, fra: e.fra, til: e.til });
+      nyeEndringer.push({ produkt: e.produktNr, felt: e.felt, fra: e.fra, til: e.til });
     });
+    if (nyeEndringer.length === 0) return;
 
-    if (gruppe.endringer.length === 0) return;
+    // Finn eksisterende gruppe for dette tilbudsnummeret, eller opprett ny
+    const eksIdx = logg.findIndex(g => g.tilbudsNr === tilbudsNr);
+    if (eksIdx >= 0) {
+      // Slå sammen: legg til nye endringer, unngå eksakte duplikater
+      const eks = logg[eksIdx];
+      nyeEndringer.forEach(ny => {
+        const finnes = eks.endringer.some(e =>
+          e.produkt === ny.produkt && e.felt === ny.felt && e.til === ny.til
+        );
+        if (!finnes) eks.endringer.push(ny);
+      });
+      // Oppdater dato og selger til siste sesjon
+      eks.dato   = dato;
+      eks.selger = selger;
+      eks.prosjekt = prosjekt || eks.prosjekt;
+    } else {
+      logg.push({ dato, selger, tilbudsNr, prosjekt, endringer: nyeEndringer });
+    }
 
-    logg = logg.filter(g => !(g.tilbudsNr === tilbudsNr && g.dato === dato));
-    logg.push(gruppe);
     if (logg.length > 500) logg = logg.slice(logg.length - 500);
     localStorage.setItem(ADMIN_KEY, JSON.stringify(logg));
   }
@@ -1822,6 +1838,30 @@ Returner kun JSON.`;
     const ADMIN_KEY = 'norwin_admin_logg';
     let logg = [];
     try { logg = JSON.parse(localStorage.getItem(ADMIN_KEY) || '[]'); } catch(e) {}
+
+    // Rydd opp: slå sammen grupper med samme tilbudsnr, fjern tomme
+    const merged = {};
+    logg.forEach(g => {
+      const nr = g.tilbudsNr || '–';
+      if (!merged[nr]) {
+        merged[nr] = { ...g, endringer: [] };
+      }
+      (g.endringer || []).forEach(e => {
+        const finnes = merged[nr].endringer.some(x =>
+          x.produkt === e.produkt && x.felt === e.felt && x.til === e.til
+        );
+        if (!finnes) merged[nr].endringer.push(e);
+      });
+      // Behold nyeste dato og selger
+      if (g.dato > merged[nr].dato) {
+        merged[nr].dato = g.dato;
+        merged[nr].selger = g.selger;
+      }
+    });
+    logg = Object.values(merged).filter(g => g.endringer.length > 0);
+
+    // Lagre tilbake ryddet logg
+    localStorage.setItem(ADMIN_KEY, JSON.stringify(logg));
 
     if (logg.length === 0) {
       alert('Ingen endringslogg funnet ennå.\nGjør endringer i et tilbud og lagre/skriv ut for å bygge loggen.');
