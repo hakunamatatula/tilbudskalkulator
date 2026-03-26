@@ -684,10 +684,17 @@ ${klon.outerHTML}
     w.document.write(html);
     w.document.close();
     w.focus();
-    // Vent til innhold er lastet før print
-    w.onload = () => { w.print(); };
-    // Fallback hvis onload ikke utløses
-    setTimeout(() => { try { w.print(); } catch(e) {} }, 800);
+    // Skriv ut kun én gang — onload med flagg forhindrer dobbel dialog
+    let harSkrevet = false;
+    w.onload = () => {
+      if (harSkrevet) return;
+      harSkrevet = true;
+      w.print();
+    };
+    // Fallback kun hvis onload aldri utløses (f.eks. noen nettlesere med document.write)
+    setTimeout(() => {
+      if (!harSkrevet) { harSkrevet = true; try { w.print(); } catch(e) {} }
+    }, 1200);
   }
 
   function printWithTitle() {
