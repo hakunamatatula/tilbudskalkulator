@@ -2014,6 +2014,17 @@ Returner kun JSON.`;
     a.click();
   }
 
+  function byttSelgerITilbud(fornavn) {
+    const s = SELGERE[fornavn];
+    if (!s) return;
+    const navn = document.getElementById('cb-selgernavn');
+    const mob  = document.getElementById('cb-selgermob');
+    const epost = document.getElementById('cb-selgerepost');
+    if (navn)  navn.textContent  = s.navn;
+    if (mob)   mob.textContent   = s.mob  ? 'Tlf: ' + s.mob  : '';
+    if (epost) epost.textContent = s.epost || '';
+  }
+
   function lastNedLogg() {
     if (endringslogg.length === 0) { alert('Ingen endringer er gjort.'); return; }
     const selger = endringslogg[0].selger;
@@ -2397,37 +2408,37 @@ Returner kun JSON.`;
           <div class="cb-label">Kunde</div>
           <div class="cb-val editable-val" contenteditable="true" id="cb-kundenavn"
             data-produkt="Tilbud" data-felt="Kundenavn" data-original="${info.kundeNavn||''}"
-            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeNavn||'–'}</div>
+            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeNavn||''}</div>
         </div>
         <div>
           <div class="cb-label">Kontaktperson</div>
           <div class="cb-val editable-val" contenteditable="true" id="cb-kontakt"
             data-produkt="Tilbud" data-felt="Kontaktperson" data-original="${info.kundeKontakt||''}"
-            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeKontakt||'–'}</div>
+            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeKontakt||''}</div>
         </div>
         <div>
           <div class="cb-label">Prosjekt</div>
           <div class="cb-val editable-val" contenteditable="true" id="cb-prosjekt"
             data-produkt="Tilbud" data-felt="Prosjekt" data-original="${info.prosjekt||''}"
-            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.prosjekt||'–'}</div>
+            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.prosjekt||''}</div>
         </div>
         <div>
           <div class="cb-label">Adresse</div>
           <div class="cb-val editable-val" contenteditable="true" id="cb-adresse"
             data-produkt="Tilbud" data-felt="Adresse" data-original="${info.kundeAdresse||''}"
-            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeAdresse||'–'}</div>
+            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeAdresse||''}</div>
         </div>
         <div>
           <div class="cb-label">Mobil</div>
           <div class="cb-val editable-val" contenteditable="true" id="cb-mob"
-            data-produkt="Tilbud" data-felt="Mobil" data-original="${info.kundeMob||''}"
-            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeMob ? '+47 '+info.kundeMob : '–'}</div>
+            data-produkt="Tilbud" data-felt="Mobil" data-original="${info.kundeMob ? '+47 '+info.kundeMob : ''}"
+            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeMob ? '+47 '+info.kundeMob : ''}</div>
         </div>
         <div>
           <div class="cb-label">E-post</div>
           <div class="cb-val editable-val" contenteditable="true" id="cb-epost"
             data-produkt="Tilbud" data-felt="E-post" data-original="${info.kundeEpost||''}"
-            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeEpost||'–'}</div>
+            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeEpost||''}</div>
         </div>
       </div>
 
@@ -2474,15 +2485,17 @@ Returner kun JSON.`;
 
       <div class="offer-footer">
         <div class="seller-block">
-          <div class="seller-name editable-val" contenteditable="true" id="cb-selgernavn"
-            data-produkt="Tilbud" data-felt="Selger" data-original="${info.selger.navn || info.selger.fornavn || ''}"
-            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.selger.navn || info.selger.fornavn || '–'}</div>
-          <div class="seller-info editable-val" contenteditable="true" id="cb-selgermob"
-            data-produkt="Tilbud" data-felt="Selger mobil" data-original="${info.selger.mob ? 'Tlf: '+info.selger.mob : ''}"
-            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.selger.mob ? 'Tlf: '+info.selger.mob : '–'}</div>
-          <div class="seller-info editable-val" contenteditable="true" id="cb-selgerepost"
-            data-produkt="Tilbud" data-felt="Selger e-post" data-original="${info.selger.epost||''}"
-            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.selger.epost||'–'}</div>
+          <div class="no-print" style="margin-bottom:6px;">
+            <select id="cb-selger-dd" onchange="byttSelgerITilbud(this.value)"
+              style="font-family:'Source Sans 3',sans-serif;font-size:13px;padding:4px 8px;border:1px solid #c8a96e;border-radius:4px;background:#fffbe6;color:#1a2233;cursor:pointer;">
+              ${Object.keys(SELGERE).map(k =>
+                `<option value="${k}" ${(info.selger.fornavn===k||info.selger.navn===SELGERE[k].navn)?'selected':''}>${k}</option>`
+              ).join('')}
+            </select>
+          </div>
+          <div class="seller-name" id="cb-selgernavn">${info.selger.navn || info.selger.fornavn || ''}</div>
+          <div class="seller-info" id="cb-selgermob">${info.selger.mob ? 'Tlf: '+info.selger.mob : ''}</div>
+          <div class="seller-info" id="cb-selgerepost">${info.selger.epost || ''}</div>
         </div>
         <div class="cert-logos">
           <img src="${IMG_CERT1}" alt="CE" />
