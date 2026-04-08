@@ -248,6 +248,14 @@
     font-family:'Source Sans 3',sans-serif;
   }
   .skisse-override-btn:hover { color:#1a3a5c; border-color:#1a3a5c; }
+  .skisse-vnr {
+    font-size:11px; font-weight:700; color:#1a3a5c; text-align:center;
+    letter-spacing:0.08em; min-height:16px; width:100%;
+    border-radius:2px; padding:1px 4px;
+  }
+  .skisse-vnr:hover { background:#fffbe6; outline:1px dashed #c8a96e; cursor:text; }
+  .skisse-vnr:focus { background:#fffbe6; outline:2px solid #1a3a5c; }
+  @media print { .skisse-vnr:empty { display:none; } }
   .skisse-missing {
     width:100%; aspect-ratio:3/4; background:#f0f2f5;
     border:1px dashed #ccc; border-radius:4px;
@@ -1328,6 +1336,11 @@ ALTERNATIVPOSISJONER: Hvis en posisjon er merket "Alternative position (not incl
 
 BEREGNING: Kundepris NOK = Faktorpåslag × EUR listepris (direkte, ingen rabatt trekkes fra NOK-beregningen). MVA = NOK × 0.25. eksMva/mva/tot = kun sum av ikke-alternative posisjoner.
 
+TEKNISKE TOTALER: Hent fra dokumentets siste side og legg på rotnivå i JSON:
+- "uv": gjennomsnittlig U-verdi (tall, f.eks. 1.26) — fra "Gjennomsnittlig U-verdi for alle vinduer: X.XX"
+- "vekt": total vekt i kg (tall, f.eks. 1322) — fra "Total vekt: XXXX kg"
+Hvis feltene ikke finnes i dokumentet, utelat dem.
+
 Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 {"t":"167392-12","d":"2020-06-16","r":40,"kunde":"Norwin AS","kontakt":"Per Schiotz","kadr":"Hortensveien 273, 3157 BARKÅKER","mob":"90583823","epost":"per@norwin.no","prosjekt":"KTS kapell","p":[{"n":1,"dim":"2890x2890mm","m2":8.35,"ant":1,"eur":5053.04,"nok":45477.36,"sum":45477.36,"alt":false,"s":[{"l":"Type","v":"Nord 2 utadslående inngangsdør (53x115 / alu dørterskel)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"2x Fylling F12 15mdf/36pur/15mdf, Spor på fyllinger på begge sider"},{"l":"Beslag","v":"1x Høyre utadslående dobbel dør"},{"l":"Hengsler","v":"Dør hengsler N3248"},{"l":"Håndtak","v":"Uten håndtak (hull boret)"},{"l":"Låsesystem","v":"M5019 trepunkts inngangslås"},{"l":"Bunnglasslist","v":"23mm alu, RAL 5009"},{"l":"Pakninger","v":"Grå"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Terskel","v":"Alu DAFA 68/62"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Huller til montering","v":"MS14+ADJUFIX"},{"l":"Øvrig","v":"VX 7729/160 hengsler, Begge karmflanker: 115x60mm, Med standard espagnolette-lås, Dørblad pakkes separat, Uten profilering"}]},{"n":2,"dim":"1210x2180mm","m2":2.48,"ant":1,"eur":1954.56,"nok":17590.58,"sum":17590.58,"alt":false,"s":[{"l":"Type","v":"Nord 2 utadslående inngangsdør (53x115 / alu dørterskel)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"1x Fylling F12 15mdf/36pur/15mdf, Spor på fyllinger på begge sider"},{"l":"Beslag","v":"1x Høyre utadslående dør"},{"l":"Hengsler","v":"VX 7729/160 hengsler"},{"l":"Håndtak","v":"Uten håndtak (hull boret)"},{"l":"Låsesystem","v":"1 punkt lås ASSA 562"},{"l":"Bunnglasslist","v":"23mm alu, RAL 5009"},{"l":"Pakninger","v":"Grå"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Terskel","v":"Alu DAFA 68/62"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Huller til montering","v":"MS14+ADJUFIX 4 på hver side og 1 i topp senter"},{"l":"Øvrig","v":"One radius arc, Med kabel i karm – karm er klargjort for SOLID 75 (SOLID 75 + SOLID 731/20), Forborede hull for håndtak og sylinder, Uten profilering"}]},{"n":4,"dim":"2705x1135mm","m2":3.07,"ant":7,"eur":941.33,"nok":8471.97,"sum":59303.79,"alt":false,"s":[{"l":"Type","v":"Nord 2 vindu (53x115, bunn 45mm)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"4/24Ar/4TH (Varmkant CH ultra RAL9004 sort)"},{"l":"Beslag","v":"4x Fast karm"},{"l":"Sprosser","v":"8mm gylne sprosser inni glass"},{"l":"Bunnglasslist","v":"36mm alu, RAL 5009"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Spor i underkant","v":"L1"},{"l":"Åpningsretning","v":"Sett fra utsiden"},{"l":"Huller til montering","v":"MS14+ADJUFIX"},{"l":"Øvrig","v":"Uten profilering"}]},{"n":9,"dim":"510x495mm","m2":0.25,"ant":5,"eur":177.98,"nok":1601.82,"sum":8009.1,"alt":false,"s":[{"l":"Type","v":"IV-78 N vinduer"},{"l":"Tresort","v":"Fingerskjøtet furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"4/20Ar/4TH"},{"l":"Beslag","v":"1x Topphengslet vipp"},{"l":"Håndtak","v":"Sølv (Nr.7)"},{"l":"Ventilasjon","v":"Teleskopventil med barnesikring"},{"l":"Bunnglasslist","v":"Lite vindavviser RAL 5009, Vindavviser RAL 5009"},{"l":"Pakninger","v":"Grå"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Spor i underkant","v":"L1"},{"l":"Åpningsretning","v":"Innadslående (innside)"},{"l":"Huller til montering","v":"MS14+ADJUFIX"},{"l":"Øvrig","v":"OBS: Karm under minstemål (min 450x400mm)"}]}],"eksMva":185000.0,"mva":46250.0,"tot":231250.0}`;
 
@@ -2302,6 +2315,11 @@ Returner kun JSON.`;
             ? `<img id="${skisseId}" src="data:image/png;base64,${skisseB64}" alt="Teknisk skisse produkt ${i+1}" />`
             : `<div class="skisse-missing">Dra bilde hit<br>eller klikk ↓</div>`
           }
+          <div class="skisse-vnr editable-val" contenteditable="true"
+            id="vnr_${i}"
+            data-produkt="Posisjon ${i+1}" data-felt="Kode" data-original=""
+            onblur="sjekkEndring(this)"
+            title="Klikk for å redigere (f.eks. V1, Y2)"></div>
           <label class="skisse-override-btn no-print" title="Last opp, dra eller lim inn bilde (Ctrl+V)">
             ↑ Bytt bilde / lim inn
             <input type="file" accept="image/*" style="display:none"
@@ -2476,11 +2494,20 @@ Returner kun JSON.`;
           <div class="total-row"><span>Total inkl. MVA</span><span id="total-inkl-mva">kr ${formatNOK(res.tot||res.totalInklMVA)}</span></div>
         </div>
       </div>
+      ${(res.uv || res.vekt) ? `
+      <div style="margin-top:10px;font-size:12px;color:#555;display:flex;gap:24px;padding:8px 4px;border-top:1px solid #dde2ea;">
+        ${res.uv  ? `<span>Gjennomsnittlig U-verdi: <strong>${res.uv}</strong></span>` : ''}
+        ${res.vekt ? `<span>Total vekt: <strong>${res.vekt} kg</strong></span>` : ''}
+      </div>` : ''}
       </div><!-- end price-table-wrapper -->
 
       <div class="vilkar-block">
         <h4>Vilkår og bestillingsavtale</h4>
-        ${VILKAR.map((v,i)=>`<p>${i+1}. ${v}</p>`).join('')}
+        ${VILKAR.map((v,vi)=>`<p contenteditable="true" class="editable-val"
+          data-produkt="Vilkår" data-felt="Vilkår ${vi+1}" data-original="${v.replace(/"/g,'&quot;')}"
+          onblur="sjekkEndring(this)"
+          style="min-height:1.2em;"
+          title="Klikk for å redigere">${vi+1}. ${v}</p>`).join('')}
       </div>
 
       <div class="offer-footer">
