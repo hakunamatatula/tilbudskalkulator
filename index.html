@@ -60,10 +60,13 @@
   .seller-info[contenteditable]:focus { background:#fffbe6; outline:2px solid #1a3a5c; border-radius:2px; }
   .product-section { margin-bottom:20px; }
   .product-header { background:#1a3a5c; color:#fff; padding:8px 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .product-body { border:1px solid #dde2ea; border-top:none; padding:10px 12px; font-size:12px; display:grid; grid-template-columns:1fr 1fr; gap:5px 12px; }
-  .product-body .spec-row { display:flex; gap:4px; align-items:baseline; min-width:0; }
-  .product-body .spec-label { color:#888; min-width:76px; max-width:76px; flex-shrink:0; font-size:10.5px; }
-  .product-body .spec-val { color:#111; font-weight:500; word-break:break-word; overflow-wrap:break-word; min-width:0; font-size:12px; }
+  .product-body { border:1px solid #dde2ea; border-top:none; padding:8px 12px; font-size:12px; display:block; }
+  .product-body .spec-row { display:flex; gap:6px; align-items:baseline; min-width:0; padding:2px 0; border-bottom:1px solid #f0f2f5; }
+  .product-body .spec-row:last-child { border-bottom:none; }
+  .product-body .spec-label { color:#444; min-width:110px; max-width:110px; flex-shrink:0; font-size:11.5px; font-style:italic; }
+  .product-body .spec-label em { font-style:italic; }
+  .product-body .spec-val { color:#111; font-weight:400; word-break:break-word; overflow-wrap:break-word; min-width:0; font-size:12px; }
+  .product-body .spec-val-wrap { color:#111; font-size:12px; display:flex; flex-wrap:wrap; gap:4px; align-items:baseline; flex:1; min-width:0; }
   .product-img { border:1px solid #dde2ea; border-top:none; padding:10px; text-align:center; }
   .product-img img { max-height:120px; max-width:200px; object-fit:contain; }
   .price-table { width:100%; border-collapse:collapse; margin-bottom:20px; font-size:12px; }
@@ -1091,10 +1094,15 @@ ${klon.outerHTML}
       const startAnkere = items.filter(it => {
         const n = parseInt(it.str);
         if (isNaN(n) || n < 1 || n > 30 || it.str !== String(n) || it.x >= 0.15) return false;
-        // Krev at det finnes et slutt-anker ELLER et V-anker under dette punktet
-        const harSluttAnker = alleSluttAnkereTmp.some(s => s.yTop > it.yTop + 0.02);
-        const harVAnker = alleVAnkereTmp.some(v => v.yTop > it.yTop + 0.03);
-        return harSluttAnker || harVAnker;
+        // Utelukk tall som typisk er mål/dimensjoner i skisser (20, 25 etc.) ved å kreve
+        // at det finnes et UNIKT slutt-anker for akkurat dette produktnummeret under det
+        const harEgetSluttAnker = alleSluttAnkereTmp.some(s => {
+          const sn = parseInt(s.str);
+          return sn === n && s.yTop > it.yTop + 0.02;
+        });
+        // Fallback: V-anker under (for formater uten stk-tekst)
+        const harVAnker = !harEgetSluttAnker && alleVAnkereTmp.some(v => v.yTop > it.yTop + 0.03);
+        return harEgetSluttAnker || harVAnker;
       }).map(it => ({ ...it, prodNr: parseInt(it.str) }));
 
       // Finn slutt-ankere: "N (Xstk.)" — x < 0.35, passer mønsteret
@@ -1142,7 +1150,8 @@ ${klon.outerHTML}
           prodNr:   n,
           pageIdx:  i,
           yStart:   start.yTop,
-          yEnd:     slutt ? slutt.yTop + 0.012 : start.yTop + 0.55,
+          // Stopp RETT FØR slutt-anker (N stk.) for å unngå å ta med tekst under skissen
+          yEnd:     slutt ? slutt.yTop - 0.005 : start.yTop + 0.50,
           pageH:    vp0.height,
           pageW:    vp0.width,
           specXMin: prodSpecXMin   // per-produkt høyre grense
@@ -1163,6 +1172,32 @@ ${klon.outerHTML}
     // Fallback hvis ingen ankere funnet
     if (ankereUnike.length === 0) {
       return extractPdfSkisserFallback(pdf, scale);
+    }
+
+    // Steg 1b: Trekk ut V-koder (V1, V2, V3 etc.) per produkt fra PDF-tekst
+    // V-koden står vanligvis rett under slutt-ankeret (N (Xstk.)) på x < 0.15
+    const vnrMap = {}; // {prodNr: "V1"}
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const vp0  = page.getViewport({ scale: 1.0 });
+      const tc   = await page.getTextContent();
+      const items = tc.items.map(it => ({
+        str:  it.str.trim(),
+        x:    it.transform[4] / vp0.width,
+        yTop: 1 - (it.transform[5] / vp0.height)
+      }));
+      // Finn alle V-koder på x < 0.18
+      items.forEach(it => {
+        if (/^[VY][D]?\d+[a-z]?$/i.test(it.str) && it.x < 0.18) {
+          // Knytt til nærmeste produktnummer over denne y-posisjonen
+          const anker = ankereUnike
+            .filter(a => a.pageIdx === i && a.yStart < it.yTop)
+            .sort((a, b) => b.yStart - a.yStart)[0];
+          if (anker && !vnrMap[anker.prodNr]) {
+            vnrMap[anker.prodNr] = it.str;
+          }
+        }
+      });
     }
 
     // Steg 2: Render og crop per produkt
@@ -1240,7 +1275,7 @@ ${klon.outerHTML}
         skisser[prodNr] = null;
       }
     }
-    return skisser;
+    return { skisser, vnrMap };
   }
 
   // Fallback: én skisse per side med faste koordinater
@@ -1461,9 +1496,19 @@ Returner kun JSON.`;
 
       // Hent skisser fra P1-PDF (én per side = én per produkt)
       let skisser = [];
-      try { skisser = await extractPdfSkisser(selectedFile); } catch(e) {}
+      let vnrMap = {};
+      try {
+        const result = await extractPdfSkisser(selectedFile);
+        // Ny format: {skisser, vnrMap} — eldre fallback returnerer array direkte
+        if (result && typeof result === 'object' && !Array.isArray(result) && result.skisser) {
+          skisser = result.skisser;
+          vnrMap  = result.vnrMap || {};
+        } else {
+          skisser = result || [];
+        }
+      } catch(e) {}
 
-      renderOffer(resFinal, { kundeNavn, kundeKontakt, kundeAdresse, kundeMob, kundeEpost, prosjekt, selger, today, skisser });
+      renderOffer(resFinal, { kundeNavn, kundeKontakt, kundeAdresse, kundeMob, kundeEpost, prosjekt, selger, today, skisser, vnrMap });
 
       document.getElementById('loading').style.display = 'none';
       document.getElementById('result').style.display = 'block';
@@ -2071,10 +2116,112 @@ Returner kun JSON.`;
     } else {
       rader = Object.entries(spek).filter(([k,v])=>v).map(([k,v])=>({ l:k, v }));
     }
-    return rader.map(s => {
-      const id = `spec_${produktNr}_${s.l.replace(/\s+/g,'_')}`;
-      return `<div class="spec-row" style="display:flex;align-items:baseline;gap:4px;">
-        <span class="spec-label">${s.l}:</span>
+
+    // Normaliser feltnavn
+    rader = rader.map(s => ({
+      ...s,
+      l: s.l === 'Beslag' ? 'Rammer/beslag' : s.l
+    }));
+
+    // Felt som skal skilles ut fra Øvrig og vises som egne rader (sist)
+    const EGET_FELT = ['Vekt', 'Uw', 'U-verdi', 'Not for foringer', 'Spor i underkant'];
+
+    // Trekk ut Øvrig og parse evt. innebygde felt
+    let øvrigRad = rader.find(s => s.l === 'Øvrig');
+    let ekstraFelt = []; // Felt funnet i Øvrig-teksten
+    if (øvrigRad) {
+      const øvrigTekst = øvrigRad.v;
+      // Trekk ut Vekt og Uw fra Øvrig hvis de er der
+      const vektMatch = øvrigTekst.match(/Vekt\s+([\d.,]+\s*kg)/i);
+      const uwMatch   = øvrigTekst.match(/Uw\s*<=?\s*([\d.,]+)/i);
+      const notMatch  = øvrigTekst.match(/Not for foringer[:\s]+([\w\s\dx]+?)(?:,|$)/i);
+      const sporMatch = øvrigTekst.match(/Spor i underkant[:\s]+([\w/()]+)/i);
+      if (vektMatch) ekstraFelt.push({ l:'Vekt', v: vektMatch[1].trim() });
+      if (uwMatch)   ekstraFelt.push({ l:'Uw', v: 'Uw <= ' + uwMatch[1].trim() });
+      if (notMatch)  ekstraFelt.push({ l:'Not for foringer', v: notMatch[1].trim() });
+      if (sporMatch && !rader.find(s=>s.l==='Spor i underkant'))
+                     ekstraFelt.push({ l:'Spor i underkant', v: sporMatch[1].trim() });
+
+      // Fjern de uttrekkede delene fra Øvrig-verdien
+      let renØvrig = øvrigTekst
+        .replace(/,?\s*Vekt\s+[\d.,]+\s*kg/gi, '')
+        .replace(/,?\s*Uw\s*<=?\s*[\d.,]+/gi, '')
+        .replace(/,?\s*Not for foringer[:\s]+[\w\s\dx]+?(?=,|$)/gi, '')
+        .replace(/,?\s*Spor i underkant[:\s]+[\w/()]+/gi, '')
+        .replace(/^,\s*/, '').replace(/,\s*$/, '').trim();
+      øvrigRad = renØvrig ? { l:'Øvrig', v:renØvrig } : null;
+    }
+
+    // Finn Åpningsretning → omdøp til "Sett fra"
+    rader = rader.map(s => {
+      if (s.l !== 'Åpningsretning') return s;
+      let v = s.v;
+      if (/innadsl/i.test(v) && /innside/i.test(v)) v = 'Innsiden';
+      else if (/innadsl/i.test(v)) v = 'Utsiden';
+      else if (/utadsl/i.test(v)) v = 'Utsiden';
+      else if (/innside/i.test(v)) v = 'Innsiden';
+      return { l:'Sett fra', v };
+    });
+
+    // Fjern Øvrig og EGET_FELT fra hovedlisten (håndteres separat)
+    const egentFeltLabels = [...EGET_FELT, 'Øvrig'];
+    const hovFelt = rader.filter(s => !egentFeltLabels.includes(s.l) && s.l !== 'Åpningsretning' || s.l === 'Sett fra');
+
+    // Slå sammen Maling inne + Maling ute på én rad
+    const malingInne = hovFelt.find(s => s.l === 'Maling inne');
+    const malingUte  = hovFelt.find(s => s.l === 'Maling ute');
+    let kombinert = [];
+    hovFelt.forEach(s => {
+      if (s.l === 'Maling ute') return; // hoppes over, slås inn under Maling inne
+      if (s.l === 'Maling inne' && malingUte) {
+        kombinert.push({ l:'Maling inne / ute', v: `${s.v} / ${malingUte.v}`, _inne:s, _ute:malingUte });
+      } else {
+        kombinert.push(s);
+      }
+    });
+
+    // Eksisterende egne felt (Vekt, Spor i underkant etc.) allerede i rader
+    const eksEgne = rader.filter(s => EGET_FELT.includes(s.l));
+    // Slå sammen med evt. uttrekkede fra Øvrig (unngå duplikater)
+    ekstraFelt.forEach(e => {
+      if (!eksEgne.find(x => x.l === e.l)) eksEgne.push(e);
+    });
+    // Sørg for rekkefølge: Not for foringer, Spor i underkant, Vekt, Uw
+    const feltRekkefølge = ['Not for foringer', 'Spor i underkant', 'Vekt', 'Uw', 'U-verdi'];
+    eksEgne.sort((a,b) => feltRekkefølge.indexOf(a.l) - feltRekkefølge.indexOf(b.l));
+
+    // Alle rader som skal rendres
+    const alleRader = [
+      ...kombinert,
+      ...(øvrigRad ? [øvrigRad] : []),
+      ...eksEgne
+    ];
+
+    // Render som tabell-lignende rader (italic label, normal verdi)
+    return alleRader.map(s => {
+      const id = `spec_${produktNr}_${s.l.replace(/[\s/]+/g,'_')}`;
+
+      // Maling inne/ute: to separate redigerbare felt på én linje
+      if (s._inne && s._ute) {
+        const idI = `spec_${produktNr}_Maling_inne`;
+        const idU = `spec_${produktNr}_Maling_ute`;
+        return `<div class="spec-row">
+          <span class="spec-label"><em>Malingfarge:</em></span>
+          <span class="spec-val-wrap">
+            Inne:&nbsp;<span class="spec-val editable-val" contenteditable="true"
+              data-original="${s._inne.v.replace(/"/g,'&quot;')}" data-felt="Maling inne"
+              data-produkt="${produktNr}" id="${idI}" onblur="sjekkEndring(this)"
+              title="Klikk for å redigere">${s._inne.v}</span><span class="edited-mark" id="mark_${idI}" style="display:none;"></span>
+            &nbsp; Ute:&nbsp;<span class="spec-val editable-val" contenteditable="true"
+              data-original="${s._ute.v.replace(/"/g,'&quot;')}" data-felt="Maling ute"
+              data-produkt="${produktNr}" id="${idU}" onblur="sjekkEndring(this)"
+              title="Klikk for å redigere">${s._ute.v}</span><span class="edited-mark" id="mark_${idU}" style="display:none;"></span>
+          </span>
+        </div>`;
+      }
+
+      return `<div class="spec-row">
+        <span class="spec-label"><em>${s.l}:</em></span>
         <span class="spec-val editable-val"
           contenteditable="true"
           data-original="${s.v.replace(/"/g,'&quot;')}"
@@ -2308,6 +2455,8 @@ Returner kun JSON.`;
             ? (info.skisser[p.n] || info.skisser[i+1] || null)   // Map: slå opp på prodNr
             : (info.skisser[i] || null))                          // Fallback array
         : null;
+      // V-kode fra PDF (V1, V2, V3 etc.) — forhåndsutfylt fra vnrMap, redigerbart av selger
+      const vnrVerdi = (info.vnrMap && (info.vnrMap[p.n] || info.vnrMap[i+1])) || '';
       const skisseId  = `skisse_${i}`;
       const skisseHTML = `
         <div class="product-skisse${erAlt?' alt-skisse':''}" id="skisse_container_${i}">
@@ -2317,9 +2466,9 @@ Returner kun JSON.`;
           }
           <div class="skisse-vnr editable-val" contenteditable="true"
             id="vnr_${i}"
-            data-produkt="Posisjon ${i+1}" data-felt="Kode" data-original=""
+            data-produkt="Posisjon ${i+1}" data-felt="Kode" data-original="${vnrVerdi}"
             onblur="sjekkEndring(this)"
-            title="Klikk for å redigere (f.eks. V1, Y2)"></div>
+            title="Klikk for å redigere (f.eks. V1, Y2)">${vnrVerdi}</div>
           <label class="skisse-override-btn no-print" title="Last opp, dra eller lim inn bilde (Ctrl+V)">
             ↑ Bytt bilde / lim inn
             <input type="file" accept="image/*" style="display:none"
