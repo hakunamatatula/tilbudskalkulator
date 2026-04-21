@@ -1131,12 +1131,16 @@ ${klon.outerHTML}
         let slutt = alleSluttAnkere
           .filter(s => s.yTop > start.yTop + 0.02 && s.yTop < yMax)
           .sort((a, b) => a.yTop - b.yTop)[0];
+        let sluttErStk = !!slutt;
 
-        // Fallback: finn "V1", "V2", "VD1" etc. som slutt-anker (brukes i 322529/322361-format)
+        // Fallback: finn "V1", "V2", "VD1" etc. som slutt-anker (brukes i HCTC-format)
+        // I HCTC-format: V-koden er UNDER tegningen og skal INKLUDERES i bildet
+        let sluttV = null;
         if (!slutt) {
-          slutt = items
+          sluttV = items
             .filter(it => /^V[D]?\d+$/i.test(it.str) && it.x < 0.15 && it.yTop > start.yTop + 0.05 && it.yTop < yMax)
             .sort((a, b) => a.yTop - b.yTop)[0];
+          slutt = sluttV;
         }
 
         // specXMin per produkt: finn spec-labels innenfor dette produktets y-range
@@ -1146,12 +1150,35 @@ ${klon.outerHTML}
           ? Math.min(...specIProd.map(it => it.x))
           : null;
 
+        // yEnd-beregning:
+        // - stk-anker (Norwin-format): stopp RETT FØR "N (Xstk.)" — tegningen er OVER ankeret
+        // - V-anker (HCTC-format): inkluder V-teksten + litt padding — V-koden er UNDER tegningen
+        let yEnd;
+        if (sluttErStk) {
+          // Norwin-format: slutt-anker er "N (Xstk.)" som er UNDER tegningen — stopp før det
+          yEnd = slutt.yTop - 0.005;
+        } else if (sluttV) {
+          // HCTC-format: V-koden er det siste elementet på venstre side under tegningen
+          // Finn evt. "Sett fra utsiden" / "N (Xstk.)" tekster mellom prodNr og V-ankeret
+          // og inkluder dem. Stopp ved neste produkt-start eller pris-rad.
+          // Prisraden ("1385x2085mm" etc.) er på x≈0.198, mens V-koden er på x≈0.112
+          // Vi stopper ved første pris-rad (x > 0.15 og inneholder "mm" + tall)
+          const prisRad = items.find(it =>
+            it.x > 0.15 && it.x < 0.40 &&
+            it.yTop > sluttV.yTop + 0.01 &&
+            it.yTop < yMax &&
+            /\d+x\d+mm/i.test(it.str)
+          );
+          yEnd = prisRad ? prisRad.yTop - 0.005 : sluttV.yTop + 0.04;
+        } else {
+          yEnd = start.yTop + 0.50;
+        }
+
         ankere.push({
           prodNr:   n,
           pageIdx:  i,
           yStart:   start.yTop,
-          // Stopp RETT FØR slutt-anker (N stk.) for å unngå å ta med tekst under skissen
-          yEnd:     slutt ? slutt.yTop - 0.005 : start.yTop + 0.50,
+          yEnd:     yEnd,
           pageH:    vp0.height,
           pageW:    vp0.width,
           specXMin: prodSpecXMin   // per-produkt høyre grense
