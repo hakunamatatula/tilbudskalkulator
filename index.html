@@ -1077,8 +1077,9 @@ ${klon.outerHTML}
       // Samle alle tekstelementer med posisjon
       const items = tc.items.map(it => ({
         str:  it.str.trim(),
-        x:    it.transform[4] / vp0.width,         // 0-1 fra venstre
-        yTop: 1 - (it.transform[5] / vp0.height)   // 0-1 fra topp
+        x:    it.transform[4] / vp0.width,                          // 0-1 fra venstre
+        x1:   (it.transform[4] + (it.width || 0)) / vp0.width,     // 0-1 høyre kant
+        yTop: 1 - (it.transform[5] / vp0.height)                    // 0-1 fra topp
       }));
 
       // Finn produktnummer-ankere (enkelt tall, x < 15%)
@@ -1143,12 +1144,23 @@ ${klon.outerHTML}
           slutt = sluttV;
         }
 
-        // specXMin per produkt: finn spec-labels innenfor dette produktets y-range
-        // Dette sikrer riktig cropW selv når to produkter på samme side har ulik bredde
+        // cropXFrac: bruk høyre kant (x1) av dimensjonsteksten (f.eks. "1385x2085mm") i dette produktet
+        // Dimensjonsteksten er på x≈0.198 og slutter på x1≈0.325 — dette er faktisk bredde av tegningsområdet
+        // Mye sikrere enn spec-etikettenes x0, da spec-etiketter starter nærmere tegningen enn antatt
+        const prisRadIProd = items.find(it =>
+          it.yTop >= start.yTop && it.yTop < yMax &&
+          it.x > 0.15 && it.x < 0.25 &&
+          /\d+x\d+mm/i.test(it.str)
+        );
+        // Fallback til spec-kolonnens x0 dersom prisrad ikke finnes (Norwin-format)
         const specIProd = specItemsSide.filter(it => it.yTop >= start.yTop && it.yTop < yMax);
         const prodSpecXMin = specIProd.length > 0
           ? Math.min(...specIProd.map(it => it.x))
           : null;
+        // prodCropXFrac: prisrad x1 + 0.02 margin er primær; spec x0 - 0.01 er fallback
+        const prodCropXFrac = prisRadIProd
+          ? prisRadIProd.x1 + 0.02
+          : (prodSpecXMin != null ? prodSpecXMin - 0.01 : null);
 
         // yEnd-beregning:
         // - stk-anker (Norwin-format): stopp RETT FØR "N (Xstk.)" — tegningen er OVER ankeret
@@ -1181,7 +1193,8 @@ ${klon.outerHTML}
           yEnd:     yEnd,
           pageH:    vp0.height,
           pageW:    vp0.width,
-          specXMin: prodSpecXMin   // per-produkt høyre grense
+          specXMin: prodSpecXMin,   // per-produkt høyre grense (fallback)
+          cropXFrac: prodCropXFrac         // beregnet fra prisrad x1 (primær)
         });
       });
     }
@@ -1254,8 +1267,8 @@ ${klon.outerHTML}
         const cropY = Math.max(0, Math.floor(viewport.height * (yStart - 0.03)));
         // cropW: høyre grense er spec-kolonnens venstre kant (Type:-etikett)
         // Dette fungerer for alle formater siden HCTC alltid har fast kolonneplassering
-        const cropXFrac = (ankereUnike[pi].specXMin != null)
-          ? ankereUnike[pi].specXMin - 0.01
+        const cropXFrac = (ankereUnike[pi].cropXFrac != null)
+          ? ankereUnike[pi].cropXFrac
           : 0.45;
         const cropW = Math.floor(viewport.width * cropXFrac);
         const rawH  = Math.floor(viewport.height * (yEnd - yStart + 0.03));
