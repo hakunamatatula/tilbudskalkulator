@@ -1144,22 +1144,32 @@ ${klon.outerHTML}
           slutt = sluttV;
         }
 
-        // cropXFrac: bruk høyre kant (x1) av dimensjonsteksten (f.eks. "1385x2085mm") i dette produktet
-        // Dimensjonsteksten er på x≈0.198 og slutter på x1≈0.325 — dette er faktisk bredde av tegningsområdet
-        // Mye sikrere enn spec-etikettenes x0, da spec-etiketter starter nærmere tegningen enn antatt
-        const prisRadIProd = items.find(it =>
-          it.yTop >= start.yTop && it.yTop < yMax &&
-          it.x > 0.15 && it.x < 0.25 &&
-          /\d+x\d+mm/i.test(it.str)
-        );
-        // Fallback til spec-kolonnens x0 dersom prisrad ikke finnes (Norwin-format)
+        // cropXFrac: beregn høyre grense for skisse-crop
+        // Spec-etiketter (Type:, Tresort: etc.) finnes både i skisse-kolonnen (HCTC-format, x≈0.23-0.32)
+        // og i den egentlige spec-kolonnen (x≈0.35+). Vi bruker ALLTID spec-kolonnens venstre kant
+        // som høyre grense — dette kutter ut alle etiketter og verdier til høyre for selve tegningen.
         const specIProd = specItemsSide.filter(it => it.yTop >= start.yTop && it.yTop < yMax);
         const prodSpecXMin = specIProd.length > 0
           ? Math.min(...specIProd.map(it => it.x))
           : null;
-        // prodCropXFrac: prisrad x1 + 0.02 margin er primær; spec x0 - 0.01 er fallback
-        const prodCropXFrac = prisRadIProd
-          ? prisRadIProd.x1 + 0.02
+
+        // For HCTC-format (V-anker): spec-etikettene dukker opp inne i skisse-kolonnen (x≈0.23-0.32).
+        // Vi søker etter ALLE spec-etiketter (inkl. de i skisse-kolonnen) innenfor produktets y-range
+        // og bruker den minste x-verdien blant alle som starter etter x=0.15 som grense.
+        const alleSpecIProd = items.filter(it =>
+          it.yTop >= start.yTop && it.yTop < yMax &&
+          it.x > 0.15 &&
+          specLabels.some(l => it.str === l || it.str === l + ':' ||
+            it.str.startsWith(l + ':') || it.str.startsWith(l + ' '))
+        );
+        const alleSpecXMin = alleSpecIProd.length > 0
+          ? Math.min(...alleSpecIProd.map(it => it.x))
+          : null;
+
+        // prodCropXFrac: bruk minste spec-etikett x - 0.01 som grense (inkluderer alle formater)
+        // Fallback til 0.32 dersom ingen spec-etiketter finnes
+        const prodCropXFrac = alleSpecXMin != null
+          ? alleSpecXMin - 0.01
           : (prodSpecXMin != null ? prodSpecXMin - 0.01 : null);
 
         // yEnd-beregning:
