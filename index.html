@@ -1419,6 +1419,28 @@ Hvis feltene ikke finnes i dokumentet, utelat dem.
 Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 {"t":"167392-12","d":"2020-06-16","r":40,"kunde":"Norwin AS","kontakt":"Per Schiotz","kadr":"Hortensveien 273, 3157 BARKÅKER","mob":"90583823","epost":"per@norwin.no","prosjekt":"KTS kapell","p":[{"n":1,"dim":"2890x2890mm","m2":8.35,"ant":1,"eur":5053.04,"nok":45477.36,"sum":45477.36,"alt":false,"s":[{"l":"Type","v":"Nord 2 utadslående inngangsdør (53x115 / alu dørterskel)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"2x Fylling F12 15mdf/36pur/15mdf, Spor på fyllinger på begge sider"},{"l":"Beslag","v":"1x Høyre utadslående dobbel dør"},{"l":"Hengsler","v":"Dør hengsler N3248"},{"l":"Håndtak","v":"Uten håndtak (hull boret)"},{"l":"Låsesystem","v":"M5019 trepunkts inngangslås"},{"l":"Bunnglasslist","v":"23mm alu, RAL 5009"},{"l":"Pakninger","v":"Grå"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Terskel","v":"Alu DAFA 68/62"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Huller til montering","v":"MS14+ADJUFIX"},{"l":"Øvrig","v":"VX 7729/160 hengsler, Begge karmflanker: 115x60mm, Med standard espagnolette-lås, Dørblad pakkes separat, Uten profilering"}]},{"n":2,"dim":"1210x2180mm","m2":2.48,"ant":1,"eur":1954.56,"nok":17590.58,"sum":17590.58,"alt":false,"s":[{"l":"Type","v":"Nord 2 utadslående inngangsdør (53x115 / alu dørterskel)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"1x Fylling F12 15mdf/36pur/15mdf, Spor på fyllinger på begge sider"},{"l":"Beslag","v":"1x Høyre utadslående dør"},{"l":"Hengsler","v":"VX 7729/160 hengsler"},{"l":"Håndtak","v":"Uten håndtak (hull boret)"},{"l":"Låsesystem","v":"1 punkt lås ASSA 562"},{"l":"Bunnglasslist","v":"23mm alu, RAL 5009"},{"l":"Pakninger","v":"Grå"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Terskel","v":"Alu DAFA 68/62"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Huller til montering","v":"MS14+ADJUFIX 4 på hver side og 1 i topp senter"},{"l":"Øvrig","v":"One radius arc, Med kabel i karm – karm er klargjort for SOLID 75 (SOLID 75 + SOLID 731/20), Forborede hull for håndtak og sylinder, Uten profilering"}]},{"n":4,"dim":"2705x1135mm","m2":3.07,"ant":7,"eur":941.33,"nok":8471.97,"sum":59303.79,"alt":false,"s":[{"l":"Type","v":"Nord 2 vindu (53x115, bunn 45mm)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"4/24Ar/4TH (Varmkant CH ultra RAL9004 sort)"},{"l":"Beslag","v":"4x Fast karm"},{"l":"Sprosser","v":"8mm gylne sprosser inni glass"},{"l":"Bunnglasslist","v":"36mm alu, RAL 5009"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Spor i underkant","v":"L1"},{"l":"Åpningsretning","v":"Sett fra utsiden"},{"l":"Huller til montering","v":"MS14+ADJUFIX"},{"l":"Øvrig","v":"Uten profilering"}]},{"n":9,"dim":"510x495mm","m2":0.25,"ant":5,"eur":177.98,"nok":1601.82,"sum":8009.1,"alt":false,"s":[{"l":"Type","v":"IV-78 N vinduer"},{"l":"Tresort","v":"Fingerskjøtet furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"4/20Ar/4TH"},{"l":"Beslag","v":"1x Topphengslet vipp"},{"l":"Håndtak","v":"Sølv (Nr.7)"},{"l":"Ventilasjon","v":"Teleskopventil med barnesikring"},{"l":"Bunnglasslist","v":"Lite vindavviser RAL 5009, Vindavviser RAL 5009"},{"l":"Pakninger","v":"Grå"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Spor i underkant","v":"L1"},{"l":"Åpningsretning","v":"Innadslående (innside)"},{"l":"Huller til montering","v":"MS14+ADJUFIX"},{"l":"Øvrig","v":"OBS: Karm under minstemål (min 450x400mm)"}]}],"eksMva":185000.0,"mva":46250.0,"tot":231250.0}`;
 
+  function cleanAndParseJSON(raw) {
+    // 1. Fjern eventuelle markdown-fences
+    let s = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    // 2. Finn første '{' og siste '}' — kast alt utenfor
+    const start = s.indexOf('{');
+    const end   = s.lastIndexOf('}');
+    if (start === -1 || end === -1) throw new Error('Ingen gyldig JSON funnet i API-svar.');
+    s = s.slice(start, end + 1);
+    // 3. Fjern linjeskift og tab-tegn inni JSON-strenger (vanligste årsak til parse-feil)
+    //    Strategi: erstatt \n, \r, \t som ikke er escaped med space, kun inni streng-verdier
+    s = s.replace(/"(?:[^"\\]|\\.)*"/g, match =>
+      match.replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ')
+    );
+    try {
+      return JSON.parse(s);
+    } catch(e) {
+      // 4. Siste utvei: prøv å fjerne trailing commas (Claude produserer av og til dette)
+      s = s.replace(/,\s*([}\]])/g, '$1');
+      return JSON.parse(s);
+    }
+  }
+
   async function runAgent() {
     const errEl = document.getElementById('error-msg');
     errEl.textContent = '';
@@ -1470,7 +1492,7 @@ Returner kun JSON.`;
       const data1 = await resp1.json();
       if (data1.error) throw new Error(data1.error.message);
       const raw1 = data1.content.map(i => i.text||'').join('');
-      const res1 = JSON.parse(raw1.replace(/```json|```/g,'').trim());
+      const res1 = cleanAndParseJSON(raw1);
 
       let resFinal = res1;
 
@@ -1508,7 +1530,7 @@ Returner kun JSON.`;
         const data2 = await resp2.json();
         if (data2.error) throw new Error(data2.error.message);
         const raw2 = data2.content.map(i => i.text||'').join('');
-        const res2 = JSON.parse(raw2.replace(/```json|```/g,'').trim());
+        const res2 = cleanAndParseJSON(raw2);
 
         // Slå sammen produkter og summer fra P1 og P2
         const alleProdukter = [...(res1.p||[]), ...(res2.p||[])];
