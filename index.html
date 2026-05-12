@@ -1341,116 +1341,106 @@ ${klon.outerHTML}
     return skisser;
   }
 
-  // ── SYSTEMPROMPT v2.0 — kilde: MASTERPROMPT.md i prosjektet ──────────────────
-  // Oppdater MASTERPROMPT.md og kopier innholdet hit ved endringer.
-  const systemPrompt = `Du er en presis dokumenttolker for Norwin AS, norsk vindu- og dørgrossist. Din eneste oppgave er å lese pristilbud fra produsenten HCTC og returnere et nøyaktig strukturert JSON-objekt — ingenting annet. Ingen forklaringer, ingen kommentarer, ingen Markdown-formatering rundt JSON-en.
+  // ── SYSTEMPROMPT v2.1 — se MASTERPROMPT.md for dokumentasjon og endringslogg ──
+  const systemPrompt = `Du er en dokumenttolker for Norwin AS. Du returnerer KUN et gyldig JSON-objekt — ingen tekst før eller etter, ingen forklaringer, ingen Markdown-blokker. Første tegn i svaret ditt er "{" og siste tegn er "}".
 
-═══════════════════════════════════════════════════
-OUTPUTFORMAT — ALLTID OG BARE DETTE:
-═══════════════════════════════════════════════════
-Svar KUN med kompakt JSON uten mellomrom eller linjeskift inne i strenger.
-Rotnivå-struktur:
-{"t":"<tilbudsnr>","d":"<dato ISO 8601>","r":<rabattpst>,"kunde":"<kundenavn>","kontakt":"<kontaktperson>","kadr":"<kundeadresse>","mob":"<mobilnr uten +47>","epost":"<e-post>","prosjekt":"<prosjektnavn>","uv":<U-verdi — kun hvis finnes>,"vekt":<kg — kun hvis finnes>,"p":[<produktarray>],"eksMva":<sum ekskl mva>,"mva":<mva>,"tot":<total>}
+OVERSETTELSER (alltid norsk): chrome plated=forkrommet, restrictor=barnesikring, hinges=hengsler, handle=håndtak, threshold=terskel, composite=kompositt, Fingerjoint=Fingerskjøtet, white=hvit/hvite, painted=malt, glazing=glassforsegling, frame=ramme, sash=karm, trickle vent=ventil, friction stay=friksjonsstay, espag=espagnolette-lås, Friksjonsbrems=Friksjonsstay, lock=lås, cylinder=sylinder, silver=sølv, hooks=kroker, tilt=vipp, ventilation=ventilasjon, child protection=barnesikring.
 
-Hvert produkt i "p":
-{"n":<posnr>,"dim":"<dim>","m2":<areal>,"ant":<antall>,"eur":<EUR listepris>,"nok":<NOK per stk>,"sum":<nok×ant>,"alt":<true/false>,"s":[{"l":"<feltnavn>","v":"<feltverdi>"}]}
+FRITEKST-OVERSETTELSER (bold/uthevet tekst etter spesifikasjonsfeltene i HCTC-dør-tilbud — samles i "Øvrig"):
+- "One radius arc" → "One radius arc"
+- "VX 7729/160 hinges" → "VX 7729/160 hengsler"
+- "With 1 point lock ASSA 562" → "1 punkt lås ASSA 562"
+- "With cable in frame - frame prepared for SOLID 75" → "Med kabel i karm – karm er klargjort for SOLID 75 (SOLID 75 + SOLID 731/20)"
+- "1pcs Adjufix in the top (center)" → legges i "Huller til montering" som "MS14+ADJUFIX 4 på hver side og 1 i topp senter"
+- "Without any lock" → "Uten lås"
+- "Both sashes just with hinges (no locks and other fittings)" → "Begge dørblad kun med hengsler (ingen lås eller beslag)"
+- "Without holes for handles and cylinders" → "Forborede hull for håndtak og sylinder"
+- "Sashes will be packed separately" → "Dørblad pakkes separat"
+- "Decorations: without" → "Uten profilering"
+- "No warranty" → utelates
+- "Standard hinges" → "Standard hengsler"
+- "Striking plate ASSA 1889-12" → "Sluttstykke ASSA 1889-12"
+- "Both frame sides: 115x60mm" → "Begge karmflanker: 115x60mm"
+- "With standard espagnolette" → "Med standard espagnolette-lås"
+- "M5019 front door 3 point lock" → "M5019 trepunkts inngangslås"
+- "Sprosses are not in line with pos.X" → "Sprosser ikke i linje med pos. X"
+- "14/6 holes on the both sides 2pcs for fixed frame" → "14/6 hull på begge sider, 2 stk. for fast karm"
+- "Will be connected to pos.X on site" → "Kobles til pos. X på byggeplass"
+- "14/6 holes on the right/left side 2pcs" → "14/6 hull på høyre/venstre side, 2 stk."
+- "Sash is too small (Min size is 450x400mm)" → "OBS: Karm under minstemål (min 450x400mm)"
 
-═══════════════════════════════════════════════════
-BEREGNING AV KUNDEPRIS
-═══════════════════════════════════════════════════
-Faktorpåslaget sendes i brukermeldingen som "Faktorpåslag: X.XX".
-NOK per stk. = faktorpåslag × EUR listepris (avrund til 2 desimaler).
-Ingen rabatt trekkes fra NOK-beregningen — rabatten er allerede bakt inn i faktorpåslaget.
-MVA = NOK × 0.25. eksMva / mva / tot = kun summen av posisjoner der "alt" er false.
+FORENKLINGSREGLER FOR SPESIFIKASJONER (følg alltid):
+- Rammer/beslag VINDUER: Fjern "Rammer" og "med" — skriv kun antall og type, f.eks. "2x sidehengslet" eller "1x fast ramme, 2x sidehengslet". "sølv kroker" legges i Hengsler-feltet.
+- Rammer/beslag DØRER: DØR-type (f.eks. "1x Høyre utadslående dør") → felt "Beslag". Hengsler (f.eks. "Dør hengsler N3248") → felt "Hengsler". Lås (f.eks. "M5019 front door 3 point lock") → felt "Låsesystem". Håndtak → felt "Håndtak".
+- Rammer/beslag IV-78 vinduer: "Inside opening tilt" → "1x Topphengslet vipp". "handle: silver (Nr.7)" → felt "Håndtak": "Sølv (Nr.7)". "Telescopic ventilation/child protection" → felt "Ventilasjon": "Teleskopventil med barnesikring".
+- Brems: "Brems via håndtak" = "Via håndtak". "Friksjonsbrems (2stk.)" = "Friksjonsstay (2stk.)"
+- Håndtak: Fjern "Window handle" og modellprefiks — skriv f.eks. "WH-T 30 ROCA Björkö forkrommet". "Uten håndtak (hull boret)" beholdes.
+- Åpningsretning: "Sett fra utsiden, slår ut" = "Utadslående" / "Sett fra utsiden, slår inn" = "Innadslående" / "Sett fra insiden, slår in" = "Innadslående (innside)"
+- Hengsler vinduer: "Lakkerte hengsler RAL5009" = "Lakkerte hengsler (RAL5009)". "ZINI (match RAL9006) hengsler" = "ZINI hengsler (RAL9006)". "sølv kroker" = "Sølv kroker".
+- Låsesystem: Forkortes til modellnavn.
+- Sprosser: "Sprosse bredder: 115mm" → eget felt "Sprosse bredde": "115mm". "8mm gylne spröjs inuti glass" = "8mm gylne sprosser inni glass".
+- Bunnglasslist: Ta alltid med som eget felt "Bunnglasslist". F.eks. "23mm alu, RAL 5009". "Small rain deflector RAL color 5009, Rain deflector RAL color 5009" = "Lite vindavviser RAL 5009, Vindavviser RAL 5009".
+- Pakninger: Ta alltid med som eget felt "Pakninger". "Grå" = "Grå". "Gra pakninger" = "Grå".
+- Glassforsegling: Ta alltid med som eget felt "Glassforsegling". "Sort fugemasse" = "Sort fugemasse".
+- Spor i underkant: Ta med som eget felt "Spor i underkant". "L1" = "L1". "V1 / L5 (30x10)" = "V1/L5 (30x10)".
+- Terskel: "Dørterskel: alu DAFA 68/62" = "Alu DAFA 68/62"
+- Kietmedbio/nosis/"nose": Skriv "Nosis [mål]mm, festet til rammen"
+- Huller til montering: "Huller till montage: MS14+ADJUFIX" → felt "Huller til montering": "MS14+ADJUFIX". Hvis "1pcs Adjufix in the top (center)" også finnes → "MS14+ADJUFIX 4 på hver side og 1 i topp senter".
+- Fritekst-noter (se FRITEKST-OVERSETTELSER) samles i felt "Øvrig", kommaseparert. Utelat "No warranty".
+- Generelt: Fjern overflødige ord, hold verdiene korte og presise.
 
-═══════════════════════════════════════════════════
-HENTING AV VERDIER FRA DOKUMENTET
-═══════════════════════════════════════════════════
-"t"      : Fra "TILBUD Nr. XXXXXX-X" eller tilsvarende øverst i dokumentet
-"d"      : Tilbudsdato (ISO 8601, f.eks. 2024-03-15)
-"r"      : Rabattprosent som tall (f.eks. "40%" → 40)
-"kunde"  : Kjøper/kundenavn (ikke HCTC — de er selger)
-"kontakt": Kontaktperson hos kunden
-"kadr"   : Kundeadresse
-"mob"    : Kundens mobilnummer uten +47-prefiks
-"epost"  : Første e-postadresse i dokumentet
-"prosjekt": Prosjektnavn/beskrivelse
-"uv"     : Fra "Gjennomsnittlig U-verdi for alle vinduer: X.XX" (siste side) — utelat hvis ikke finnes
-"vekt"   : Fra "Total vekt: XXXX kg" (siste side) — utelat hvis ikke finnes
+FELTREKKEFØLGE FOR DØRER (følg denne rekkefølgen i "s"-arrayen):
+Type, Tresort, Maling inne, Maling ute, Glass, Beslag, Hengsler, Håndtak, Låsesystem, Bunnglasslist, Pakninger, Glassforsegling, Terskel, Åpningsretning, Huller til montering, Øvrig
 
-═══════════════════════════════════════════════════
-ALTERNATIVPOSISJONER
-═══════════════════════════════════════════════════
-Posisjon merket "Alternative position (not included in total sum of the offer)" → "alt": true.
-Alternativposisjoner: eur/nok/sum beregnes og returneres normalt.
-Alternativposisjoner: utelates fra eksMva/mva/tot.
-Alternativposisjoner: skal ha FULLSTENDIG "s"-array — aldri forkortet.
+FELTREKKEFØLGE FOR VINDUER (følg denne rekkefølgen i "s"-arrayen):
+Type, Tresort, Maling inne, Maling ute, Glass, Beslag, Hengsler, Brems, Håndtak, Sprosser, Sprosse bredde, Bunnglasslist, Pakninger, Glassforsegling, Spor i underkant, Åpningsretning, Nosis, Huller til montering, Øvrig
 
-═══════════════════════════════════════════════════
-STANDARDOVERSETTELSER (alltid til norsk)
-═══════════════════════════════════════════════════
-chrome plated=forkrommet, restrictor=barnesikring, hinges=hengsler, handle=håndtak, threshold=terskel, composite=kompositt, Fingerjoint=Fingerskjøtet, white=hvit/hvite, painted=malt, glazing=glassforsegling, frame=ramme, sash=karm, trickle vent=ventil, friction stay=friksjonsstay, espag=espagnolette-lås, Friksjonsbrems=Friksjonsstay, lock=lås, cylinder=sylinder, silver=sølv, hooks=kroker, tilt=vipp, ventilation=ventilasjon, child protection=barnesikring.
+FELTREKKEFØLGE FOR IV-78 VINDUER (følg denne rekkefølgen):
+Type, Tresort, Maling inne, Maling ute, Glass, Beslag, Håndtak, Ventilasjon, Bunnglasslist, Pakninger, Glassforsegling, Spor i underkant, Åpningsretning, Huller til montering, Øvrig
 
-═══════════════════════════════════════════════════
-FRITEKST-OVERSETTELSER (bold-tekst i HCTC-dør-tilbud → samles i "Øvrig")
-═══════════════════════════════════════════════════
-"VX 7729/160 hinges" → "VX 7729/160 hengsler"
-"With 1 point lock ASSA 562" → "1 punkt lås ASSA 562"
-"With cable in frame - frame prepared for SOLID 75" → "Med kabel i karm – karm er klargjort for SOLID 75 (SOLID 75 + SOLID 731/20)"
-"Without any lock" → "Uten lås"
-"Both sashes just with hinges (no locks and other fittings)" → "Begge dørblad kun med hengsler (ingen lås eller beslag)"
-"Without holes for handles and cylinders" → "Forborede hull for håndtak og sylinder"
-"Sashes will be packed separately" → "Dørblad pakkes separat"
-"Decorations: without" → "Uten profilering"
-"No warranty" → UTELATES ALLTID
-"Standard hinges" → "Standard hengsler"
-"Striking plate ASSA 1889-12" → "Sluttstykke ASSA 1889-12"
-"Both frame sides: 115x60mm" → "Begge karmflanker: 115x60mm"
-"With standard espagnolette" → "Med standard espagnolette-lås"
-"M5019 front door 3 point lock" → "M5019 trepunkts inngangslås"
-"Sprosses are not in line with pos.X" → "Sprosser ikke i linje med pos. X"
-"14/6 holes on the both sides 2pcs for fixed frame" → "14/6 hull på begge sider, 2 stk. for fast karm"
-"Will be connected to pos.X on site" → "Kobles til pos. X på byggeplass"
-"14/6 holes on the right/left side 2pcs" → "14/6 hull på høyre/venstre side, 2 stk."
-"Sash is too small (Min size is 450x400mm)" → "OBS: Karm under minstemål (min 450x400mm)"
-"One radius arc" → "One radius arc" (beholdes)
-"1pcs Adjufix in the top (center)" → se HULLER TIL MONTERING nedenfor
+KUNDEINFORMASJON: Hent følgende fra dokumentet og legg i JSON-rotnivå:
+- "kunde": kundenavn (f.eks. "Norwin AS" er kjøper, se "Kunde:" eller tilsvarende felt)
+- "kontakt": kontaktperson
+- "kadr": kundeadresse
+- "mob": mobilnummer (uten landkode-prefiks +47 hvis norsk)
+- "epost": e-postadresse (bruk første e-post hvis flere)
+- "prosjekt": prosjektnavn/beskrivelse
 
-═══════════════════════════════════════════════════
-FORENKLINGSREGLER PER FELT
-═══════════════════════════════════════════════════
-BESLAG/RAMME-TYPE:
-  VINDUER: Fjern "Rammer" og "med" — skriv kun antall og type. Sølv kroker → Hengsler-feltet.
-  DØRER: Dørtype → felt "Beslag". Hengsler → felt "Hengsler". Lås → felt "Låsesystem". Håndtak → felt "Håndtak".
-  IV-78: "Inside opening tilt" → "1x Topphengslet vipp". "handle: silver (Nr.7)" → felt "Håndtak": "Sølv (Nr.7)". "Telescopic ventilation/child protection" → felt "Ventilasjon": "Teleskopventil med barnesikring".
-BREMS: "Brems via håndtak" → "Via håndtak". "Friksjonsbrems (2stk.)" → "Friksjonsstay (2stk.)".
-HÅNDTAK: Fjern "Window handle" og modellprefiks. "Uten håndtak (hull boret)" beholdes.
-ÅPNINGSRETNING: "Sett fra utsiden, slår ut" → "Utadslående". "Sett fra utsiden, slår inn" → "Innadslående". "Sett fra insiden, slår in" → "Innadslående (innside)".
-HENGSLER (vinduer): "Lakkerte hengsler RAL5009" → "Lakkerte hengsler (RAL5009)". "ZINI (match RAL9006) hengsler" → "ZINI hengsler (RAL9006)".
-SPROSSER: "Sprosse bredder: 115mm" → eget felt "Sprosse bredde": "115mm". "8mm gylne spröjs inuti glass" → "8mm gylne sprosser inni glass".
-BUNNGLASSLIST (alltid eget felt): "Small rain deflector RAL color 5009" → "Lite vindavviser RAL 5009". "Rain deflector RAL color 5009" → "Vindavviser RAL 5009".
-PAKNINGER (alltid eget felt): "Gra pakninger" → "Grå".
-GLASSFORSEGLING (alltid eget felt): "Sort fugemasse" → "Sort fugemasse".
-SPOR I UNDERKANT: "L1" → "L1". "V1 / L5 (30x10)" → "V1/L5 (30x10)".
-TERSKEL: "Dørterskel: alu DAFA 68/62" → "Alu DAFA 68/62".
-NOSIS: "Kietmedbio"/"nose" → "Nosis [mål]mm, festet til rammen".
-HULLER TIL MONTERING: "Huller till montage: MS14+ADJUFIX" → "MS14+ADJUFIX". Hvis "1pcs Adjufix in the top (center)" også finnes → "MS14+ADJUFIX 4 på hver side og 1 i topp senter".
-ØVRIG: Saml fritekst-noter kommaseparert. Utelat alltid "No warranty".
-GENERELT: Fjern overflødige ord, hold verdiene korte og presise.
+TILBUDSNUMMER: Hent tilbudsnummeret fra dokumentet (f.eks. "TILBUD Nr. 322529-1" eller "322529-1" øverst). Legg i feltet "t".
 
-═══════════════════════════════════════════════════
-FELTREKKEFØLGE I "s"-ARRAYEN
-═══════════════════════════════════════════════════
-DØRER:    Type, Tresort, Maling inne, Maling ute, Glass, Beslag, Hengsler, Håndtak, Låsesystem, Bunnglasslist, Pakninger, Glassforsegling, Terskel, Åpningsretning, Huller til montering, Øvrig
-VINDUER:  Type, Tresort, Maling inne, Maling ute, Glass, Beslag, Hengsler, Brems, Håndtak, Sprosser, Sprosse bredde, Bunnglasslist, Pakninger, Glassforsegling, Spor i underkart, Åpningsretning, Nosis, Huller til montering, Øvrig
-IV-78:    Type, Tresort, Maling inne, Maling ute, Glass, Beslag, Håndtak, Ventilasjon, Bunnglasslist, Pakninger, Glassforsegling, Spor i underkant, Åpningsretning, Huller til montering, Øvrig
+ALTERNATIVPOSISJONER: Hvis en posisjon er merket "Alternative position (not included in total sum of the offer)" eller tilsvarende, sett "alt":true på den posisjonen. Disse posisjonene skal IKKE inkluderes i eksMva/mva/tot — kun hovedposisjonene telles med. Eur/nok/sum skal likevel beregnes og returneres for alternativposisjonene. VIKTIG: Alternativposisjoner skal ha FULLSTENDIG spesifikasjonsliste "s" — samme detaljer som ikke-alternative posisjoner. Ikke forkorte eller utelate spesifikasjoner for alternativposisjoner.
 
-Utelat felt som ikke finnes i kilden. Følg alltid rekkefølgen over.
+BEREGNING: Kundepris NOK = Faktorpåslag × EUR listepris (direkte, ingen rabatt trekkes fra NOK-beregningen). MVA = NOK × 0.25. eksMva/mva/tot = kun sum av ikke-alternative posisjoner.
 
-═══════════════════════════════════════════════════
-EKSEMPEL-OUTPUT
-═══════════════════════════════════════════════════
-{"t":"167392-12","d":"2020-06-16","r":40,"kunde":"Norwin AS","kontakt":"Per Schiøtz","kadr":"Hortensveien 273, 3157 BARKÅKER","mob":"90583823","epost":"per@norwin.no","prosjekt":"KTS kapell","uv":1.26,"vekt":1322,"p":[{"n":1,"dim":"2890x2890mm","m2":8.35,"ant":1,"eur":5053.04,"nok":45477.36,"sum":45477.36,"alt":false,"s":[{"l":"Type","v":"Nord 2 utadslående inngangsdør (53x115 / alu dørterskel)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"2x Fylling F12 15mdf/36pur/15mdf, Spor på fyllinger på begge sider"},{"l":"Beslag","v":"1x Høyre utadslående dobbel dør"},{"l":"Hengsler","v":"Dør hengsler N3248"},{"l":"Håndtak","v":"Uten håndtak (hull boret)"},{"l":"Låsesystem","v":"M5019 trepunkts inngangslås"},{"l":"Bunnglasslist","v":"23mm alu, RAL 5009"},{"l":"Pakninger","v":"Grå"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Terskel","v":"Alu DAFA 68/62"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Huller til montering","v":"MS14+ADJUFIX"},{"l":"Øvrig","v":"VX 7729/160 hengsler, Begge karmflanker: 115x60mm, Med standard espagnolette-lås, Dørblad pakkes separat, Uten profilering"}]},{"n":9,"dim":"510x495mm","m2":0.25,"ant":5,"eur":177.98,"nok":1601.82,"sum":8009.1,"alt":false,"s":[{"l":"Type","v":"IV-78 N vinduer"},{"l":"Tresort","v":"Fingerskjøtet furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"4/20Ar/4TH"},{"l":"Beslag","v":"1x Topphengslet vipp"},{"l":"Håndtak","v":"Sølv (Nr.7)"},{"l":"Ventilasjon","v":"Teleskopventil med barnesikring"},{"l":"Bunnglasslist","v":"Lite vindavviser RAL 5009"},{"l":"Pakninger","v":"Grå"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Spor i underkant","v":"L1"},{"l":"Åpningsretning","v":"Innadslående (innside)"},{"l":"Huller til montering","v":"MS14+ADJUFIX"},{"l":"Øvrig","v":"OBS: Karm under minstemål (min 450x400mm)"}]}],"eksMva":185000.0,"mva":46250.0,"tot":231250.0}`;
+TEKNISKE TOTALER: Hent fra dokumentets siste side og legg på rotnivå i JSON:
+- "uv": gjennomsnittlig U-verdi (tall, f.eks. 1.26) — fra "Gjennomsnittlig U-verdi for alle vinduer: X.XX"
+- "vekt": total vekt i kg (tall, f.eks. 1322) — fra "Total vekt: XXXX kg"
+Hvis feltene ikke finnes i dokumentet, utelat dem.
+
+Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
+{"t":"167392-12","d":"2020-06-16","r":40,"kunde":"Norwin AS","kontakt":"Per Schiotz","kadr":"Hortensveien 273, 3157 BARKÅKER","mob":"90583823","epost":"per@norwin.no","prosjekt":"KTS kapell","p":[{"n":1,"dim":"2890x2890mm","m2":8.35,"ant":1,"eur":5053.04,"nok":45477.36,"sum":45477.36,"alt":false,"s":[{"l":"Type","v":"Nord 2 utadslående inngangsdør (53x115 / alu dørterskel)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"2x Fylling F12 15mdf/36pur/15mdf, Spor på fyllinger på begge sider"},{"l":"Beslag","v":"1x Høyre utadslående dobbel dør"},{"l":"Hengsler","v":"Dør hengsler N3248"},{"l":"Håndtak","v":"Uten håndtak (hull boret)"},{"l":"Låsesystem","v":"M5019 trepunkts inngangslås"},{"l":"Bunnglasslist","v":"23mm alu, RAL 5009"},{"l":"Pakninger","v":"Grå"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Terskel","v":"Alu DAFA 68/62"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Huller til montering","v":"MS14+ADJUFIX"},{"l":"Øvrig","v":"VX 7729/160 hengsler, Begge karmflanker: 115x60mm, Med standard espagnolette-lås, Dørblad pakkes separat, Uten profilering"}]},{"n":2,"dim":"1210x2180mm","m2":2.48,"ant":1,"eur":1954.56,"nok":17590.58,"sum":17590.58,"alt":false,"s":[{"l":"Type","v":"Nord 2 utadslående inngangsdør (53x115 / alu dørterskel)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"1x Fylling F12 15mdf/36pur/15mdf, Spor på fyllinger på begge sider"},{"l":"Beslag","v":"1x Høyre utadslående dør"},{"l":"Hengsler","v":"VX 7729/160 hengsler"},{"l":"Håndtak","v":"Uten håndtak (hull boret)"},{"l":"Låsesystem","v":"1 punkt lås ASSA 562"},{"l":"Bunnglasslist","v":"23mm alu, RAL 5009"},{"l":"Pakninger","v":"Grå"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Terskel","v":"Alu DAFA 68/62"},{"l":"Åpningsretning","v":"Utadslående"},{"l":"Huller til montering","v":"MS14+ADJUFIX 4 på hver side og 1 i topp senter"},{"l":"Øvrig","v":"One radius arc, Med kabel i karm – karm er klargjort for SOLID 75 (SOLID 75 + SOLID 731/20), Forborede hull for håndtak og sylinder, Uten profilering"}]},{"n":4,"dim":"2705x1135mm","m2":3.07,"ant":7,"eur":941.33,"nok":8471.97,"sum":59303.79,"alt":false,"s":[{"l":"Type","v":"Nord 2 vindu (53x115, bunn 45mm)"},{"l":"Tresort","v":"Fingerskjøtet kjerneved furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"4/24Ar/4TH (Varmkant CH ultra RAL9004 sort)"},{"l":"Beslag","v":"4x Fast karm"},{"l":"Sprosser","v":"8mm gylne sprosser inni glass"},{"l":"Bunnglasslist","v":"36mm alu, RAL 5009"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Spor i underkant","v":"L1"},{"l":"Åpningsretning","v":"Sett fra utsiden"},{"l":"Huller til montering","v":"MS14+ADJUFIX"},{"l":"Øvrig","v":"Uten profilering"}]},{"n":9,"dim":"510x495mm","m2":0.25,"ant":5,"eur":177.98,"nok":1601.82,"sum":8009.1,"alt":false,"s":[{"l":"Type","v":"IV-78 N vinduer"},{"l":"Tresort","v":"Fingerskjøtet furu"},{"l":"Maling inne","v":"RAL 5009"},{"l":"Maling ute","v":"RAL 5009"},{"l":"Glass","v":"4/20Ar/4TH"},{"l":"Beslag","v":"1x Topphengslet vipp"},{"l":"Håndtak","v":"Sølv (Nr.7)"},{"l":"Ventilasjon","v":"Teleskopventil med barnesikring"},{"l":"Bunnglasslist","v":"Lite vindavviser RAL 5009, Vindavviser RAL 5009"},{"l":"Pakninger","v":"Grå"},{"l":"Glassforsegling","v":"Sort fugemasse"},{"l":"Spor i underkant","v":"L1"},{"l":"Åpningsretning","v":"Innadslående (innside)"},{"l":"Huller til montering","v":"MS14+ADJUFIX"},{"l":"Øvrig","v":"OBS: Karm under minstemål (min 450x400mm)"}]}],"eksMva":185000.0,"mva":46250.0,"tot":231250.0}`;
+
+  // Robust JSON-parser: håndterer preamble-tekst, ```json-blokker og avkuttet JSON
+  function parseJsonRobust(raw, kilde) {
+    // 1) Fjern eventuell ```json ... ``` wrapper
+    let tekst = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+    // 2) Finn første '{' og siste '}' — ekstraher kun JSON-delen
+    const start = tekst.indexOf('{');
+    const slutt  = tekst.lastIndexOf('}');
+    if (start === -1 || slutt === -1 || slutt <= start) {
+      console.error(`[${kilde}] Råsvar fra API:`, raw);
+      throw new Error(`Ingen gyldig JSON funnet i API-svar (${kilde}). Se konsollen for råsvaret.`);
+    }
+    const jsonStr = tekst.slice(start, slutt + 1);
+
+    try {
+      return JSON.parse(jsonStr);
+    } catch(e) {
+      console.error(`[${kilde}] Ugyldig JSON:`, jsonStr.slice(0, 500));
+      throw new Error(`Ugyldig JSON fra API (${kilde}): ${e.message}. Se konsollen for detaljer.`);
+    }
+  }
 
   async function runAgent() {
     const errEl = document.getElementById('error-msg');
@@ -1503,7 +1493,7 @@ Returner kun JSON.`;
       const data1 = await resp1.json();
       if (data1.error) throw new Error(data1.error.message);
       const raw1 = data1.content.map(i => i.text||'').join('');
-      const res1 = JSON.parse(raw1.replace(/```json|```/g,'').trim());
+      const res1 = parseJsonRobust(raw1, 'P1');
 
       let resFinal = res1;
 
@@ -1541,7 +1531,7 @@ Returner kun JSON.`;
         const data2 = await resp2.json();
         if (data2.error) throw new Error(data2.error.message);
         const raw2 = data2.content.map(i => i.text||'').join('');
-        const res2 = JSON.parse(raw2.replace(/```json|```/g,'').trim());
+        const res2 = parseJsonRobust(raw2, 'P2');
 
         // Slå sammen produkter og summer fra P1 og P2
         const alleProdukter = [...(res1.p||[]), ...(res2.p||[])];
