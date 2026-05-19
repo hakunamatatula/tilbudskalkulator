@@ -1167,8 +1167,22 @@ ${klon.outerHTML}
         // - V-anker (HCTC-format): inkluder V-teksten + litt padding — V-koden er UNDER tegningen
         let yEnd;
         if (sluttErStk) {
-          // Norwin-format: slutt-anker er "N (Xstk.)" som er UNDER tegningen — stopp før det
-          yEnd = slutt.yTop - 0.005;
+          // Norwin-format: slutt-anker er "N (Xstk.)" som er UNDER tegningen — stopp før det.
+          // Finn eventuelle tekstlinjer (f.eks. "Sett fra utsiden", åpningsmerker) mellom
+          // tegningsbunnen og stk-ankeret, og bruk den høyeste som tettere yEnd.
+          const tekstMellom = items.filter(it =>
+            it.yTop > start.yTop + 0.10 &&
+            it.yTop < slutt.yTop - 0.01 &&
+            it.x < 0.18 &&
+            it.str.length > 3 &&
+            !/^\d+$/.test(it.str)   // ekskluder rene tall (produktnr, stk-tall)
+          );
+          const tettereYEnd = tekstMellom.length > 0
+            ? Math.min(...tekstMellom.map(it => it.yTop)) - 0.005
+            : null;
+          yEnd = (tettereYEnd && tettereYEnd > start.yTop + 0.08)
+            ? tettereYEnd
+            : slutt.yTop - 0.020;  // økt margin fra 0.005 → 0.020 for å unngå tekst under tegning
         } else if (sluttV) {
           // HCTC-format: V-koden er det siste elementet på venstre side under tegningen
           // Finn evt. "Sett fra utsiden" / "N (Xstk.)" tekster mellom prodNr og V-ankeret
@@ -1449,10 +1463,11 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     const valutakurs = parseNum(document.getElementById('valutakurs').value);
     if (!valutakurs) { errEl.textContent = 'Fyll inn valutakurs øverst på siden.'; return; }
 
-    // Faktor beregnes automatisk for 30% fortjenestemargin med typisk 40% rabatt:
-    // kostpris = EUR_list × 0.60 × valutakurs, salgspris = kostpris / 0.70
-    // => faktor = 0.60 / 0.70 × valutakurs
-    const faktorTilbud = parseFloat((0.6 / 0.7 * valutakurs).toFixed(2));
+    // Faktor beregnes ETTER API-kall basert på faktisk rabatt i dokumentet.
+    // For leverandører uten rabatt (f.eks. Vitron): faktor = 1.0 / 0.70 × kurs
+    // For leverandører med rabatt (f.eks. HCTC 40%): faktor = 0.60 / 0.70 × kurs
+    // Formel: faktor = (1 - rabatt%) / 0.70 × valutakurs  →  sikrer alltid 30% fortjenestemargin
+    let faktorTilbud = parseFloat((0.6 / 0.7 * valutakurs).toFixed(2)); // foreløpig estimat til prompt
 
     document.getElementById('form-area').style.display = 'none';
     document.getElementById('loading').style.display = 'block';
@@ -1495,6 +1510,22 @@ Returner kun JSON.`;
       const raw1 = data1.content.map(i => i.text||'').join('');
       const res1 = parseJsonRobust(raw1, 'P1');
 
+      // Beregn korrekt faktor basert på FAKTISK rabatt i P1-dokumentet
+      // Formula: faktor = (1 - rabatt%) / 0.70 × valutakurs → alltid 30% fortjenestemargin
+      const rabatt1 = (res1.r || 0) / 100;
+      faktorTilbud = parseFloat(((1 - rabatt1) / 0.70 * valutakurs).toFixed(2));
+      // Override AI-beregnede NOK-priser med korrekt faktor
+      if (res1.p) {
+        res1.p.forEach(p => {
+          p.nok = parseFloat((faktorTilbud * (p.eur || 0)).toFixed(2));
+          p.sum = parseFloat((p.nok * (p.ant || 1)).toFixed(2));
+        });
+        const mainPos1 = res1.p.filter(p => !p.alt);
+        res1.eksMva = parseFloat(mainPos1.reduce((a, p) => a + p.sum, 0).toFixed(2));
+        res1.mva    = parseFloat((res1.eksMva * 0.25).toFixed(2));
+        res1.tot    = parseFloat((res1.eksMva + res1.mva).toFixed(2));
+      }
+
       let resFinal = res1;
 
       // Hvis P2 er lastet opp — behandle og slå sammen
@@ -1533,11 +1564,22 @@ Returner kun JSON.`;
         const raw2 = data2.content.map(i => i.text||'').join('');
         const res2 = parseJsonRobust(raw2, 'P2');
 
-        // Slå sammen produkter og summer fra P1 og P2
+        // Beregn korrekt faktor for P2 basert på faktisk rabatt i P2-dokumentet
+        const rabatt2 = (res2.r || 0) / 100;
+        const faktorTilbud2 = parseFloat(((1 - rabatt2) / 0.70 * valutakurs).toFixed(2));
+        if (res2.p) {
+          res2.p.forEach(p => {
+            p.nok = parseFloat((faktorTilbud2 * (p.eur || 0)).toFixed(2));
+            p.sum = parseFloat((p.nok * (p.ant || 1)).toFixed(2));
+          });
+        }
+
+        // Slå sammen og beregn totaler fra korrekte produkt-summer
         const alleProdukter = [...(res1.p||[]), ...(res2.p||[])];
-        const eksMva = (res1.eksMva||0) + (res2.eksMva||0);
-        const mva    = (res1.mva||0)    + (res2.mva||0);
-        const tot    = (res1.tot||0)    + (res2.tot||0);
+        const mainPosAll = alleProdukter.filter(p => !p.alt);
+        const eksMva = parseFloat(mainPosAll.reduce((a, p) => a + (p.sum||0), 0).toFixed(2));
+        const mva    = parseFloat((eksMva * 0.25).toFixed(2));
+        const tot    = parseFloat((eksMva + mva).toFixed(2));
         resFinal = { ...res1, p: alleProdukter, eksMva, mva, tot };
       }
 
@@ -2725,56 +2767,4 @@ Returner kun JSON.`;
       <div class="offer-footer">
         <div class="seller-block">
           <div class="no-print" style="margin-bottom:6px;">
-            <select id="cb-selger-dd" onchange="byttSelgerITilbud(this.value)"
-              style="font-family:'Source Sans 3',sans-serif;font-size:13px;padding:4px 8px;border:1px solid #c8a96e;border-radius:4px;background:#fffbe6;color:#1a2233;cursor:pointer;">
-              ${Object.keys(SELGERE).map(k =>
-                `<option value="${k}" ${(info.selger.fornavn===k||info.selger.navn===SELGERE[k].navn)?'selected':''}>${k}</option>`
-              ).join('')}
-            </select>
-          </div>
-          <div class="seller-name" id="cb-selgernavn">${info.selger.navn || info.selger.fornavn || ''}</div>
-          <div class="seller-info" id="cb-selgermob">${info.selger.mob ? 'Tlf: '+info.selger.mob : ''}</div>
-          <div class="seller-info" id="cb-selgerepost">${info.selger.epost || ''}</div>
-        </div>
-        <div class="cert-logos">
-          <img src="${IMG_CERT1}" alt="CE" />
-          <img src="${IMG_CERT2}" alt="DVV" />
-          <img src="${IMG_CERT3}" alt="Enova" />
-          <img src="${IMG_CERT4}" alt="NDVK" />
-          <img src="${IMG_CERT5}" alt="Ruteretur" />
-          <img src="${IMG_CERT6}" alt="Vinduesindustri" />
-        </div>
-      </div>
-    `;
-  }
-
-  // ── Global paste-interceptor: alltid lim inn som ren tekst ──
-  // Fjerner all formatering (font, størrelse, farge, bold etc.) fra tekst
-  // limt inn i alle contenteditable-felt i tilbudet
-  document.addEventListener('paste', function(e) {
-    const target = e.target;
-    // Kun håndter contenteditable-felt
-    if (!target.isContentEditable) return;
-    // Ikke interferere med skisse-containernes bildelim
-    if (target.classList.contains('product-skisse') || target.closest('.product-skisse')) return;
-
-    e.preventDefault();
-    const tekst = (e.clipboardData || window.clipboardData).getData('text/plain');
-    if (!tekst) return;
-
-    // Lim inn ren tekst på markørposisjonen
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    sel.deleteFromDocument();
-    const node = document.createTextNode(tekst);
-    sel.getRangeAt(0).insertNode(node);
-    // Flytt markør til slutten av innsatt tekst
-    const range = document.createRange();
-    range.setStartAfter(node);
-    range.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }, true); // capture-fase: kjør før andre handlers
-</script>
-</body>
-</html>
+            <select id="cb-selger-dd" onchange="byttSelg
