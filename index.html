@@ -1055,22 +1055,6 @@ ${klon.outerHTML}
     return start > 0 ? fullText.slice(start, end) : fullText;
   }
 
-  // Bygger content-array for API: sender PDF som dokument (base64) hvis tekst er tom/kort,
-  // ellers sender teksten direkte. Dette håndterer bilde-baserte PDFer (f.eks. VEKA82).
-  async function buildApiContent(file, pdfText, userPrompt) {
-    const trimmed = pdfText.trim();
-    if (trimmed.length > 50) {
-      // Tekstbasert PDF — send som vanlig tekst
-      return [{ type: 'text', text: userPrompt + '\n\nTILBUDSTEKST:\n' + trimmed }];
-    }
-    // Bilde-basert / skannet PDF — send som base64-dokument til Claude Vision
-    const base64 = await fileToBase64(file);
-    return [
-      { type: 'text', text: userPrompt },
-      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
-    ];
-  }
-
   // Rendrer PDF og henter skisser med presise crop-koordinater basert på tekstlag
   // Start: produktnummeret ("1", "2" etc.) i venstre hjørne
   // Slutt: "N (Xstk.)" teksten under skissen
@@ -1489,7 +1473,6 @@ Husk: Kundepris NOK = ${faktorTilbud} × EUR listepris (direkte).
 Returner kun JSON.`;
 
       // Kall API for P1
-      const content1 = await buildApiContent(selectedFile, pdfText1, userPrompt1);
       const resp1 = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -1502,7 +1485,9 @@ Returner kun JSON.`;
           model: 'claude-sonnet-4-20250514',
           max_tokens: 8000,
           system: systemPrompt,
-          messages: [{ role:'user', content: content1 }]
+          messages: [{ role:'user', content:[
+            { type:'text', text: userPrompt1 + '\n\nTILBUDSTEKST:\n' + pdfText1 }
+          ]}]
         })
       });
       const data1 = await resp1.json();
@@ -1526,7 +1511,6 @@ Parametere:
 Husk: Kundepris NOK = ${faktorTilbud} × EUR listepris (direkte).
 Returner kun JSON.`;
 
-        const content2 = await buildApiContent(selectedFile2, pdfText2, userPrompt2);
         const resp2 = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -1539,7 +1523,9 @@ Returner kun JSON.`;
             model: 'claude-sonnet-4-20250514',
             max_tokens: 8000,
             system: systemPrompt,
-            messages: [{ role:'user', content: content2 }]
+            messages: [{ role:'user', content:[
+              { type:'text', text: userPrompt2 + '\n\nTILBUDSTEKST:\n' + pdfText2 }
+            ]}]
           })
         });
         const data2 = await resp2.json();
