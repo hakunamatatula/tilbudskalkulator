@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="app-version" content="2026-05-20-v2"/>
 <title>Norwin Tilbudsagent</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Playfair+Display:wght@700&display=swap');
@@ -923,16 +924,17 @@ ${klon.outerHTML}
   let rateIsOfficial = false;
   let FALLBACK_RATE = 11.20; // Oppdateres automatisk når offisiell kurs hentes
 
-  function saveRate(rate, date) {
-    try { localStorage.setItem(RATE_CACHE_KEY, rate); localStorage.setItem(RATE_DATE_KEY, date); } catch(e) {}
-    try { sessionStorage.setItem(RATE_CACHE_KEY, rate); sessionStorage.setItem(RATE_DATE_KEY, date); } catch(e) {}
+  function saveRate(rate, date, source) {
+    try { localStorage.setItem(RATE_CACHE_KEY, rate); localStorage.setItem(RATE_DATE_KEY, date); localStorage.setItem('norwin_eur_source', source || 'nb'); } catch(e) {}
+    try { sessionStorage.setItem(RATE_CACHE_KEY, rate); sessionStorage.setItem(RATE_DATE_KEY, date); sessionStorage.setItem('norwin_eur_source', source || 'nb'); } catch(e) {}
   }
 
   function loadSavedRate() {
     try {
       const r = localStorage.getItem(RATE_CACHE_KEY) || sessionStorage.getItem(RATE_CACHE_KEY);
       const d = localStorage.getItem(RATE_DATE_KEY)  || sessionStorage.getItem(RATE_DATE_KEY);
-      if (r) return { rate: r, date: d };
+      const s = localStorage.getItem('norwin_eur_source') || sessionStorage.getItem('norwin_eur_source') || 'nb';
+      if (r) return { rate: r, date: d, source: s };
     } catch(e) {}
     return null;
   }
@@ -942,55 +944,89 @@ ${klon.outerHTML}
     const saved = loadSavedRate();
 
     if (saved && saved.date === today) {
-      setRateDisplay(parseFloat(saved.rate), true);
+      setRateDisplay(parseFloat(saved.rate), true, saved.source || 'nb');
       return;
     }
 
-    const API_URL = 'https://data.norges-bank.no/api/data/EXR/B.EUR.NOK.SP?format=sdmx-json&lastNObservations=1&locale=no';
+    // Dynamisk startPeriod: 7 dager tilbake — sikrer data uansett helger/helligdager
+    const lastWeek = new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0];
+    const NB_URL = `https://data.norges-bank.no/api/data/EXR/B.EUR.NOK.SP?format=sdmx-json&startPeriod=${lastWeek}&locale=no`;
+    const FR_URL = 'https://api.frankfurter.app/latest?from=EUR&to=NOK';
 
-    async function tryFetch(url) {
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const json = await resp.json();
-      // Støtter både SDMX-JSON 1.0 (data.data.dataSets) og direkte (data.dataSets)
-      const dataSets = (json.data && json.data.dataSets) ? json.data.dataSets : json.dataSets;
-      const seriesObj = dataSets[0].series;
-      // Bruk første tilgjengelige serie-nøkkel (robust mot '0:0:0:0' endringer)
-      const seriesKey = Object.keys(seriesObj)[0];
-      const obs = seriesObj[seriesKey].observations;
-      const keys = Object.keys(obs).sort((a,b)=>parseInt(a)-parseInt(b));
-      const rate = parseFloat(obs[keys[keys.length-1]][0]);
-      if (isNaN(rate)) throw new Error('Ugyldig kurs-verdi');
-      return rate;
+    // Parser Norges Bank SDMX-JSON (støtter begge strukturvarianter)
+    async function tryNorgesBank(url) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      try {
+        const resp = await fetch(url, { signal: ctrl.signal });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const json = await resp.json();
+        const dataSets = (json.data && json.data.dataSets) ? json.data.dataSets : json.dataSets;
+        if (!dataSets || !dataSets[0] || !dataSets[0].series) throw new Error('Ugyldig API-struktur');
+        const seriesObj = dataSets[0].series;
+        const seriesKey = Object.keys(seriesObj)[0];
+        const obs = seriesObj[seriesKey].observations;
+        const keys = Object.keys(obs).sort((a, b) => parseInt(a) - parseInt(b));
+        const rate = parseFloat(obs[keys[keys.length - 1]][0]);
+        if (isNaN(rate)) throw new Error('Ugyldig kurs-verdi');
+        return rate;
+      } finally { clearTimeout(timer); }
     }
 
-    try {
-      let rate;
+    // Parser Frankfurter API (ECB-kurs — brukes kun hvis Norges Bank er utilgjengelig)
+    async function tryFrankfurter() {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
       try {
-        // Direkte kall (fungerer når CORS er tillatt)
-        rate = await tryFetch(API_URL);
-      } catch(e) {
-        console.warn('Norges Bank direkte kall feilet, prøver CORS-proxy:', e.message);
-        // Fallback via CORS-proxy
-        rate = await tryFetch('https://corsproxy.io/?' + encodeURIComponent(API_URL));
-      }
-      saveRate(rate, today);
+        const resp = await fetch(FR_URL, { signal: ctrl.signal });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const json = await resp.json();
+        const rate = parseFloat(json.rates && json.rates.NOK);
+        if (isNaN(rate)) throw new Error('Ugyldig kurs fra Frankfurter');
+        return rate;
+      } finally { clearTimeout(timer); }
+    }
+
+    let rate = null;
+    let source = 'nb';
+
+    // LAG 1: Norges Bank direkte
+    try { rate = await tryNorgesBank(NB_URL); }
+    catch(e) { console.warn('NB direkte feilet:', e.message); }
+
+    // LAG 2: Norges Bank via CORS-proxy (for file://-protokoll og restriktive nettlesere)
+    if (rate === null) {
+      try { rate = await tryNorgesBank('https://corsproxy.io/?' + encodeURIComponent(NB_URL)); }
+      catch(e) { console.warn('NB CORS-proxy feilet:', e.message); }
+    }
+
+    // LAG 3: Frankfurter API (ECB-kurs, brukes kun som siste utvei)
+    if (rate === null) {
+      try { rate = await tryFrankfurter(); source = 'fr'; }
+      catch(e) { console.warn('Frankfurter feilet:', e.message); }
+    }
+
+    if (rate !== null) {
+      saveRate(rate, today, source);
       FALLBACK_RATE = rate;
-      setRateDisplay(rate, true);
-    } catch(e) {
-      console.error('Norges Bank valutakurs kunne ikke hentes:', e.message);
-      setRateDisplay(null, false);
+      setRateDisplay(rate, true, source);
+    } else {
+      console.error('Alle valutakurs-kilder feilet');
+      setRateDisplay(null, false, null);
     }
   }
 
-  function setRateDisplay(rate, official) {
+  function setRateDisplay(rate, official, source) {
     const box = document.getElementById('rate-status-box');
     const input = document.getElementById('valutakurs');
     rateIsOfficial = official;
     if (official && rate) {
       input.value = rate;
       calcQuick();
-      box.innerHTML = `<div class="rate-box rate-ok"><div class="rate-dot rate-dot-ok"></div><span>Offisiell kurs fra Norges Bank: <strong>${rate}</strong></span><span class="rate-override-link" onclick="startOverride()">Overstyr</span></div>`;
+      const label = source === 'fr'
+        ? 'Kurs fra Frankfurter (ECB-data)'
+        : 'Offisiell kurs fra Norges Bank';
+      box.innerHTML = `<div class="rate-box rate-ok"><div class="rate-dot rate-dot-ok"></div><span>${label}: <strong>${rate}</strong></span><span class="rate-override-link" onclick="startOverride()">Overstyr</span></div>`;
     } else {
       const saved = loadSavedRate();
       const displayRate = saved ? parseFloat(saved.rate) : FALLBACK_RATE;
@@ -2730,45 +2766,4 @@ Returner kun JSON.`;
         </div>
         <div>
           <div class="cb-label">E-post</div>
-          <div class="cb-val editable-val" contenteditable="true" id="cb-epost"
-            data-produkt="Tilbud" data-felt="E-post" data-original="${info.kundeEpost||''}"
-            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeEpost||''}</div>
-        </div>
-      </div>
-
-      <div class="offer-info-field">
-        <div class="info-label no-print">Informasjon til kunden (valgfritt)</div>
-        <div class="offer-info-val editable-val"
-          contenteditable="true"
-          data-produkt="Tilbud"
-          data-felt="Informasjon til kunden"
-          data-original=""
-          id="info-til-kunde"
-          onblur="sjekkEndring(this)"
-          title="Klikk for å legge til informasjon til kunden"></div>
-      </div>
-
-      ${produktSeksjoner}
-
-      <div class="price-table-wrapper">
-      <table class="price-table">
-        <thead><tr>
-          <th style="text-align:left;">Dimensjon</th>
-          <th style="text-align:center;">m²</th>
-          <th style="text-align:center;">Antall</th>
-          <th class="price-col no-print" style="text-align:center;">Faktor</th>
-          <th class="price-col" style="text-align:right;">Enhetspris, NOK</th>
-          <th class="sum-col" style="text-align:right;">Totalpris, NOK</th>
-        </tr></thead>
-        <tbody>${produktRaderHoved}</tbody>
-      </table>
-
-      <div class="totals-block">
-        <div class="totals-inner">
-          <div class="total-row"><span>Total ekskl. MVA</span><span id="total-eks-mva">kr ${formatNOK(res.eksMva||res.totalEkskMVA)}</span></div>
-          <div class="total-row"><span>MVA 25%</span><span id="total-mva">kr ${formatNOK(res.mva)}</span></div>
-          <div class="total-row"><span>Total inkl. MVA</span><span id="total-inkl-mva">kr ${formatNOK(res.tot||res.totalInklMVA)}</span></div>
-        </div>
-      </div>
-      ${(res.uv || res.vekt) ? `
-      <div style="margin-top:10px;font-size
+          <div class="cb-val editable-val" conte
