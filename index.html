@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta name="app-version" content="2026-05-20-v2"/>
+<meta name="app-version" content="2026-05-20-v3"/>
 <title>Norwin Tilbudsagent</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Playfair+Display:wght@700&display=swap');
@@ -424,6 +424,7 @@
   <div style="display:flex;align-items:center;gap:16px;">
     <div id="today-date" style="font-size:15px;color:var(--muted);font-weight:600;"></div>
     <button onclick="visAdminPanel()" title="Admin: se oversettelseslogg" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;font-family:'Source Sans 3',sans-serif;letter-spacing:0.06em;text-transform:uppercase;">⚙ Admin</button>
+    <span style="font-size:10px;color:var(--dim);opacity:0.7;">v3</span>
   </div>
 </div>
 
@@ -2765,5 +2766,4 @@ Returner kun JSON.`;
             onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeMob ? '+47 '+info.kundeMob : ''}</div>
         </div>
         <div>
-          <div class="cb-label">E-post</div>
-          <div class="cb-val editable-val" conte
+          <div class
