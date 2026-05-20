@@ -925,6 +925,19 @@ ${klon.outerHTML}
   let rateIsOfficial = false;
   let FALLBACK_RATE = 11.20; // Oppdateres automatisk når offisiell kurs hentes
 
+  // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
+  // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
+  // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
+  const APP_VERSION = '2026-05-20-v3';
+  try {
+    if (localStorage.getItem('norwin_app_version') !== APP_VERSION) {
+      localStorage.removeItem(RATE_CACHE_KEY);
+      localStorage.removeItem(RATE_DATE_KEY);
+      localStorage.removeItem('norwin_eur_source');
+      localStorage.setItem('norwin_app_version', APP_VERSION);
+    }
+  } catch(e) {}
+
   function saveRate(rate, date, source) {
     try { localStorage.setItem(RATE_CACHE_KEY, rate); localStorage.setItem(RATE_DATE_KEY, date); localStorage.setItem('norwin_eur_source', source || 'nb'); } catch(e) {}
     try { sessionStorage.setItem(RATE_CACHE_KEY, rate); sessionStorage.setItem(RATE_DATE_KEY, date); sessionStorage.setItem('norwin_eur_source', source || 'nb'); } catch(e) {}
