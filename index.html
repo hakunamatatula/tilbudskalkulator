@@ -946,17 +946,39 @@ ${klon.outerHTML}
       return;
     }
 
-    try {
-      const url = 'https://data.norges-bank.no/api/data/EXR/B.EUR.NOK.SP?format=sdmx-json&lastNObservations=1&locale=no';
+    const API_URL = 'https://data.norges-bank.no/api/data/EXR/B.EUR.NOK.SP?format=sdmx-json&lastNObservations=1&locale=no';
+
+    async function tryFetch(url) {
       const resp = await fetch(url);
-      const data = await resp.json();
-      const obs = data.data.dataSets[0].series['0:0:0:0'].observations;
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const json = await resp.json();
+      // Støtter både SDMX-JSON 1.0 (data.data.dataSets) og direkte (data.dataSets)
+      const dataSets = (json.data && json.data.dataSets) ? json.data.dataSets : json.dataSets;
+      const seriesObj = dataSets[0].series;
+      // Bruk første tilgjengelige serie-nøkkel (robust mot '0:0:0:0' endringer)
+      const seriesKey = Object.keys(seriesObj)[0];
+      const obs = seriesObj[seriesKey].observations;
       const keys = Object.keys(obs).sort((a,b)=>parseInt(a)-parseInt(b));
       const rate = parseFloat(obs[keys[keys.length-1]][0]);
+      if (isNaN(rate)) throw new Error('Ugyldig kurs-verdi');
+      return rate;
+    }
+
+    try {
+      let rate;
+      try {
+        // Direkte kall (fungerer når CORS er tillatt)
+        rate = await tryFetch(API_URL);
+      } catch(e) {
+        console.warn('Norges Bank direkte kall feilet, prøver CORS-proxy:', e.message);
+        // Fallback via CORS-proxy
+        rate = await tryFetch('https://corsproxy.io/?' + encodeURIComponent(API_URL));
+      }
       saveRate(rate, today);
       FALLBACK_RATE = rate;
       setRateDisplay(rate, true);
     } catch(e) {
+      console.error('Norges Bank valutakurs kunne ikke hentes:', e.message);
       setRateDisplay(null, false);
     }
   }
@@ -1037,7 +1059,7 @@ ${klon.outerHTML}
   }
 
   async function extractPdfText(file) {
-    const pdfjsLib = window['pdfjs-dist/build/pdf'];
+    const pdfjsLib = window.pdfjsLib;
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -1059,7 +1081,7 @@ ${klon.outerHTML}
   // Start: produktnummeret ("1", "2" etc.) i venstre hjørne
   // Slutt: "N (Xstk.)" teksten under skissen
   async function extractPdfSkisser(file, scale = 2.0) {
-    const pdfjsLib = window['pdfjs-dist/build/pdf'];
+    const pdfjsLib = window.pdfjsLib;
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -2749,22 +2771,4 @@ Returner kun JSON.`;
         </div>
       </div>
       ${(res.uv || res.vekt) ? `
-      <div style="margin-top:10px;font-size:12px;color:#555;display:flex;gap:24px;padding:8px 4px;border-top:1px solid #dde2ea;">
-        ${res.uv  ? `<span>Gjennomsnittlig U-verdi: <strong>${res.uv}</strong></span>` : ''}
-        ${res.vekt ? `<span>Total vekt: <strong>${res.vekt} kg</strong></span>` : ''}
-      </div>` : ''}
-      </div><!-- end price-table-wrapper -->
-
-      <div class="vilkar-block">
-        <h4>Vilkår og bestillingsavtale</h4>
-        ${VILKAR.map((v,vi)=>`<p contenteditable="true" class="editable-val"
-          data-produkt="Vilkår" data-felt="Vilkår ${vi+1}" data-original="${v.replace(/"/g,'&quot;')}"
-          onblur="sjekkEndring(this)"
-          style="min-height:1.2em;"
-          title="Klikk for å redigere">${vi+1}. ${v}</p>`).join('')}
-      </div>
-
-      <div class="offer-footer">
-        <div class="seller-block">
-          <div class="no-print" style="margin-bottom:6px;">
-            <select id="cb-selger-dd" onchange="byttSelg
+      <div style="margin-top:10px;font-size
