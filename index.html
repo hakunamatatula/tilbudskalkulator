@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta name="app-version" content="2026-05-20-v2"/>
 <title>Norwin Tilbudsagent</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Playfair+Display:wght@700&display=swap');
@@ -924,17 +923,16 @@ ${klon.outerHTML}
   let rateIsOfficial = false;
   let FALLBACK_RATE = 11.20; // Oppdateres automatisk når offisiell kurs hentes
 
-  function saveRate(rate, date, source) {
-    try { localStorage.setItem(RATE_CACHE_KEY, rate); localStorage.setItem(RATE_DATE_KEY, date); localStorage.setItem('norwin_eur_source', source || 'nb'); } catch(e) {}
-    try { sessionStorage.setItem(RATE_CACHE_KEY, rate); sessionStorage.setItem(RATE_DATE_KEY, date); sessionStorage.setItem('norwin_eur_source', source || 'nb'); } catch(e) {}
+  function saveRate(rate, date) {
+    try { localStorage.setItem(RATE_CACHE_KEY, rate); localStorage.setItem(RATE_DATE_KEY, date); } catch(e) {}
+    try { sessionStorage.setItem(RATE_CACHE_KEY, rate); sessionStorage.setItem(RATE_DATE_KEY, date); } catch(e) {}
   }
 
   function loadSavedRate() {
     try {
       const r = localStorage.getItem(RATE_CACHE_KEY) || sessionStorage.getItem(RATE_CACHE_KEY);
       const d = localStorage.getItem(RATE_DATE_KEY)  || sessionStorage.getItem(RATE_DATE_KEY);
-      const s = localStorage.getItem('norwin_eur_source') || sessionStorage.getItem('norwin_eur_source') || 'nb';
-      if (r) return { rate: r, date: d, source: s };
+      if (r) return { rate: r, date: d };
     } catch(e) {}
     return null;
   }
@@ -944,89 +942,33 @@ ${klon.outerHTML}
     const saved = loadSavedRate();
 
     if (saved && saved.date === today) {
-      setRateDisplay(parseFloat(saved.rate), true, saved.source || 'nb');
+      setRateDisplay(parseFloat(saved.rate), true);
       return;
     }
 
-    // Dynamisk startPeriod: 7 dager tilbake — sikrer data uansett helger/helligdager
-    const lastWeek = new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0];
-    const NB_URL = `https://data.norges-bank.no/api/data/EXR/B.EUR.NOK.SP?format=sdmx-json&startPeriod=${lastWeek}&locale=no`;
-    const FR_URL = 'https://api.frankfurter.app/latest?from=EUR&to=NOK';
-
-    // Parser Norges Bank SDMX-JSON (støtter begge strukturvarianter)
-    async function tryNorgesBank(url) {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 8000);
-      try {
-        const resp = await fetch(url, { signal: ctrl.signal });
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const json = await resp.json();
-        const dataSets = (json.data && json.data.dataSets) ? json.data.dataSets : json.dataSets;
-        if (!dataSets || !dataSets[0] || !dataSets[0].series) throw new Error('Ugyldig API-struktur');
-        const seriesObj = dataSets[0].series;
-        const seriesKey = Object.keys(seriesObj)[0];
-        const obs = seriesObj[seriesKey].observations;
-        const keys = Object.keys(obs).sort((a, b) => parseInt(a) - parseInt(b));
-        const rate = parseFloat(obs[keys[keys.length - 1]][0]);
-        if (isNaN(rate)) throw new Error('Ugyldig kurs-verdi');
-        return rate;
-      } finally { clearTimeout(timer); }
-    }
-
-    // Parser Frankfurter API (ECB-kurs — brukes kun hvis Norges Bank er utilgjengelig)
-    async function tryFrankfurter() {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 8000);
-      try {
-        const resp = await fetch(FR_URL, { signal: ctrl.signal });
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const json = await resp.json();
-        const rate = parseFloat(json.rates && json.rates.NOK);
-        if (isNaN(rate)) throw new Error('Ugyldig kurs fra Frankfurter');
-        return rate;
-      } finally { clearTimeout(timer); }
-    }
-
-    let rate = null;
-    let source = 'nb';
-
-    // LAG 1: Norges Bank direkte
-    try { rate = await tryNorgesBank(NB_URL); }
-    catch(e) { console.warn('NB direkte feilet:', e.message); }
-
-    // LAG 2: Norges Bank via CORS-proxy (for file://-protokoll og restriktive nettlesere)
-    if (rate === null) {
-      try { rate = await tryNorgesBank('https://corsproxy.io/?' + encodeURIComponent(NB_URL)); }
-      catch(e) { console.warn('NB CORS-proxy feilet:', e.message); }
-    }
-
-    // LAG 3: Frankfurter API (ECB-kurs, brukes kun som siste utvei)
-    if (rate === null) {
-      try { rate = await tryFrankfurter(); source = 'fr'; }
-      catch(e) { console.warn('Frankfurter feilet:', e.message); }
-    }
-
-    if (rate !== null) {
-      saveRate(rate, today, source);
+    try {
+      const url = 'https://data.norges-bank.no/api/data/EXR/B.EUR.NOK.SP?format=sdmx-json&lastNObservations=1&locale=no';
+      const resp = await fetch(url);
+      const data = await resp.json();
+      const obs = data.data.dataSets[0].series['0:0:0:0'].observations;
+      const keys = Object.keys(obs).sort((a,b)=>parseInt(a)-parseInt(b));
+      const rate = parseFloat(obs[keys[keys.length-1]][0]);
+      saveRate(rate, today);
       FALLBACK_RATE = rate;
-      setRateDisplay(rate, true, source);
-    } else {
-      console.error('Alle valutakurs-kilder feilet');
-      setRateDisplay(null, false, null);
+      setRateDisplay(rate, true);
+    } catch(e) {
+      setRateDisplay(null, false);
     }
   }
 
-  function setRateDisplay(rate, official, source) {
+  function setRateDisplay(rate, official) {
     const box = document.getElementById('rate-status-box');
     const input = document.getElementById('valutakurs');
     rateIsOfficial = official;
     if (official && rate) {
       input.value = rate;
       calcQuick();
-      const label = source === 'fr'
-        ? 'Kurs fra Frankfurter (ECB-data)'
-        : 'Offisiell kurs fra Norges Bank';
-      box.innerHTML = `<div class="rate-box rate-ok"><div class="rate-dot rate-dot-ok"></div><span>${label}: <strong>${rate}</strong></span><span class="rate-override-link" onclick="startOverride()">Overstyr</span></div>`;
+      box.innerHTML = `<div class="rate-box rate-ok"><div class="rate-dot rate-dot-ok"></div><span>Offisiell kurs fra Norges Bank: <strong>${rate}</strong></span><span class="rate-override-link" onclick="startOverride()">Overstyr</span></div>`;
     } else {
       const saved = loadSavedRate();
       const displayRate = saved ? parseFloat(saved.rate) : FALLBACK_RATE;
@@ -1095,7 +1037,7 @@ ${klon.outerHTML}
   }
 
   async function extractPdfText(file) {
-    const pdfjsLib = window.pdfjsLib;
+    const pdfjsLib = window['pdfjs-dist/build/pdf'];
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -1117,7 +1059,7 @@ ${klon.outerHTML}
   // Start: produktnummeret ("1", "2" etc.) i venstre hjørne
   // Slutt: "N (Xstk.)" teksten under skissen
   async function extractPdfSkisser(file, scale = 2.0) {
-    const pdfjsLib = window.pdfjsLib;
+    const pdfjsLib = window['pdfjs-dist/build/pdf'];
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -1225,22 +1167,8 @@ ${klon.outerHTML}
         // - V-anker (HCTC-format): inkluder V-teksten + litt padding — V-koden er UNDER tegningen
         let yEnd;
         if (sluttErStk) {
-          // Norwin-format: slutt-anker er "N (Xstk.)" som er UNDER tegningen — stopp før det.
-          // Finn eventuelle tekstlinjer (f.eks. "Sett fra utsiden", åpningsmerker) mellom
-          // tegningsbunnen og stk-ankeret, og bruk den høyeste som tettere yEnd.
-          const tekstMellom = items.filter(it =>
-            it.yTop > start.yTop + 0.10 &&
-            it.yTop < slutt.yTop - 0.01 &&
-            it.x < 0.18 &&
-            it.str.length > 3 &&
-            !/^\d+$/.test(it.str)   // ekskluder rene tall (produktnr, stk-tall)
-          );
-          const tettereYEnd = tekstMellom.length > 0
-            ? Math.min(...tekstMellom.map(it => it.yTop)) - 0.005
-            : null;
-          yEnd = (tettereYEnd && tettereYEnd > start.yTop + 0.08)
-            ? tettereYEnd
-            : slutt.yTop - 0.020;  // økt margin fra 0.005 → 0.020 for å unngå tekst under tegning
+          // Norwin-format: slutt-anker er "N (Xstk.)" som er UNDER tegningen — stopp før det
+          yEnd = slutt.yTop - 0.005;
         } else if (sluttV) {
           // HCTC-format: V-koden er det siste elementet på venstre side under tegningen
           // Finn evt. "Sett fra utsiden" / "N (Xstk.)" tekster mellom prodNr og V-ankeret
@@ -1521,11 +1449,10 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     const valutakurs = parseNum(document.getElementById('valutakurs').value);
     if (!valutakurs) { errEl.textContent = 'Fyll inn valutakurs øverst på siden.'; return; }
 
-    // Faktor beregnes ETTER API-kall basert på faktisk rabatt i dokumentet.
-    // For leverandører uten rabatt (f.eks. Vitron): faktor = 1.0 / 0.70 × kurs
-    // For leverandører med rabatt (f.eks. HCTC 40%): faktor = 0.60 / 0.70 × kurs
-    // Formel: faktor = (1 - rabatt%) / 0.70 × valutakurs  →  sikrer alltid 30% fortjenestemargin
-    let faktorTilbud = parseFloat((0.6 / 0.7 * valutakurs).toFixed(2)); // foreløpig estimat til prompt
+    // Faktor beregnes automatisk for 30% fortjenestemargin med typisk 40% rabatt:
+    // kostpris = EUR_list × 0.60 × valutakurs, salgspris = kostpris / 0.70
+    // => faktor = 0.60 / 0.70 × valutakurs
+    const faktorTilbud = parseFloat((0.6 / 0.7 * valutakurs).toFixed(2));
 
     document.getElementById('form-area').style.display = 'none';
     document.getElementById('loading').style.display = 'block';
@@ -1568,22 +1495,6 @@ Returner kun JSON.`;
       const raw1 = data1.content.map(i => i.text||'').join('');
       const res1 = parseJsonRobust(raw1, 'P1');
 
-      // Beregn korrekt faktor basert på FAKTISK rabatt i P1-dokumentet
-      // Formula: faktor = (1 - rabatt%) / 0.70 × valutakurs → alltid 30% fortjenestemargin
-      const rabatt1 = (res1.r || 0) / 100;
-      faktorTilbud = parseFloat(((1 - rabatt1) / 0.70 * valutakurs).toFixed(2));
-      // Override AI-beregnede NOK-priser med korrekt faktor
-      if (res1.p) {
-        res1.p.forEach(p => {
-          p.nok = parseFloat((faktorTilbud * (p.eur || 0)).toFixed(2));
-          p.sum = parseFloat((p.nok * (p.ant || 1)).toFixed(2));
-        });
-        const mainPos1 = res1.p.filter(p => !p.alt);
-        res1.eksMva = parseFloat(mainPos1.reduce((a, p) => a + p.sum, 0).toFixed(2));
-        res1.mva    = parseFloat((res1.eksMva * 0.25).toFixed(2));
-        res1.tot    = parseFloat((res1.eksMva + res1.mva).toFixed(2));
-      }
-
       let resFinal = res1;
 
       // Hvis P2 er lastet opp — behandle og slå sammen
@@ -1622,22 +1533,11 @@ Returner kun JSON.`;
         const raw2 = data2.content.map(i => i.text||'').join('');
         const res2 = parseJsonRobust(raw2, 'P2');
 
-        // Beregn korrekt faktor for P2 basert på faktisk rabatt i P2-dokumentet
-        const rabatt2 = (res2.r || 0) / 100;
-        const faktorTilbud2 = parseFloat(((1 - rabatt2) / 0.70 * valutakurs).toFixed(2));
-        if (res2.p) {
-          res2.p.forEach(p => {
-            p.nok = parseFloat((faktorTilbud2 * (p.eur || 0)).toFixed(2));
-            p.sum = parseFloat((p.nok * (p.ant || 1)).toFixed(2));
-          });
-        }
-
-        // Slå sammen og beregn totaler fra korrekte produkt-summer
+        // Slå sammen produkter og summer fra P1 og P2
         const alleProdukter = [...(res1.p||[]), ...(res2.p||[])];
-        const mainPosAll = alleProdukter.filter(p => !p.alt);
-        const eksMva = parseFloat(mainPosAll.reduce((a, p) => a + (p.sum||0), 0).toFixed(2));
-        const mva    = parseFloat((eksMva * 0.25).toFixed(2));
-        const tot    = parseFloat((eksMva + mva).toFixed(2));
+        const eksMva = (res1.eksMva||0) + (res2.eksMva||0);
+        const mva    = (res1.mva||0)    + (res2.mva||0);
+        const tot    = (res1.tot||0)    + (res2.tot||0);
         resFinal = { ...res1, p: alleProdukter, eksMva, mva, tot };
       }
 
@@ -2766,4 +2666,115 @@ Returner kun JSON.`;
         </div>
         <div>
           <div class="cb-label">E-post</div>
-          <div class="cb-val editable-val" conte
+          <div class="cb-val editable-val" contenteditable="true" id="cb-epost"
+            data-produkt="Tilbud" data-felt="E-post" data-original="${info.kundeEpost||''}"
+            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeEpost||''}</div>
+        </div>
+      </div>
+
+      <div class="offer-info-field">
+        <div class="info-label no-print">Informasjon til kunden (valgfritt)</div>
+        <div class="offer-info-val editable-val"
+          contenteditable="true"
+          data-produkt="Tilbud"
+          data-felt="Informasjon til kunden"
+          data-original=""
+          id="info-til-kunde"
+          onblur="sjekkEndring(this)"
+          title="Klikk for å legge til informasjon til kunden"></div>
+      </div>
+
+      ${produktSeksjoner}
+
+      <div class="price-table-wrapper">
+      <table class="price-table">
+        <thead><tr>
+          <th style="text-align:left;">Dimensjon</th>
+          <th style="text-align:center;">m²</th>
+          <th style="text-align:center;">Antall</th>
+          <th class="price-col no-print" style="text-align:center;">Faktor</th>
+          <th class="price-col" style="text-align:right;">Enhetspris, NOK</th>
+          <th class="sum-col" style="text-align:right;">Totalpris, NOK</th>
+        </tr></thead>
+        <tbody>${produktRaderHoved}</tbody>
+      </table>
+
+      <div class="totals-block">
+        <div class="totals-inner">
+          <div class="total-row"><span>Total ekskl. MVA</span><span id="total-eks-mva">kr ${formatNOK(res.eksMva||res.totalEkskMVA)}</span></div>
+          <div class="total-row"><span>MVA 25%</span><span id="total-mva">kr ${formatNOK(res.mva)}</span></div>
+          <div class="total-row"><span>Total inkl. MVA</span><span id="total-inkl-mva">kr ${formatNOK(res.tot||res.totalInklMVA)}</span></div>
+        </div>
+      </div>
+      ${(res.uv || res.vekt) ? `
+      <div style="margin-top:10px;font-size:12px;color:#555;display:flex;gap:24px;padding:8px 4px;border-top:1px solid #dde2ea;">
+        ${res.uv  ? `<span>Gjennomsnittlig U-verdi: <strong>${res.uv}</strong></span>` : ''}
+        ${res.vekt ? `<span>Total vekt: <strong>${res.vekt} kg</strong></span>` : ''}
+      </div>` : ''}
+      </div><!-- end price-table-wrapper -->
+
+      <div class="vilkar-block">
+        <h4>Vilkår og bestillingsavtale</h4>
+        ${VILKAR.map((v,vi)=>`<p contenteditable="true" class="editable-val"
+          data-produkt="Vilkår" data-felt="Vilkår ${vi+1}" data-original="${v.replace(/"/g,'&quot;')}"
+          onblur="sjekkEndring(this)"
+          style="min-height:1.2em;"
+          title="Klikk for å redigere">${vi+1}. ${v}</p>`).join('')}
+      </div>
+
+      <div class="offer-footer">
+        <div class="seller-block">
+          <div class="no-print" style="margin-bottom:6px;">
+            <select id="cb-selger-dd" onchange="byttSelgerITilbud(this.value)"
+              style="font-family:'Source Sans 3',sans-serif;font-size:13px;padding:4px 8px;border:1px solid #c8a96e;border-radius:4px;background:#fffbe6;color:#1a2233;cursor:pointer;">
+              ${Object.keys(SELGERE).map(k =>
+                `<option value="${k}" ${(info.selger.fornavn===k||info.selger.navn===SELGERE[k].navn)?'selected':''}>${k}</option>`
+              ).join('')}
+            </select>
+          </div>
+          <div class="seller-name" id="cb-selgernavn">${info.selger.navn || info.selger.fornavn || ''}</div>
+          <div class="seller-info" id="cb-selgermob">${info.selger.mob ? 'Tlf: '+info.selger.mob : ''}</div>
+          <div class="seller-info" id="cb-selgerepost">${info.selger.epost || ''}</div>
+        </div>
+        <div class="cert-logos">
+          <img src="${IMG_CERT1}" alt="CE" />
+          <img src="${IMG_CERT2}" alt="DVV" />
+          <img src="${IMG_CERT3}" alt="Enova" />
+          <img src="${IMG_CERT4}" alt="NDVK" />
+          <img src="${IMG_CERT5}" alt="Ruteretur" />
+          <img src="${IMG_CERT6}" alt="Vinduesindustri" />
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Global paste-interceptor: alltid lim inn som ren tekst ──
+  // Fjerner all formatering (font, størrelse, farge, bold etc.) fra tekst
+  // limt inn i alle contenteditable-felt i tilbudet
+  document.addEventListener('paste', function(e) {
+    const target = e.target;
+    // Kun håndter contenteditable-felt
+    if (!target.isContentEditable) return;
+    // Ikke interferere med skisse-containernes bildelim
+    if (target.classList.contains('product-skisse') || target.closest('.product-skisse')) return;
+
+    e.preventDefault();
+    const tekst = (e.clipboardData || window.clipboardData).getData('text/plain');
+    if (!tekst) return;
+
+    // Lim inn ren tekst på markørposisjonen
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    sel.deleteFromDocument();
+    const node = document.createTextNode(tekst);
+    sel.getRangeAt(0).insertNode(node);
+    // Flytt markør til slutten av innsatt tekst
+    const range = document.createRange();
+    range.setStartAfter(node);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }, true); // capture-fase: kjør før andre handlers
+</script>
+</body>
+</html>
