@@ -220,14 +220,14 @@
   }
   .product-layout { display:flex; align-items:flex-start; gap:0; }
   .product-skisse {
-    width:210px; min-width:140px; max-width:210px;
+    width:250px; min-width:160px; max-width:250px;
     flex-shrink:0;
     padding:10px 8px;
     display:flex; flex-direction:column; align-items:center; gap:6px;
     border-right:1px solid #dde2ea;
     background:#fafbfc;
     box-sizing:border-box;
-    overflow:hidden;
+    overflow:visible;
     position:relative;
     transition:background 0.15s, border-color 0.15s;
   }
@@ -239,12 +239,12 @@
     outline-offset:-3px;
   }
   .product-skisse img {
-    width:100%;
+    width:auto;
     height:auto;
-    max-height:220px;
+    max-width:100%;
+    max-height:400px;
     display:block;
-    object-fit:contain;
-    object-position:center center;
+    margin:0 auto;
   }
   .skisse-override-btn {
     font-size:10px; color:#888; background:none; border:1px dashed #ccc;
@@ -356,8 +356,9 @@
     .margin-panel { display:none !important; }
     /* Skisse-kolonne i print: skjul override-knapp, behold layout */
     .skisse-override-btn { display:none !important; }
-    .product-skisse { border-right-color:#ddd !important; background:#fff !important; padding:4px 4px; }
+    .product-skisse { border-right-color:#ddd !important; background:#fff !important; padding:4px 4px; overflow:visible !important; }
     .product-skisse.alt-skisse { background:#f8f9fb !important; }
+    .product-skisse img { max-height:400px !important; width:auto !important; max-width:100% !important; }
     /* Fjern nettleserens automatiske URL og sidetall i topp/bunn */
     @page {
       size: A4;
@@ -1570,7 +1571,7 @@ Returner kun JSON.`;
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 8000,
+          max_tokens: 16000,
           system: systemPrompt,
           messages: [{ role:'user', content:[
             { type:'text', text: userPrompt1 + '\n\nTILBUDSTEKST:\n' + pdfText1 }
@@ -1579,6 +1580,7 @@ Returner kun JSON.`;
       });
       const data1 = await resp1.json();
       if (data1.error) throw new Error(data1.error.message);
+      if (data1.stop_reason === 'max_tokens') throw new Error('Svar fra API (P1) ble avbrutt – tilbudet inneholder for mange produktlinjer. Prøv med færre linjer.');
       const raw1 = data1.content.map(i => i.text||'').join('');
       const res1 = parseJsonRobust(raw1, 'P1');
 
@@ -1624,7 +1626,7 @@ Returner kun JSON.`;
           },
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
-            max_tokens: 8000,
+            max_tokens: 16000,
             system: systemPrompt,
             messages: [{ role:'user', content:[
               { type:'text', text: userPrompt2 + '\n\nTILBUDSTEKST:\n' + pdfText2 }
@@ -1633,6 +1635,7 @@ Returner kun JSON.`;
         });
         const data2 = await resp2.json();
         if (data2.error) throw new Error(data2.error.message);
+        if (data2.stop_reason === 'max_tokens') throw new Error('Svar fra API (P2) ble avbrutt – tilbudet inneholder for mange produktlinjer. Prøv med færre linjer.');
         const raw2 = data2.content.map(i => i.text||'').join('');
         const res2 = parseJsonRobust(raw2, 'P2');
 
