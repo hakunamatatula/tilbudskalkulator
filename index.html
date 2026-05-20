@@ -2766,4 +2766,116 @@ Returner kun JSON.`;
             onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeMob ? '+47 '+info.kundeMob : ''}</div>
         </div>
         <div>
-          <div class
+          <div class="cb-label">E-post</div>
+          <div class="cb-val editable-val" contenteditable="true" id="cb-epost"
+            data-produkt="Tilbud" data-felt="E-post" data-original="${info.kundeEpost||''}"
+            onblur="sjekkEndring(this)" title="Klikk for å redigere">${info.kundeEpost||''}</div>
+        </div>
+      </div>
+
+      <div class="offer-info-field">
+        <div class="info-label no-print">Informasjon til kunden (valgfritt)</div>
+        <div class="offer-info-val editable-val"
+          contenteditable="true"
+          data-produkt="Tilbud"
+          data-felt="Informasjon til kunden"
+          data-original=""
+          id="info-til-kunde"
+          onblur="sjekkEndring(this)"
+          title="Klikk for å legge til informasjon til kunden"></div>
+      </div>
+
+      ${produktSeksjoner}
+
+      <div class="price-table-wrapper">
+      <table class="price-table">
+        <thead><tr>
+          <th style="text-align:left;">Dimensjon</th>
+          <th style="text-align:center;">m²</th>
+          <th style="text-align:center;">Antall</th>
+          <th class="price-col no-print" style="text-align:center;">Faktor</th>
+          <th class="price-col" style="text-align:right;">Enhetspris, NOK</th>
+          <th class="sum-col" style="text-align:right;">Totalpris, NOK</th>
+        </tr></thead>
+        <tbody>${produktRaderHoved}</tbody>
+      </table>
+
+      <div class="totals-block">
+        <div class="totals-inner">
+          <div class="total-row"><span>Total ekskl. MVA</span><span id="total-eks-mva">kr ${formatNOK(res.eksMva||res.totalEkskMVA)}</span></div>
+          <div class="total-row"><span>MVA 25%</span><span id="total-mva">kr ${formatNOK(res.mva)}</span></div>
+          <div class="total-row"><span>Total inkl. MVA</span><span id="total-inkl-mva">kr ${formatNOK(res.tot||res.totalInklMVA)}</span></div>
+        </div>
+      </div>
+      ${(res.uv || res.vekt) ? `
+      <div style="margin-top:10px;font-size:12px;color:#555;display:flex;gap:24px;padding:8px 4px;border-top:1px solid #dde2ea;">
+        ${res.uv  ? `<span>Gjennomsnittlig U-verdi: <strong>${res.uv}</strong></span>` : ''}
+        ${res.vekt ? `<span>Total vekt: <strong>${res.vekt} kg</strong></span>` : ''}
+      </div>` : ''}
+      </div><!-- end price-table-wrapper -->
+
+      <div class="vilkar-block">
+        <h4>Vilkår og bestillingsavtale</h4>
+        ${VILKAR.map((v,vi)=>`<p contenteditable="true" class="editable-val"
+          data-produkt="Vilkår" data-felt="Vilkår ${vi+1}" data-original="${v.replace(/"/g,'&quot;')}"
+          onblur="sjekkEndring(this)"
+          style="min-height:1.2em;"
+          title="Klikk for å redigere">${vi+1}. ${v}</p>`).join('')}
+      </div>
+
+      <div class="offer-footer">
+        <div class="seller-block">
+          <div class="no-print" style="margin-bottom:6px;">
+            <select id="cb-selger-dd" onchange="byttSelgerITilbud(this.value)"
+              style="font-family:'Source Sans 3',sans-serif;font-size:13px;padding:4px 8px;border:1px solid #c8a96e;border-radius:4px;background:#fffbe6;color:#1a2233;cursor:pointer;">
+              ${Object.keys(SELGERE).map(k =>
+                `<option value="${k}" ${(info.selger.fornavn===k||info.selger.navn===SELGERE[k].navn)?'selected':''}>${k}</option>`
+              ).join('')}
+            </select>
+          </div>
+          <div class="seller-name" id="cb-selgernavn">${info.selger.navn || info.selger.fornavn || ''}</div>
+          <div class="seller-info" id="cb-selgermob">${info.selger.mob ? 'Tlf: '+info.selger.mob : ''}</div>
+          <div class="seller-info" id="cb-selgerepost">${info.selger.epost || ''}</div>
+        </div>
+        <div class="cert-logos">
+          <img src="${IMG_CERT1}" alt="CE" />
+          <img src="${IMG_CERT2}" alt="DVV" />
+          <img src="${IMG_CERT3}" alt="Enova" />
+          <img src="${IMG_CERT4}" alt="NDVK" />
+          <img src="${IMG_CERT5}" alt="Ruteretur" />
+          <img src="${IMG_CERT6}" alt="Vinduesindustri" />
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Global paste-interceptor: alltid lim inn som ren tekst ──
+  // Fjerner all formatering (font, størrelse, farge, bold etc.) fra tekst
+  // limt inn i alle contenteditable-felt i tilbudet
+  document.addEventListener('paste', function(e) {
+    const target = e.target;
+    // Kun håndter contenteditable-felt
+    if (!target.isContentEditable) return;
+    // Ikke interferere med skisse-containernes bildelim
+    if (target.classList.contains('product-skisse') || target.closest('.product-skisse')) return;
+
+    e.preventDefault();
+    const tekst = (e.clipboardData || window.clipboardData).getData('text/plain');
+    if (!tekst) return;
+
+    // Lim inn ren tekst på markørposisjonen
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    sel.deleteFromDocument();
+    const node = document.createTextNode(tekst);
+    sel.getRangeAt(0).insertNode(node);
+    // Flytt markør til slutten av innsatt tekst
+    const range = document.createRange();
+    range.setStartAfter(node);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }, true); // capture-fase: kjør før andre handlers
+</script>
+</body>
+</html>
