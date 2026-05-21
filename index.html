@@ -1518,6 +1518,363 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // DETERMINISTISK NORWIN-PARSER — ingen API-kall, fullt offline
+  // ══════════════════════════════════════════════════════════════════════════
+
+  function _r2(n) { return Math.round(n * 100) / 100; }
+
+  /** Layout-bevisst PDF-tekstekstraksjon.
+   *  Sorterer tekstelementer per side etter y-koordinat (topp→bunn),
+   *  grupperer elementer på samme horisontallinje (toleranse 8pt),
+   *  sorterer venstre→høyre innen hver linje. */
+  async function extractPdfTextLayout(file) {
+    const pdfjsLib = window.pdfjsLib;
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const allLines = [];
+    for (let pn = 1; pn <= pdf.numPages; pn++) {
+      const page = await pdf.getPage(pn);
+      const tc   = await page.getTextContent();
+      const items = tc.items
+        .filter(it => it.str && it.str.trim())
+        .map(it => ({ str: it.str.trim(), x: it.transform[4], y: it.transform[5] }));
+      if (!items.length) continue;
+      items.sort((a, b) => b.y - a.y); // høyest y = topp av siden (PDF-koordinater)
+      const groups = [];
+      for (const it of items) {
+        const last = groups[groups.length - 1];
+        if (last && Math.abs(it.y - last.y0) < 8) {
+          last.items.push(it);
+        } else {
+          groups.push({ y0: it.y, items: [it] });
+        }
+      }
+      for (const g of groups) {
+        g.items.sort((a, b) => a.x - b.x);
+        const text = g.items.map(i => i.str).join(' ');
+        if (text.trim()) allLines.push(text.trim());
+      }
+    }
+    return allLines.join('\n');
+  }
+
+  /** Hoved-parser: konverterer rå PDF-tekst til JSON som renderOffer() forventer. */
+  function parseNorwinPDF(rawText, valutakurs) {
+    const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+    // ── HEADER ──────────────────────────────────────────────────────────────
+    let offerNum = '', dato = '', kunde = '', kontakt = '', prosjekt = '',
+        kadr = '', mob = '', epost = '';
+    let rabatt = 35, uvVal = null, vektVal = null;
+
+    for (const ln of lines) {
+      let r;
+      if (!offerNum && (r = ln.match(/^Offer\s+([\d\-]+)/i)))           offerNum = r[1];
+      if (!dato     && (r = ln.match(/^(\d{4}-\d{2}-\d{2})$/)))         dato = r[1];
+      if (!kunde    && (r = ln.match(/^Customer:\s*(.+)/i)))             kunde = r[1].trim();
+      if (!kontakt  && (r = ln.match(/^Contact:\s*(.+)/i)))              kontakt = r[1].trim();
+      if (!prosjekt && (r = ln.match(/^Project\.?:?\s*(.+)/i)))          prosjekt = r[1].trim();
+      if (!kadr     && (r = ln.match(/^Address:\s*(.+)/i)))              kadr = r[1].trim();
+      if (!mob      && (r = ln.match(/^Mobile:\s*(.+)/i)))               mob = r[1].trim().replace(/^\+47\s*/, '');
+      if (!epost    && (r = ln.match(/^E-?mail:\s*(.+)/i)))              epost = r[1].trim();
+      if ((r = ln.match(/Rabatt[,\s%]+(\d+(?:[.,]\d+)?)\s*%/i)))        rabatt = Math.round(parseFloat(r[1].replace(',','.')));
+      if ((r = ln.match(/Gjennomsnittlig U-verdi[^:]*:\s*([\d.]+)/i)))  uvVal = parseFloat(r[1]);
+      if ((r = ln.match(/Total vekt:\s*([\d\s]+)\s*kg/i)))              vektVal = parseInt(r[1].replace(/\s/g,''));
+    }
+
+    // ── FINN PRODUKTBLOKKER ──────────────────────────────────────────────────
+    // En ny posisjon starter med 1–2 siffer etterfulgt av "Type:" eller "Alternative position"
+    const blockStarts = [];
+    for (let i = 0; i < lines.length; i++) {
+      const r = lines[i].match(/^(\d{1,2})\s+(Type:|Alternative\s+position)/i);
+      if (r) blockStarts.push({ posNr: parseInt(r[1]), lineIdx: i });
+    }
+    if (!blockStarts.length)
+      throw new Error('Fant ingen produktposisjoner i PDF-teksten. Kontroller at riktig fabrikktilbud er lastet opp (Norwin-format).');
+
+    // ── PARSE HVERT PRODUKT ──────────────────────────────────────────────────
+    const faktor = _r2((1 - rabatt / 100) / 0.70 * valutakurs);
+    const produkter = blockStarts.map((bs, idx) => {
+      const endIdx = idx + 1 < blockStarts.length ? blockStarts[idx + 1].lineIdx : lines.length;
+      return _parseBlock(lines.slice(bs.lineIdx, endIdx), bs.posNr, faktor);
+    });
+
+    // ── TOTALER ──────────────────────────────────────────────────────────────
+    const main   = produkter.filter(p => !p.alt);
+    const eksMva = _r2(main.reduce((s, p) => s + p.sum, 0));
+    const mva    = _r2(eksMva * 0.25);
+    const tot    = _r2(eksMva + mva);
+
+    const res = { t: offerNum, d: dato, r: rabatt, kunde, kontakt, kadr, mob, epost, prosjekt,
+                  p: produkter, eksMva, mva, tot };
+    if (uvVal   != null) res.uv   = uvVal;
+    if (vektVal != null) res.vekt = vektVal;
+    return res;
+  }
+
+  function _parseBlock(blockLines, posNr, faktor) {
+    let isAlt = false, dim = '', m2 = 0, eurPris = 0, ant = 1;
+    const rf = {}; // rawFields: label → akkumulert verdi
+    let curLabel = null, curVal = '';
+
+    const save = () => {
+      if (curLabel) { rf[curLabel] = curVal.trim(); curLabel = null; curVal = ''; }
+    };
+
+    const FIELD_RE      = /^(Type|Wood|Color|Glass sealing|Glass|Frames\/hardware|Glazing bars|Continuous bar widths|Bottomframe|Gaskets|Lining groove|Bottom groove):/i;
+    // Same labels, unforankret — for å plukke ut felt-etiketter midt i en linje
+    const FIELD_EMBED   = /(?:^|\s)(Type|Wood|Color|Glass sealing|Glass|Frames\/hardware|Glazing bars|Continuous bar widths|Bottomframe|Gaskets|Lining groove|Bottom groove):/i;
+
+    const applyLine = (ln) => {
+      // 1) Felt-etikett ved starten av linjen
+      const fm = FIELD_RE.exec(ln);
+      if (fm) {
+        save();
+        curLabel = fm[1].toLowerCase();
+        curVal   = ln.slice(fm[0].length).trim();
+        return;
+      }
+      // 2) Felt-etikett midt i linjen (f.eks. "30 x 40 Glass sealing: VALUE")
+      const em = FIELD_EMBED.exec(ln);
+      if (em && em.index > 0) {
+        save();
+        curLabel = em[1].toLowerCase();
+        curVal   = ln.slice(em.index + em[0].length).trim();
+        return;
+      }
+      // 3) Fortsettelse av nåværende felt
+      if (curLabel) curVal = (curVal ? curVal + ' ' : '') + ln;
+    };
+    const NOISE_RE = /^(Price, EUR|Qty|Sum, EUR|Weight|Uw <=|\d{6,}|\d+ \/ \d+|Alle priser|Vilkår|Manager|Qty\.:|m2:|Total ekskl|Totalt inkl|Totalsum|Rabatt)/i;
+    const STK_RE   = /^\d+\s*\(\d+\s*stk\.?\)/i;
+
+    // Fix 1: Fjern posisjons-nr fra første linje: "1 Type: VALUE" → "Type: VALUE"
+    const processedLines = blockLines.map((ln, i) =>
+      i === 0 ? ln.replace(/^\d{1,2}\s+/, '') : ln
+    );
+
+    for (const ln of processedLines) {
+      if (/Alternative position/i.test(ln)) { isAlt = true; }
+
+      // Prislinje: 1100x2000mm 2.20m² 1369.08 19 26012.52
+      const pr = ln.match(/(\d{3,4}x\d{3,5})\s*mm\s+([\d.,]+)\s*m[²2]\s+([\d.,]+)\s+(\d+)\s+([\d.,]+)/);
+      if (pr) {
+        save();
+        dim = pr[1] + 'mm';
+        m2      = parseFloat(pr[2].replace(',', '.'));
+        eurPris = parseFloat(pr[3].replace(',', '.'));
+        ant     = parseInt(pr[4]);
+        continue;
+      }
+
+      if (NOISE_RE.test(ln)) { save(); continue; }
+
+      // Fix 3: Hopp over løse tallkoder fra tegningsetiketter ("1", "60", "30 x 40", "6161", "115 x 135")
+      if (/^\d+(\s*x\s*\d+)?$/.test(ln)) continue;
+
+      // "Seen from ..." → Åpningsretning
+      if (/^Seen from/i.test(ln)) { save(); rf['seen_from'] = ln; continue; }
+
+      // Fix 2: "Sett fra..." / "N (Xstk.)" — kan ha FELT: VERDI på høyre side
+      if (/^Sett fra/i.test(ln) || STK_RE.test(ln)) {
+        const rightPart = ln
+          .replace(/^Sett fra[^,]+,\s*slår\s+\S+\s*/i, '')
+          .replace(/^\d+\s*\(\d+\s*stk\.?\)\s*/i, '')
+          .trim();
+        if (rightPart) applyLine(rightPart);
+        continue;
+      }
+
+      applyLine(ln);
+    }
+    save();
+
+    const s   = _buildSpecs(rf);
+    const nok = _r2(faktor * eurPris);
+    const sum = _r2(nok * ant);
+    return { n: posNr, dim, m2, ant, eur: eurPris, nok, sum, alt: isAlt, s };
+  }
+
+  function _buildSpecs(rf) {
+    const s = [];
+    const add = (l, v) => { if (v && v.trim()) s.push({ l, v: v.trim() }); };
+
+    add('Type',    _xlType(rf['type'] || ''));
+    add('Tresort', _xlWood(rf['wood'] || ''));
+
+    // Maling inne / ute
+    const colorRaw = rf['color'] || '';
+    const inneM = colorRaw.match(/Inside:\s*(.+?)(?=\s*Outside:|$)/i);
+    const uteM  = colorRaw.match(/Outside:\s*(.+?)$/i);
+    add('Maling inne', inneM ? _xlColor(inneM[1].trim()) : '');
+    add('Maling ute',  uteM  ? _xlColor(uteM[1].trim())  : '');
+
+    add('Glass', _xlGlass(rf['glass'] || ''));
+
+    // Frames/hardware → Beslag + Hengsler + Brems + Håndtak + Ventilasjon
+    const fh = _xlFrames(rf['frames/hardware'] || '');
+    add('Beslag',      fh.beslag);
+    add('Hengsler',    fh.hengsler);
+    add('Brems',       fh.brems);
+    add('Håndtak',     fh.handtak);
+    add('Ventilasjon', fh.ventilasjon);
+
+    // Sprosser (Glazing bars)
+    const gbRaw = rf['glazing bars'] || '';
+    if (gbRaw) {
+      add('Sprosser', _xlGlazingBars(gbRaw));
+      const cbRaw = rf['continuous bar widths'] || '';
+      const bwM = cbRaw.match(/(\d+)\s*mm/) || gbRaw.match(/(\d+)\s*mm/);
+      if (bwM) add('Sprosse bredde', bwM[1] + 'mm');
+    }
+
+    add('Bunnglasslist', _xlBottomframe(rf['bottomframe'] || ''));
+    add('Pakninger',     _xlGaskets(rf['gaskets'] || ''));
+    add('Glassforsegling', _xlGlassSealing(rf['glass sealing'] || ''));
+
+    const bgRaw = (rf['bottom groove'] || '').trim();
+    if (bgRaw) add('Spor i underkant', bgRaw.replace('V1 / L', 'V1/L').trim());
+
+    add('Åpningsretning', _xlSeenFrom(rf['seen_from'] || ''));
+
+    return s;
+  }
+
+  function _xlType(raw) {
+    return raw
+      .replace(/\bwindows?\b/gi, 'vindu')
+      .replace(/Casement vindu Kitted/i, 'Casement-vindu Kitted')
+      .replace(/\(Frame\s+/i, '(karm ')
+      .trim();
+  }
+  function _xlWood(raw) {
+    return raw
+      .replace(/Finger-jointed pine/i, 'Fingerskjøtet furu')
+      .replace(/Finger-jointed/i, 'Fingerskjøtet')
+      .replace(/\bpine\b/i, 'furu')
+      .trim();
+  }
+  function _xlColor(raw) {
+    return raw
+      .replace(/^White\s+(RAL\s*\d+)/i, 'Hvit $1')
+      .replace(/^White$/i, 'Hvit')
+      .replace(/^Black$/i, 'Sort')
+      .trim();
+  }
+  function _xlGlass(raw) {
+    // Behold bare glasskoden — kutt av forklaring i parentes
+    const code = raw.split('(')[0].trim();
+    return code || raw.trim();
+  }
+  function _xlFrames(raw) {
+    const res = { beslag: '', hengsler: '', brems: '', handtak: '', ventilasjon: '' };
+    if (!raw) return res;
+    const parts = raw
+      .split(/(?=\d+\s*x\s+|Painted hinges|ZINI|Friction brake|Brake via handle|Handle\s+[A-Z\d]|White hooks?|Telescopic ventilation|Routing)/i)
+      .map(p => p.trim()).filter(p => p);
+    const beslagItems = [];
+    for (const part of parts) {
+      if (/Telescopic ventilation/i.test(part)) {
+        res.ventilasjon = 'Teleskopventil med barnesikring';
+      } else if (/Friction brake/i.test(part)) {
+        const n = part.match(/\((\d+)\s*pcs?\.?\)/i);
+        const piece = 'Friksjonsstay' + (n ? ' (' + n[1] + 'stk.)' : '');
+        res.brems = res.brems ? res.brems + ', ' + piece : piece;
+      } else if (/Brake via handle/i.test(part)) {
+        res.brems = res.brems ? res.brems + ', Via håndtak' : 'Via håndtak';
+      } else if (/Painted hinges/i.test(part)) {
+        const ral = part.match(/RAL\s*(\d+)/i);
+        const piece = ral ? 'Lakkerte hengsler (RAL' + ral[1] + ')' : 'Lakkerte hengsler';
+        res.hengsler = res.hengsler ? res.hengsler + ', ' + piece : piece;
+      } else if (/ZINI/i.test(part)) {
+        const ral = part.match(/RAL\s*(\d+)/i);
+        const piece = ral ? 'ZINI hengsler (RAL' + ral[1] + ')' : 'ZINI hengsler';
+        res.hengsler = res.hengsler ? res.hengsler + ', ' + piece : piece;
+      } else if (/White hooks?/i.test(part)) {
+        res.hengsler = res.hengsler ? res.hengsler + ', Sølv kroker' : 'Sølv kroker';
+      } else if (/^Handle\s+/i.test(part)) {
+        let h = part.replace(/^Handle\s+/i, '').trim()
+          .replace(/\bchrome\b/i, 'krom').replace(/\bbrushed?\b/i, 'børstet')
+          .replace(/\bsilver\b/i, 'sølv').replace(/child lock,?\s*/i, '')
+          .replace(/brushed handle\s*/i, '').replace(/\(\d+\s*pcs?\.?\)/i, '').trim();
+        if (h) res.handtak = h;
+      } else if (/\d+\s*x\s+/i.test(part)) {
+        let p = part
+          .replace(/(\d+)\s*x\s+Fixed frame/i,                              '$1x Fast karm')
+          .replace(/(\d+)\s*x\s+Inside opening tilt-turn/i,                '$1x Sidehengslet tilt-turn')
+          .replace(/(\d+)\s*x\s+Inside opening tilt\b/i,                   '$1x Topphengslet vipp')
+          .replace(/(\d+)\s*x\s+Top-hung[^,\n]*/i,                         '$1x Topphengslet')
+          .replace(/(\d+)\s*x\s+Side-hinged with casement hooks[^,\n]*/i,  '$1x Sidehengslet')
+          .replace(/(\d+)\s*x\s+Side-hinged with handle/i,                 '$1x Sidehengslet')
+          .replace(/(\d+)\s*x\s+Side-hinged\b/i,                           '$1x Sidehengslet')
+          .replace(/(\d+)\s*x\s+Right outward-opening double door/i,       '$1x Høyre utadslående dobbel dør')
+          .replace(/(\d+)\s*x\s+Right outward-opening door/i,              '$1x Høyre utadslående dør')
+          .replace(/(\d+)\s*x\s+Left outward-opening door/i,               '$1x Venstre utadslående dør')
+          .replace(/(\d+)\s*x\s+Outward-opening\b.*/i,                     '$1x Utadslående dør')
+          .replace(/,?\s*(child lock|brushed handle|White handle.*|Routing.*)$/i, '')
+          .trim();
+        if (p) beslagItems.push(p);
+      }
+    }
+    res.beslag = beslagItems.join(', ');
+    return res;
+  }
+  function _xlBottomframe(raw) {
+    return raw
+      .replace(/Small rain deflector RAL color,?\s*black endings\s*(\d+)[^,]*,?\s*Wooden rain deflector/i,
+               'Lite vindavviser RAL $1, Vindavviser RAL $1')
+      .replace(/Small rain deflector RAL color,?\s*white endings\s*(\d+)[^,]*,?\s*Wooden rain deflector/i,
+               'Lite vindavviser RAL $1, Vindavviser RAL $1')
+      .replace(/Small rain deflector RAL color[^,]*/i, 'Lite vindavviser')
+      .replace(/Wooden rain deflector/i,               'Vindavviser')
+      .replace(/\bWood\b/i, 'Tre')
+      .replace(/(\d+)mm alu[^\s,]*/i, '$1mm alu')
+      .trim();
+  }
+  function _xlGaskets(raw) {
+    return raw
+      .replace(/White gaskets?/i, 'Hvite').replace(/Grey gaskets?/i, 'Grå')
+      .replace(/Gray gaskets?/i,  'Grå').replace(/\bGrey\b/i, 'Grå')
+      .replace(/\bGray\b/i,       'Grå').replace(/\bWhite\b/i, 'Hvite')
+      .replace(/Gra pakninger/i,  'Grå').trim();
+  }
+  function _xlGlassSealing(raw) {
+    if (!raw) return '';
+    return raw
+      .replace(/Inside:\s*/gi,  'Inne: ').replace(/Outside:\s*/gi, 'Ute: ')
+      .replace(/White paintable sealant\/putty/gi, 'Hvit maling/sparkel')
+      .replace(/WHITE PUTTY/gi,    'Hvit sparkel')
+      .replace(/Black sealant/gi,  'Sort fugemasse')
+      .replace(/White FR sealing/gi, 'Hvit FR tetting')
+      .trim();
+  }
+  function _xlGlazingBars(raw) {
+    return raw
+      .replace(/(\d+)mm glued bars\s*\(duplex\)/i, '$1mm limt spross (duplex)')
+      .replace(/(\d+)mm glued bars/i,              '$1mm limt spross')
+      .replace(/EXT:\s*bevelled/i,     'Ute: fasettert')
+      .replace(/INT:\s*round\s*\(std\.?\)/i, 'Inn: rund (std.)')
+      .replace(/INT:\s*round/i,        'Inn: rund')
+      .replace(/EXT:\s*putty\s+INN:\s*round/i, 'Ute: kitt, Inn: rund')
+      .trim();
+  }
+  function _xlSeenFrom(raw) {
+    if (!raw) return '';
+    const l = raw.toLowerCase();
+    if (/inside.*inward/.test(l))   return 'Innadslående (innside)';
+    if (/outside.*outward/.test(l)) return 'Utadslående';
+    if (/inside.*outward/.test(l))  return 'Utadslående (innside)';
+    if (/outside.*inward/.test(l))  return 'Innadslående';
+    return raw;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // END PARSER
+  // ══════════════════════════════════════════════════════════════════════════
+
   async function runAgent() {
     const errEl = document.getElementById('error-msg');
     errEl.textContent = '';
@@ -1525,132 +1882,32 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     const valutakurs = parseNum(document.getElementById('valutakurs').value);
     if (!valutakurs) { errEl.textContent = 'Fyll inn valutakurs øverst på siden.'; return; }
 
-    // Faktor beregnes ETTER API-kall basert på faktisk rabatt i dokumentet.
-    // For leverandører uten rabatt (f.eks. Vitron): faktor = 1.0 / 0.70 × kurs
-    // For leverandører med rabatt (f.eks. HCTC 40%): faktor = 0.60 / 0.70 × kurs
-    // Formel: faktor = (1 - rabatt%) / 0.70 × valutakurs  →  sikrer alltid 30% fortjenestemargin
-    let faktorTilbud = parseFloat((0.6 / 0.7 * valutakurs).toFixed(2)); // foreløpig estimat til prompt
-
     document.getElementById('form-area').style.display = 'none';
     document.getElementById('loading').style.display = 'block';
 
     try {
-      // Trekk ut tekst fra PDF 1
-      const pdfText1 = await extractPdfText(selectedFile);
-
-      // Bygg prompt for P1
-      const userPrompt1 = `Analyser dette pristilbudet (TILBUD FRA PRODUSENT 1) og konverter det til et kundetilbud.
-
-Parametere:
-- Valutakurs EUR/NOK: ${valutakurs}
-- Faktorpåslag: ${faktorTilbud}
-- Hent rabattprosenten fra selve dokumentet.
-
-Husk: Kundepris NOK = ${faktorTilbud} × EUR listepris (direkte).
-Returner kun JSON.`;
-
-      // Kall API for P1
-      const resp1 = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': NORWIN_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 16000,
-          system: systemPrompt,
-          messages: [{ role:'user', content:[
-            { type:'text', text: userPrompt1 + '\n\nTILBUDSTEKST:\n' + pdfText1 }
-          ]}]
-        })
-      });
-      const data1 = await resp1.json();
-      if (data1.error) throw new Error(data1.error.message);
-      if (data1.stop_reason === 'max_tokens') throw new Error('Svar fra API (P1) ble avbrutt – tilbudet inneholder for mange produktlinjer. Prøv med færre linjer.');
-      const raw1 = data1.content.map(i => i.text||'').join('');
-      const res1 = parseJsonRobust(raw1, 'P1');
-
-      // Beregn korrekt faktor basert på FAKTISK rabatt i P1-dokumentet
-      // Formula: faktor = (1 - rabatt%) / 0.70 × valutakurs → alltid 30% fortjenestemargin
-      const rabatt1 = (res1.r || 0) / 100;
-      faktorTilbud = parseFloat(((1 - rabatt1) / 0.70 * valutakurs).toFixed(2));
-      // Override AI-beregnede NOK-priser med korrekt faktor
-      if (res1.p) {
-        res1.p.forEach(p => {
-          p.nok = parseFloat((faktorTilbud * (p.eur || 0)).toFixed(2));
-          p.sum = parseFloat((p.nok * (p.ant || 1)).toFixed(2));
-        });
-        const mainPos1 = res1.p.filter(p => !p.alt);
-        res1.eksMva = parseFloat(mainPos1.reduce((a, p) => a + p.sum, 0).toFixed(2));
-        res1.mva    = parseFloat((res1.eksMva * 0.25).toFixed(2));
-        res1.tot    = parseFloat((res1.eksMva + res1.mva).toFixed(2));
-      }
+      // Trekk ut layout-tekst og parse P1 deterministisk
+      const pdfText1 = await extractPdfTextLayout(selectedFile);
+      const res1     = parseNorwinPDF(pdfText1, valutakurs);
 
       let resFinal = res1;
 
-      // Hvis P2 er lastet opp — behandle og slå sammen
+      // Hvis P2 er lastet opp — parse og slå sammen
       if (selectedFile2) {
-        const pdfText2 = await extractPdfText(selectedFile2);
+        const pdfText2 = await extractPdfTextLayout(selectedFile2);
+        const res2     = parseNorwinPDF(pdfText2, valutakurs);
 
-        const userPrompt2 = `Analyser dette pristilbudet (TILBUD FRA PRODUSENT 2) og konverter det til et kundetilbud.
-
-Parametere:
-- Valutakurs EUR/NOK: ${valutakurs}
-- Faktorpåslag: ${faktorTilbud}
-- Hent rabattprosenten fra selve dokumentet.
-
-Husk: Kundepris NOK = ${faktorTilbud} × EUR listepris (direkte).
-Returner kun JSON.`;
-
-        const resp2 = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': NORWIN_API_KEY,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true'
-          },
-          body: JSON.stringify({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 16000,
-            system: systemPrompt,
-            messages: [{ role:'user', content:[
-              { type:'text', text: userPrompt2 + '\n\nTILBUDSTEKST:\n' + pdfText2 }
-            ]}]
-          })
-        });
-        const data2 = await resp2.json();
-        if (data2.error) throw new Error(data2.error.message);
-        if (data2.stop_reason === 'max_tokens') throw new Error('Svar fra API (P2) ble avbrutt – tilbudet inneholder for mange produktlinjer. Prøv med færre linjer.');
-        const raw2 = data2.content.map(i => i.text||'').join('');
-        const res2 = parseJsonRobust(raw2, 'P2');
-
-        // Beregn korrekt faktor for P2 basert på faktisk rabatt i P2-dokumentet
-        const rabatt2 = (res2.r || 0) / 100;
-        const faktorTilbud2 = parseFloat(((1 - rabatt2) / 0.70 * valutakurs).toFixed(2));
-        if (res2.p) {
-          res2.p.forEach(p => {
-            p.nok = parseFloat((faktorTilbud2 * (p.eur || 0)).toFixed(2));
-            p.sum = parseFloat((p.nok * (p.ant || 1)).toFixed(2));
-          });
-        }
-
-        // Slå sammen og beregn totaler fra korrekte produkt-summer
-        const alleProdukter = [...(res1.p||[]), ...(res2.p||[])];
-        const mainPosAll = alleProdukter.filter(p => !p.alt);
-        const eksMva = parseFloat(mainPosAll.reduce((a, p) => a + (p.sum||0), 0).toFixed(2));
-        const mva    = parseFloat((eksMva * 0.25).toFixed(2));
-        const tot    = parseFloat((eksMva + mva).toFixed(2));
+        const alleProdukter = [...(res1.p || []), ...(res2.p || [])];
+        const mainPosAll    = alleProdukter.filter(p => !p.alt);
+        const eksMva = _r2(mainPosAll.reduce((a, p) => a + (p.sum || 0), 0));
+        const mva    = _r2(eksMva * 0.25);
+        const tot    = _r2(eksMva + mva);
         resFinal = { ...res1, p: alleProdukter, eksMva, mva, tot };
       }
 
       const selger = getSelger();
       const today  = new Date().toLocaleDateString('nb-NO');
 
-      // Kundeinformasjon fra skjema (selger fyller inn)
       const kundeNavn    = document.getElementById('kunde-navn').value;
       const kundeKontakt = document.getElementById('kunde-kontakt').value;
       const kundeAdresse = document.getElementById('kunde-adresse').value;
@@ -1660,15 +1917,14 @@ Returner kun JSON.`;
 
       window._prosjektNavn = prosjekt;
       window._valutakurs   = valutakurs;
-      window._faktorTilbud = faktorTilbud;
+      window._faktorTilbud = _r2((1 - (resFinal.r || 35) / 100) / 0.70 * valutakurs);
       window._tilbudsNr    = resFinal.t || '';
 
-      // Hent skisser fra P1-PDF (én per side = én per produkt)
+      // Hent skisser fra P1-PDF
       let skisser = [];
-      let vnrMap = {};
+      let vnrMap  = {};
       try {
         const result = await extractPdfSkisser(selectedFile);
-        // Ny format: {skisser, vnrMap} — eldre fallback returnerer array direkte
         if (result && typeof result === 'object' && !Array.isArray(result) && result.skisser) {
           skisser = result.skisser;
           vnrMap  = result.vnrMap || {};
@@ -1682,12 +1938,9 @@ Returner kun JSON.`;
       document.getElementById('loading').style.display = 'none';
       document.getElementById('result').style.display = 'block';
 
-      // Aktiver drag+drop og paste for alle skisse-containere
       (resFinal.p || resFinal.produkter || []).forEach((p, i) => initSkisseDragDrop(i));
-
       oppdaterMarginPanel();
 
-      // Sjekk om det finnes lagrede endringer fra tidligere versjon av samme ordre
       const lagret = hentLagredeEndringer(window._tilbudsNr);
       if (lagret && lagret.tilbudsNr !== window._tilbudsNr) {
         window._lagretSelgerData = lagret;
