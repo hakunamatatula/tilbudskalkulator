@@ -1230,32 +1230,21 @@ ${klon.outerHTML}
         const prodSpecXMin = specIProd.length > 0
           ? Math.min(...specIProd.map(it => it.x))
           : null;
-        // prodCropXFrac: prisrad x1 + 0.02 margin er primær; spec x0 - 0.01 er fallback
+        // prodCropXFrac: høyre grense = 4mm forbi høydemålet (ca. x1 + 0.06 = ~4mm på A4)
+        // Minimum 0.38 sikrer at alle blyantmål og piler til høyre for tegningen alltid er med
         const prodCropXFrac = prisRadIProd
-          ? prisRadIProd.x1 + 0.02
-          : (prodSpecXMin != null ? prodSpecXMin - 0.01 : null);
+          ? Math.max(prisRadIProd.x1 + 0.06, 0.38)
+          : (prodSpecXMin != null ? Math.max(prodSpecXMin - 0.01, 0.38) : null);
 
         // yEnd-beregning:
-        // - stk-anker (Norwin-format): stopp RETT FØR "N (Xstk.)" — tegningen er OVER ankeret
+        // - stk-anker (Norwin-format): INKLUDER "N (Xstk.)" — dette er bunnen av tegningsbildet
+        //   Regelen: bildet kuttes fra posNr øverst til "N (Xstk.)" nederst (inkludert begge)
         // - V-anker (HCTC-format): inkluder V-teksten + litt padding — V-koden er UNDER tegningen
         let yEnd;
         if (sluttErStk) {
-          // Norwin-format: slutt-anker er "N (Xstk.)" som er UNDER tegningen — stopp før det.
-          // Finn eventuelle tekstlinjer (f.eks. "Sett fra utsiden", åpningsmerker) mellom
-          // tegningsbunnen og stk-ankeret, og bruk den høyeste som tettere yEnd.
-          const tekstMellom = items.filter(it =>
-            it.yTop > start.yTop + 0.10 &&
-            it.yTop < slutt.yTop - 0.01 &&
-            it.x < 0.18 &&
-            it.str.length > 3 &&
-            !/^\d+$/.test(it.str)   // ekskluder rene tall (produktnr, stk-tall)
-          );
-          const tettereYEnd = tekstMellom.length > 0
-            ? Math.min(...tekstMellom.map(it => it.yTop)) - 0.005
-            : null;
-          yEnd = (tettereYEnd && tettereYEnd > start.yTop + 0.08)
-            ? tettereYEnd
-            : slutt.yTop - 0.020;  // økt margin fra 0.005 → 0.020 for å unngå tekst under tegning
+          // Norwin-format: inkluder ALT fra posNr (topp-venstre) til "N (Xstk.)" (bunn-venstre).
+          // "Sett fra X, slår Y" og andre tekster mellom tegning og stk-anker skal OGSÅ være med.
+          yEnd = slutt.yTop + 0.030; // Strekk forbi "N (Xstk.)"-teksten + 3% sidehoyde som padding
         } else if (sluttV) {
           // HCTC-format: V-koden er det siste elementet på venstre side under tegningen
           // Finn evt. "Sett fra utsiden" / "N (Xstk.)" tekster mellom prodNr og V-ankeret
