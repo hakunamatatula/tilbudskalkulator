@@ -925,7 +925,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-05-22-v4';
+  const APP_VERSION = '2026-05-22-v5';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -981,6 +981,18 @@ ${klon.outerHTML}
 
     // Hver kilde returnerer { rate, source } ved suksess, kaster ved feil
     const sources = [
+      // rate.json — daglig oppdatert av GitHub Actions, same-origin, ingen CORS-problemer
+      fetch('./rate.json?' + Date.now(), { cache: 'no-store' }).then(async resp => {
+        if (!resp.ok) throw new Error('rate.json: HTTP ' + resp.status);
+        const json = await resp.json();
+        const r = parseFloat(json.rate);
+        const rDate = json.date || '';
+        const daysOld = rDate ? (new Date(today) - new Date(rDate)) / 86400000 : 999;
+        if (isNaN(r) || r < 5 || r > 30) throw new Error('rate.json: ugyldig verdi');
+        if (daysOld > 5) throw new Error('rate.json: for gammel (' + rDate + ')');
+        console.log('[Valutakurs] rate.json OK:', r, '(dato:', rDate, ')');
+        return { rate: r, source: 'gh' };
+      }).catch(e => { console.warn('[Valutakurs] rate.json feilet:', e.message); throw e; }),
       // Norges Bank direkte
       fetchJSON(NB_URL, 7000).then(json => {
         const ds = (json.data && json.data.dataSets) ? json.data.dataSets : json.dataSets;
@@ -1057,7 +1069,9 @@ ${klon.outerHTML}
     if (official && rate) {
       input.value = rate;
       calcQuick();
-      const label = source === 'fr'
+      const label = source === 'gh'
+        ? 'Offisiell dagskurs (automatisk oppdatert)'
+        : source === 'fr'
         ? 'Kurs fra Frankfurter/ECB'
         : source === 'cdn'
         ? 'Kurs fra valuta-CDN (daglig oppdatert)'
