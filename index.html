@@ -925,7 +925,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-05-22-v5';
+  const APP_VERSION = '2026-05-22-v6';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -953,112 +953,73 @@ ${klon.outerHTML}
   async function fetchNorgesBank() {
     const today = new Date().toISOString().split('T')[0];
     const saved = loadSavedRate();
-
     if (saved && saved.date === today) {
       setRateDisplay(parseFloat(saved.rate), true, saved.source || 'nb');
       return;
     }
 
-    // Vis "henter..."-status umiddelbart
-    const box = document.getElementById('rate-status-box');
-    box.innerHTML = '<div class="rate-box" style="border-color:#c8d0da;"><div class="rate-dot" style="background:#8a96a3;"></div><span style="color:#4a5568;">Henter valutakurs...</span></div>';
+    const lastWeek = new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0];
+    const NB_URL = `https://data.norges-bank.no/api/data/EXR/B.EUR.NOK.SP?format=sdmx-json&startPeriod=${lastWeek}&locale=no`;
+    const FR_URL = 'https://api.frankfurter.app/latest?from=EUR&to=NOK';
 
-    const NB_URL  = 'https://data.norges-bank.no/api/data/EXR/B.EUR.NOK.SP?format=sdmx-json&lastNObservations=1';
-    const FR_URL  = 'https://api.frankfurter.app/latest?from=EUR&to=NOK';
-    const CDN_URL = 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.min.json';
-    const CF_URL  = 'https://latest.currency-api.pages.dev/v1/currencies/eur.min.json';
-    const ER_URL  = 'https://open.er-api.com/v6/latest/EUR';
-
-    function timed(ms) {
-      return new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
-    }
-
-    async function fetchJSON(url, ms) {
-      const resp = await Promise.race([fetch(url, { mode: 'cors', credentials: 'omit' }), timed(ms)]);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      return resp.json();
-    }
-
-    // Hver kilde returnerer { rate, source } ved suksess, kaster ved feil
-    const sources = [
-      // rate.json — daglig oppdatert av GitHub Actions, same-origin, ingen CORS-problemer
-      fetch('./rate.json?' + Date.now(), { cache: 'no-store' }).then(async resp => {
-        if (!resp.ok) throw new Error('rate.json: HTTP ' + resp.status);
+    async function tryNorgesBank(url) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      try {
+        const resp = await fetch(url, { signal: ctrl.signal });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const json = await resp.json();
-        const r = parseFloat(json.rate);
-        const rDate = json.date || '';
-        const daysOld = rDate ? (new Date(today) - new Date(rDate)) / 86400000 : 999;
-        if (isNaN(r) || r < 5 || r > 30) throw new Error('rate.json: ugyldig verdi');
-        if (daysOld > 5) throw new Error('rate.json: for gammel (' + rDate + ')');
-        console.log('[Valutakurs] rate.json OK:', r, '(dato:', rDate, ')');
-        return { rate: r, source: 'gh' };
-      }).catch(e => { console.warn('[Valutakurs] rate.json feilet:', e.message); throw e; }),
-      // Norges Bank direkte
-      fetchJSON(NB_URL, 7000).then(json => {
-        const ds = (json.data && json.data.dataSets) ? json.data.dataSets : json.dataSets;
-        if (!ds || !ds[0] || !ds[0].series) throw new Error('NB: ugyldig struktur');
-        const obs = ds[0].series[Object.keys(ds[0].series)[0]].observations;
-        const keys = Object.keys(obs).sort((a,b) => parseInt(a)-parseInt(b));
-        const r = parseFloat(obs[keys[keys.length-1]][0]);
-        if (isNaN(r) || r < 5 || r > 30) throw new Error('NB: ugyldig verdi');
-        return { rate: r, source: 'nb' };
-      }),
-      // Norges Bank via allorigins-proxy
-      fetchJSON('https://api.allorigins.win/raw?url=' + encodeURIComponent(NB_URL), 8000).then(json => {
-        const ds = (json.data && json.data.dataSets) ? json.data.dataSets : json.dataSets;
-        if (!ds || !ds[0] || !ds[0].series) throw new Error('NB-proxy: ugyldig struktur');
-        const obs = ds[0].series[Object.keys(ds[0].series)[0]].observations;
-        const keys = Object.keys(obs).sort((a,b) => parseInt(a)-parseInt(b));
-        const r = parseFloat(obs[keys[keys.length-1]][0]);
-        if (isNaN(r) || r < 5 || r > 30) throw new Error('NB-proxy: ugyldig verdi');
-        return { rate: r, source: 'nb' };
-      }),
-      // Frankfurter / ECB
-      fetchJSON(FR_URL, 7000).then(json => {
-        const r = parseFloat(json.rates && json.rates.NOK);
-        if (isNaN(r) || r < 5 || r > 30) throw new Error('FR: ugyldig verdi');
-        return { rate: r, source: 'fr' };
-      }),
-      // jsDelivr CDN (@fawazahmed0)
-      fetchJSON(CDN_URL, 7000).then(json => {
-        const r = parseFloat(json.eur && json.eur.nok);
-        if (isNaN(r) || r < 5 || r > 30) throw new Error('CDN: ugyldig verdi');
-        return { rate: r, source: 'cdn' };
-      }),
-      // Cloudflare Pages CDN (speil av fawazahmed0)
-      fetchJSON(CF_URL, 7000).then(json => {
-        const r = parseFloat(json.eur && json.eur.nok);
-        if (isNaN(r) || r < 5 || r > 30) throw new Error('CF: ugyldig verdi');
-        return { rate: r, source: 'cdn' };
-      }),
-      // open.er-api (ECB-speil, ingen nøkkel, alltid CORS)
-      fetchJSON(ER_URL, 7000).then(json => {
-        const r = parseFloat(json.rates && json.rates.NOK);
-        if (isNaN(r) || r < 5 || r > 30) throw new Error('ER: ugyldig verdi');
-        return { rate: r, source: 'fr' };
-      }),
-    ];
+        const dataSets = (json.data && json.data.dataSets) ? json.data.dataSets : json.dataSets;
+        if (!dataSets || !dataSets[0] || !dataSets[0].series) throw new Error('Ugyldig API-struktur');
+        const seriesObj = dataSets[0].series;
+        const seriesKey = Object.keys(seriesObj)[0];
+        const obs = seriesObj[seriesKey].observations;
+        const keys = Object.keys(obs).sort((a, b) => parseInt(a) - parseInt(b));
+        const rate = parseFloat(obs[keys[keys.length - 1]][0]);
+        if (isNaN(rate)) throw new Error('Ugyldig kurs-verdi');
+        return rate;
+      } finally { clearTimeout(timer); }
+    }
 
-    try {
-      // Promise.any: første kilde som lykkes vinner — resten ignoreres
-      const { rate, source } = await Promise.any(sources);
+    async function tryFrankfurter() {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      try {
+        const resp = await fetch(FR_URL, { signal: ctrl.signal });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const json = await resp.json();
+        const rate = parseFloat(json.rates && json.rates.NOK);
+        if (isNaN(rate)) throw new Error('Ugyldig kurs fra Frankfurter');
+        return rate;
+      } finally { clearTimeout(timer); }
+    }
+
+    let rate = null;
+    let source = 'nb';
+
+    // LAG 1: Norges Bank direkte
+    try { rate = await tryNorgesBank(NB_URL); }
+    catch(e) { console.warn('NB direkte feilet:', e.message); }
+
+    // LAG 2: Norges Bank via CORS-proxy
+    if (rate === null) {
+      try { rate = await tryNorgesBank('https://corsproxy.io/?' + encodeURIComponent(NB_URL)); }
+      catch(e) { console.warn('NB CORS-proxy feilet:', e.message); }
+    }
+
+    // LAG 3: Frankfurter API
+    if (rate === null) {
+      try { rate = await tryFrankfurter(); source = 'fr'; }
+      catch(e) { console.warn('Frankfurter feilet:', e.message); }
+    }
+
+    if (rate !== null) {
       saveRate(rate, today, source);
       FALLBACK_RATE = rate;
       setRateDisplay(rate, true, source);
-    } catch(e) {
-      // AggregateError: alle 6 kildene feilet
-      console.error('Alle valutakurs-kilder feilet:', e);
-      const retryBtn = '<span class="rate-override-link" onclick="fetchNorgesBank()" style="margin-left:8px;">↻ Prøv igjen</span>';
-      const saved2 = loadSavedRate();
-      if (saved2) {
-        document.getElementById('valutakurs').value = parseFloat(saved2.rate);
-        calcQuick();
-        box.innerHTML = `<div class="rate-box rate-warn"><div class="rate-dot rate-dot-warn"></div><span>Dagskurs ikke hentet — siste kjente kurs (${saved2.date}): <strong>${saved2.rate}</strong></span>${retryBtn}<span class="rate-override-link" onclick="startOverride()">Overstyr</span></div>`;
-      } else {
-        document.getElementById('valutakurs').value = FALLBACK_RATE;
-        calcQuick();
-        box.innerHTML = `<div class="rate-box rate-warn"><div class="rate-dot rate-dot-warn"></div><span>Valutakurs ikke hentet. Sjekk nettleserens konsoll (F12) for detaljer.</span>${retryBtn}<span class="rate-override-link" onclick="startOverride()">Angi manuelt</span></div>`;
-      }
+    } else {
+      console.error('Alle valutakurs-kilder feilet');
+      setRateDisplay(null, false, null);
     }
   }
 
