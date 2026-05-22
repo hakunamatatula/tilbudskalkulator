@@ -1628,16 +1628,19 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       if (curLabel) { rf[curLabel] = curVal.trim(); curLabel = null; curVal = ''; }
     };
 
-    const FIELD_RE      = /^(Type|Wood|Color|Glass sealing|Glass|Frames\/hardware|Glazing bars|Continuous bar widths|Bottomframe|Gaskets|Lining groove|Bottom groove):/i;
+    // PDF.js kan skille ut kolon som eget tekstelement → "Wood :" i stedet for "Wood:"
+    // \s* foran : håndterer begge varianter.  Frames\s*\/\s*hardware håndterer mellomrom rundt /.
+    const FIELD_RE      = /^(Type|Wood|Color|Glass\s+sealing|Glass|Frames\s*\/\s*hardware|Glazing\s+bars|Continuous\s+bar\s+widths|Bottomframe|Gaskets|Lining\s+groove|Bottom\s+groove)\s*:/i;
     // Same labels, unforankret — for å plukke ut felt-etiketter midt i en linje
-    const FIELD_EMBED   = /(?:^|\s)(Type|Wood|Color|Glass sealing|Glass|Frames\/hardware|Glazing bars|Continuous bar widths|Bottomframe|Gaskets|Lining groove|Bottom groove):/i;
+    const FIELD_EMBED   = /(?:^|\s)(Type|Wood|Color|Glass\s+sealing|Glass|Frames\s*\/\s*hardware|Glazing\s+bars|Continuous\s+bar\s+widths|Bottomframe|Gaskets|Lining\s+groove|Bottom\s+groove)\s*:/i;
 
     const applyLine = (ln) => {
       // 1) Felt-etikett ved starten av linjen
       const fm = FIELD_RE.exec(ln);
       if (fm) {
         save();
-        curLabel = fm[1].toLowerCase();
+        // Normaliser label: komprimer mellomrom, fjern mellomrom rundt /
+        curLabel = fm[1].toLowerCase().replace(/\s+/g,' ').replace(/\s*\/\s*/g,'/');
         curVal   = ln.slice(fm[0].length).trim();
         return;
       }
@@ -1645,7 +1648,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       const em = FIELD_EMBED.exec(ln);
       if (em && em.index > 0) {
         save();
-        curLabel = em[1].toLowerCase();
+        curLabel = em[1].toLowerCase().replace(/\s+/g,' ').replace(/\s*\/\s*/g,'/');
         curVal   = ln.slice(em.index + em[0].length).trim();
         return;
       }
@@ -1711,8 +1714,9 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 
     // Maling inne / ute
     const colorRaw = rf['color'] || '';
-    const inneM = colorRaw.match(/Inside:\s*(.+?)(?=\s*Outside:|$)/i);
-    const uteM  = colorRaw.match(/Outside:\s*(.+?)$/i);
+    // PDF.js kan gi "Inside :" med mellomrom → bruk \s* rundt kolon
+    const inneM = colorRaw.match(/Inside\s*:\s*(.+?)(?=\s*Outside\s*:|$)/i);
+    const uteM  = colorRaw.match(/Outside\s*:\s*(.+?)$/i);
     add('Maling inne', inneM ? _xlColor(inneM[1].trim()) : '');
     add('Maling ute',  uteM  ? _xlColor(uteM[1].trim())  : '');
 
@@ -1756,13 +1760,17 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   }
   function _xlWood(raw) {
     return raw
-      .replace(/Finger-jointed pine/i, 'Fingerskjøtet furu')
-      .replace(/Finger-jointed/i, 'Fingerskjøtet')
+      // Håndter "Finger - jointed pine" og "Finger-jointed pine" (PDF.js splitter bindestreken)
+      .replace(/Finger\s*-\s*jointed\s+pine/i, 'Fingerskjøtet furu')
+      .replace(/Finger\s*-\s*jointed/i, 'Fingerskjøtet')
       .replace(/\bpine\b/i, 'furu')
       .trim();
   }
   function _xlColor(raw) {
-    return raw
+    // Komprimer "RAL 90 03" → "RAL 9003" (PDF.js kan sette mellomrom midt i tall)
+    const r = raw.replace(/\b(RAL)\s+(\d)\s*(\d)\s*(\d)\s*(\d)\b/gi, '$1 $2$3$4$5')
+                 .replace(/\b(RAL)\s+(\d{4,})\b/gi, '$1 $2');
+    return r
       .replace(/^White\s+(RAL\s*\d+)/i, 'Hvit $1')
       .replace(/^White$/i, 'Hvit')
       .replace(/^Black$/i, 'Sort')
@@ -1847,12 +1855,19 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   }
   function _xlGlassSealing(raw) {
     if (!raw) return '';
-    return raw
-      .replace(/Inside:\s*/gi,  'Inne: ').replace(/Outside:\s*/gi, 'Ute: ')
+    // Fjern PDF-artefakt: tekst FØR første "Inside:" / "Outside:" (f.eks. spaced "Sett fra"-tekst
+    // og stk-teller som PDF.js samler i samme linje som glassforseglingsverdi)
+    const firstContent = raw.search(/Inside\s*:|Outside\s*:/i);
+    const clean = firstContent > 0 ? raw.slice(firstContent) : raw;
+    return clean
+      // Fjern stk-mønstre som henger igjen: "1 ( 1 9 s t k . )"
+      .replace(/\d+\s*\(\s*[\d\s]+[sS][\s]*[tT][\s]*[kK][^)]*\)/g, '')
+      .replace(/Inside\s*:\s*/gi,  'Inne: ').replace(/Outside\s*:\s*/gi, 'Ute: ')
       .replace(/White paintable sealant\/putty/gi, 'Hvit maling/sparkel')
       .replace(/WHITE PUTTY/gi,    'Hvit sparkel')
       .replace(/Black sealant/gi,  'Sort fugemasse')
       .replace(/White FR sealing/gi, 'Hvit FR tetting')
+      .replace(/\s{2,}/g, ' ')
       .trim();
   }
   function _xlGlazingBars(raw) {
@@ -1868,10 +1883,12 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   function _xlSeenFrom(raw) {
     if (!raw) return '';
     const l = raw.toLowerCase();
-    if (/inside.*inward/.test(l))   return 'Innadslående (innside)';
-    if (/outside.*outward/.test(l)) return 'Utadslående';
-    if (/inside.*outward/.test(l))  return 'Utadslående (innside)';
-    if (/outside.*inward/.test(l))  return 'Innadslående';
+    // PDF.js kan splitte ord: "inwar d" i stedet for "inward" — komprimer mellomrom
+    const c = l.replace(/\s+/g, '');
+    if (/inside/.test(c) && /inward/.test(c))   return 'Innadslående (innside)';
+    if (/outside/.test(c) && /outward/.test(c)) return 'Utadslående';
+    if (/inside/.test(c) && /outward/.test(c))  return 'Utadslående (innside)';
+    if (/outside/.test(c) && /inward/.test(c))  return 'Innadslående';
     return raw;
   }
 
@@ -1911,6 +1928,18 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 
       const selger = getSelger();
       const today  = new Date().toLocaleDateString('nb-NO');
+
+      // Auto-fyll kunde-feltene fra PDF om de ikke allerede er utfylt
+      const _setIfEmpty = (id, val) => {
+        const el = document.getElementById(id);
+        if (el && !el.value.trim() && val) el.value = val;
+      };
+      _setIfEmpty('kunde-navn',    resFinal.kunde);
+      _setIfEmpty('kunde-kontakt', resFinal.kontakt);
+      _setIfEmpty('kunde-adresse', resFinal.kadr);
+      _setIfEmpty('kunde-mob',     resFinal.mob);
+      _setIfEmpty('kunde-epost',   resFinal.epost);
+      _setIfEmpty('prosjekt',      resFinal.prosjekt);
 
       const kundeNavn    = document.getElementById('kunde-navn').value;
       const kundeKontakt = document.getElementById('kunde-kontakt').value;
