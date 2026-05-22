@@ -1230,11 +1230,15 @@ ${klon.outerHTML}
         const prodSpecXMin = specIProd.length > 0
           ? Math.min(...specIProd.map(it => it.x))
           : null;
-        // prodCropXFrac: høyre grense = 4mm forbi høydemålet (ca. x1 + 0.06 = ~4mm på A4)
-        // Minimum 0.38 sikrer at alle blyantmål og piler til høyre for tegningen alltid er med
-        const prodCropXFrac = prisRadIProd
-          ? Math.max(prisRadIProd.x1 + 0.06, 0.38)
-          : (prodSpecXMin != null ? Math.max(prodSpecXMin - 0.01, 0.38) : null);
+        // prodCropXFrac: høyre grense = ~4mm forbi høydemålet ("2000" e.l. skrevet vertikalt)
+        // Dimensjonstall/-piler i tegningen er vektor-outline-tekst (ikke ekstrahertbar), men
+        // de slutter ca. 40pt (~14mm) til venstre for spec-kolonnens venstre kant.
+        // Eksempel Norwin: spec starter x≈0.346, dimensjonspil slutter x≈0.288 → avskjær ≈ 0.306
+        // Primær: spec-kolonnens x minus 0.040 (~14mm) → rett etter høydemål + litt luft
+        // Fallback: dimensjonstekst ("1100x2000mm") sin høyre kant + lite margin
+        const prodCropXFrac = prodSpecXMin != null
+          ? prodSpecXMin - 0.040
+          : (prisRadIProd ? Math.min(prisRadIProd.x1 + 0.015, 0.36) : 0.34);
 
         // yEnd-beregning:
         // - stk-anker (Norwin-format): INKLUDER "N (Xstk.)" — dette er bunnen av tegningsbildet
