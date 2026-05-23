@@ -925,7 +925,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-05-22-v6';
+  const APP_VERSION = '2026-05-22-v8';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -996,6 +996,26 @@ ${klon.outerHTML}
 
     let rate = null;
     let source = 'nb';
+
+    // LAG 0: rate.json — oppdatert daglig av GitHub Actions, same-origin, ingen CORS-blokkering
+    try {
+      const resp = await fetch('./rate.json?' + Date.now(), { cache: 'no-store' });
+      if (resp.ok) {
+        const json = await resp.json();
+        const r = parseFloat(json.rate);
+        const rDate = json.date || '';
+        const daysOld = rDate ? (new Date(today) - new Date(rDate)) / 86400000 : 999;
+        if (!isNaN(r) && r >= 5 && r <= 30 && daysOld <= 5) {
+          console.log('[Valutakurs] rate.json OK:', r, '(dato:', rDate, ')');
+          saveRate(r, today, 'gh');
+          FALLBACK_RATE = r;
+          setRateDisplay(r, true, 'gh');
+          return;
+        } else {
+          console.warn('[Valutakurs] rate.json ugyldig eller for gammel:', r, rDate);
+        }
+      }
+    } catch(e) { console.warn('[Valutakurs] rate.json feilet:', e.message); }
 
     // LAG 1: Norges Bank direkte
     try { rate = await tryNorgesBank(NB_URL); }
