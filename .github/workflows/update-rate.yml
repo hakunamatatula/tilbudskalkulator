@@ -68,7 +68,6 @@ jobs:
           fi
 
           # --- Fallback: Behold eksisterende rate.json hvis ikke eldre enn 7 dager ---
-          # Brukes i helger/helligdager dersom begge APIer er utilgjengelige.
           if [ -z "$RATE" ] || [ "$RATE" = "None" ]; then
             if [ -f rate.json ]; then
               EXISTING_RATE=$(python3 -c "import json; d=json.load(open('rate.json')); print(d.get('rate',''))" 2>/dev/null) || true
@@ -87,8 +86,6 @@ jobs:
                 RATE_DATE=$EXISTING_DATE
                 SOURCE="cached"
                 echo "ℹ Bruker eksisterende kurs fra rate.json: $RATE (dato: $RATE_DATE, alder: ${DAYS_OLD}d)"
-              else
-                echo "✗ rate.json finnes ikke eller er eldre enn 7 dager — kan ikke bruke fallback" >&2
               fi
             fi
           fi
