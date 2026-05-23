@@ -1,0 +1,118 @@
+name: Oppdater EUR/NOK valutakurs
+
+# Kjører hvert 30. minutt mellom 07:00–17:00 UTC (09:00–19:00 Oslo CEST) ALLE dager inkl. helg.
+# I helger/helligdager er det ingen ny Norges Bank-kurs — da beholdes siste kjente kurs fra rate.json.
+# Frankfurter/ECB fungerer også i helger og returnerer siste tilgjengelige hverdag-kurs.
+
+on:
+  schedule:
+    - cron: '0,30 7-16 * * *'
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-rate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Hent kode
+        uses: actions/checkout@v4
+
+      - name: Hent EUR/NOK kurs
+        id: fetch_rate
+        run: |
+          RATE=""
+          RATE_DATE=""
+          SOURCE=""
+
+          # --- Kilde 1: Norges Bank (offisiell dagskurs, kun tilgjengelig på hverdager) ---
+          NB_JSON=$(curl -sf --max-time 10 \
+            "https://data.norges-bank.no/api/data/EXR/B.EUR.NOK.SP?format=sdmx-json&lastNObservations=1" \
+            2>/dev/null) || true
+
+          if [ -n "$NB_JSON" ]; then
+            RATE=$(echo "$NB_JSON" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          ds = d.get('data', {}).get('dataSets') or d.get('dataSets')
+          obs = ds[0]['series'][list(ds[0]['series'].keys())[0]]['observations']
+          key = sorted(obs.keys(), key=int)[-1]
+          val = obs[key][0]
+          print(val if val is not None else '')
+          " 2>/dev/null) || true
+            if [ -n "$RATE" ] && [ "$RATE" != "None" ] && [ "$RATE" != "null" ] && [ "$RATE" != "" ]; then
+              RATE_DATE=$(date +%Y-%m-%d)
+              SOURCE="norges-bank"
+              echo "✓ Norges Bank: $RATE (dato: $RATE_DATE)"
+            fi
+          fi
+
+          # --- Kilde 2: Frankfurter/ECB (fungerer alle dager, returnerer siste hverdag-kurs) ---
+          if [ -z "$RATE" ] || [ "$RATE" = "None" ]; then
+            FR_JSON=$(curl -sf --max-time 10 \
+              "https://api.frankfurter.app/latest?from=EUR&to=NOK" \
+              2>/dev/null) || true
+            if [ -n "$FR_JSON" ]; then
+              RATE=$(echo "$FR_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['rates']['NOK'])" 2>/dev/null) || true
+              RATE_DATE=$(echo "$FR_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('date',''))" 2>/dev/null) || true
+              if [ -n "$RATE" ] && [ "$RATE" != "None" ]; then
+                [ -z "$RATE_DATE" ] && RATE_DATE=$(date +%Y-%m-%d)
+                SOURCE="frankfurter"
+                echo "✓ Frankfurter/ECB: $RATE (dato: $RATE_DATE)"
+              fi
+            fi
+          fi
+
+          # --- Fallback: Behold eksisterende rate.json hvis ikke eldre enn 7 dager ---
+          # Brukes i helger/helligdager dersom begge APIer er utilgjengelige.
+          if [ -z "$RATE" ] || [ "$RATE" = "None" ]; then
+            if [ -f rate.json ]; then
+              EXISTING_RATE=$(python3 -c "import json; d=json.load(open('rate.json')); print(d.get('rate',''))" 2>/dev/null) || true
+              EXISTING_DATE=$(python3 -c "import json; d=json.load(open('rate.json')); print(d.get('date',''))" 2>/dev/null) || true
+              DAYS_OLD=$(python3 -c "
+          from datetime import date
+          try:
+            d = date.fromisoformat('$EXISTING_DATE')
+            print((date.today() - d).days)
+          except:
+            print(999)
+          " 2>/dev/null) || true
+
+              if [ -n "$EXISTING_RATE" ] && [ "$DAYS_OLD" -le 7 ] 2>/dev/null; then
+                RATE=$EXISTING_RATE
+                RATE_DATE=$EXISTING_DATE
+                SOURCE="cached"
+                echo "ℹ Bruker eksisterende kurs fra rate.json: $RATE (dato: $RATE_DATE, alder: ${DAYS_OLD}d)"
+              else
+                echo "✗ rate.json finnes ikke eller er eldre enn 7 dager — kan ikke bruke fallback" >&2
+              fi
+            fi
+          fi
+
+          # --- Ingen gyldige kilder ---
+          if [ -z "$RATE" ] || [ "$RATE" = "None" ]; then
+            echo "FEIL: Ingen kurskilder tilgjengelig og ingen gyldig cache i rate.json" >&2
+            exit 1
+          fi
+
+          echo "rate=$RATE" >> $GITHUB_OUTPUT
+          echo "date=$RATE_DATE" >> $GITHUB_OUTPUT
+          echo "source=$SOURCE" >> $GITHUB_OUTPUT
+
+      - name: Skriv rate.json
+        run: |
+          echo "{\"rate\": ${{ steps.fetch_rate.outputs.rate }}, \"date\": \"${{ steps.fetch_rate.outputs.date }}\", \"source\": \"${{ steps.fetch_rate.outputs.source }}\"}" > rate.json
+          echo "rate.json innhold:"
+          cat rate.json
+
+      - name: Commit og push
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add rate.json
+          git diff --staged --quiet \
+            && echo "Ingen endring i kursen — hopper over commit" \
+            || git commit -m "Oppdater EUR/NOK kurs ${{ steps.fetch_rate.outputs.date }}: ${{ steps.fetch_rate.outputs.rate }} (${{ steps.fetch_rate.outputs.source }})"
+          git push
