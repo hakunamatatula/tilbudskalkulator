@@ -916,6 +916,12 @@ ${klon.outerHTML}
   });
   fileInput2.addEventListener('change', () => { if (fileInput2.files[0]) setFile2(fileInput2.files[0]); });
 
+  // Hindre at nettleseren åpner filen hvis bruker slipper PDF utenfor dropzone-arealet
+  document.addEventListener('dragover', e => e.preventDefault());
+  document.addEventListener('drop', e => {
+    if (!dropzone.contains(e.target) && !dropzone2.contains(e.target)) e.preventDefault();
+  });
+
   // ── Valutakurs fra Norges Bank ──
   const RATE_CACHE_KEY = 'merkapital_eur_rate';
   const RATE_DATE_KEY  = 'merkapital_eur_date';
@@ -925,7 +931,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-05-22-v8';
+  const APP_VERSION = '2026-05-26-v9';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -1005,7 +1011,7 @@ ${klon.outerHTML}
         const r = parseFloat(json.rate);
         const rDate = json.date || '';
         const daysOld = rDate ? (new Date(today) - new Date(rDate)) / 86400000 : 999;
-        if (!isNaN(r) && r >= 5 && r <= 30 && daysOld <= 5) {
+        if (!isNaN(r) && r >= 5 && r <= 30 && daysOld <= 10) {
           console.log('[Valutakurs] rate.json OK:', r, '(dato:', rDate, ')');
           saveRate(r, today, 'gh');
           FALLBACK_RATE = r;
@@ -1127,6 +1133,7 @@ ${klon.outerHTML}
 
   async function extractPdfText(file) {
     const pdfjsLib = window.pdfjsLib;
+    if (!pdfjsLib) throw new Error('PDF-biblioteket (pdf.js) er ikke lastet. Sjekk internettilkoblingen og refresh siden.');
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -1149,6 +1156,7 @@ ${klon.outerHTML}
   // Slutt: "N (Xstk.)" teksten under skissen
   async function extractPdfSkisser(file, scale = 2.0) {
     const pdfjsLib = window.pdfjsLib;
+    if (!pdfjsLib) throw new Error('PDF-biblioteket (pdf.js) er ikke lastet. Sjekk internettilkoblingen og refresh siden.');
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -1550,6 +1558,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
    *  sorterer venstre→høyre innen hver linje. */
   async function extractPdfTextLayout(file) {
     const pdfjsLib = window.pdfjsLib;
+    if (!pdfjsLib) throw new Error('PDF-biblioteket (pdf.js) er ikke lastet. Sjekk internettilkoblingen og refresh siden.');
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
