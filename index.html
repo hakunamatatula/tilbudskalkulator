@@ -3,10 +3,19 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta name="app-version" content="2026-05-20-v3"/>
+<meta name="app-version" content="2026-05-26-v11"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
+<!-- Google Fonts lastes asynkront (media=print → onload) slik at siden ikke henger
+     hvis fonts.googleapis.com er blokkert på bedriftsnettverket. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Playfair+Display:wght@700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Playfair+Display:wght@700&display=swap"></noscript>
 <title>MER Kapital Tilbudsagent</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Playfair+Display:wght@700&display=swap');
+  /* Google Fonts lastes via <link> i <head> (asynkront) — ikke @import her */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --gold: #b8860b; --gold-light: #d4a017; --gold-bg: #fff8e6;
@@ -32,7 +41,17 @@
   .dropzone-icon { font-size:28px; margin-bottom:6px; color:var(--muted); }
   .dropzone-text { font-size:14px; color:var(--muted); }
   .dropzone.has-file .dropzone-icon, .dropzone.has-file .dropzone-text { color:var(--green); }
-  #file-input, #file-input2 { display:none; }
+  /* Skjuler file-inputs visuelt men lar programmatisk .click() fungere på bedriftsnettverk.
+     display:none blokkeres av noen enterprise-sikkerhetspolicies. */
+  #file-input, #file-input2 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    clip: rect(0,0,0,0);
+  }
   .btn { background:var(--accent); color:#fff; border:none; padding:14px 28px; font-family:'Source Sans 3',sans-serif; font-size:16px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; transition:all 0.2s; width:100%; border-radius:4px; }
   .btn:hover:not(:disabled) { background:#254f7a; }
   .btn:disabled { opacity:0.38; cursor:not-allowed; }
@@ -456,14 +475,14 @@
         <div class="section-title">01 — Last opp tilbud fra produsent</div>
         <div class="label" style="margin-bottom:4px;">Tilbud fra produsent 1 <span style="color:var(--gold);font-size:9px;">(påkrevd)</span></div>
         <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
-          <input type="file" id="file-input" accept=".pdf" />
+          <input type="file" id="file-input" accept=".pdf" onclick="event.stopPropagation()" />
           <div class="dropzone-icon" id="drop-icon">↑</div>
           <div class="dropzone-text" id="drop-text">Dra og slipp eller klikk</div>
           <div style="font-size:9px;color:var(--dim);margin-top:2px;">PDF</div>
         </div>
         <div class="label" style="margin-bottom:4px;">Tilbud fra produsent 2 <span style="color:var(--dim);font-size:9px;">(valgfritt)</span></div>
         <div class="dropzone" id="dropzone2" onclick="document.getElementById('file-input2').click()">
-          <input type="file" id="file-input2" accept=".pdf" />
+          <input type="file" id="file-input2" accept=".pdf" onclick="event.stopPropagation()" />
           <div class="dropzone-icon" id="drop-icon2">↑</div>
           <div class="dropzone-text" id="drop-text2">Dra og slipp eller klikk</div>
           <div style="font-size:9px;color:var(--dim);margin-top:2px;">PDF</div>
@@ -931,7 +950,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-05-26-v10';
+  const APP_VERSION = '2026-05-26-v11';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
