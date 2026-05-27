@@ -413,7 +413,7 @@
     }
   }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="./pdf.min.js"></script>
 </head>
 <body>
 
@@ -931,7 +931,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-05-26-v9';
+  const APP_VERSION = '2026-05-26-v10';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -1015,7 +1015,7 @@ ${klon.outerHTML}
           console.log('[Valutakurs] rate.json OK:', r, '(dato:', rDate, ')');
           saveRate(r, today, 'gh');
           FALLBACK_RATE = r;
-          setRateDisplay(r, true, 'gh');
+          setRateDisplay(r, true, 'gh', rDate, daysOld, json.source || '');
           return;
         } else {
           console.warn('[Valutakurs] rate.json ugyldig eller for gammel:', r, rDate);
@@ -1049,28 +1049,67 @@ ${klon.outerHTML}
     }
   }
 
-  function setRateDisplay(rate, official, source) {
-    const box = document.getElementById('rate-status-box');
+  function setRateDisplay(rate, official, source, rDate, daysOld, ghSource) {
+    const box   = document.getElementById('rate-status-box');
     const input = document.getElementById('valutakurs');
     rateIsOfficial = official;
+
+    const _fmtDate = d => {
+      if (!d) return '';
+      try { return new Date(d + 'T12:00:00').toLocaleDateString('nb-NO', { day: 'numeric', month: 'long' }); }
+      catch(e) { return d; }
+    };
+    const _dayOfWeek = d => { try { return new Date(d + 'T12:00:00').getDay(); } catch(e) { return -1; } };
+    const _isWeekend = d => { const dow = _dayOfWeek(d); return dow === 0 || dow === 6; };
+
     if (official && rate) {
       input.value = rate;
       calcQuick();
-      const label = source === 'gh'
-        ? 'Offisiell dagskurs (automatisk oppdatert)'
-        : source === 'fr'
-        ? 'Kurs fra Frankfurter/ECB'
-        : source === 'cdn'
-        ? 'Kurs fra valuta-CDN (daglig oppdatert)'
-        : 'Offisiell kurs fra Norges Bank';
-      box.innerHTML = `<div class="rate-box rate-ok"><div class="rate-dot rate-dot-ok"></div><span>${label}: <strong>${rate}</strong></span><span class="rate-override-link" onclick="startOverride()">Overstyr</span></div>`;
+
+      let msg, cssClass = 'rate-ok', dotClass = 'rate-dot-ok';
+      const dateStr = _fmtDate(rDate);
+
+      if (source === 'gh') {
+        if (ghSource === 'initial-placeholder') {
+          msg = `Startkurs (GitHub Actions ikke kjørt ennå) — viser ${rate}`;
+          cssClass = 'rate-warn'; dotClass = 'rate-dot-warn';
+        } else if (daysOld === 0) {
+          const srcLabel = ghSource === 'norges-bank' ? 'Norges Bank'
+                         : ghSource === 'frankfurter'  ? 'ECB/Frankfurter'
+                         : 'siste kjente';
+          msg = `Dagskurs fra ${srcLabel} (${dateStr}): <strong>${rate}</strong>`;
+        } else if (daysOld <= 3 && _isWeekend(rDate)) {
+          const nextMon = 'Ny kurs publiseres mandag kl. 10:00';
+          msg = `Kurs fra ${dateStr} (helg/helligdag — ${nextMon.toLowerCase()}): <strong>${rate}</strong>`;
+        } else if (daysOld === 1) {
+          msg = `Kurs fra ${dateStr} (oppdateres hverdager kl. 10:00): <strong>${rate}</strong>`;
+        } else {
+          msg = `Kurs fra ${dateStr} (${Math.round(daysOld)} dager gammel): <strong>${rate}</strong>`;
+          cssClass = 'rate-warn'; dotClass = 'rate-dot-warn';
+        }
+      } else if (source === 'nb') {
+        msg = `Offisiell Norges Bank-kurs (hentet nå): <strong>${rate}</strong>`;
+      } else if (source === 'fr') {
+        msg = `Kurs fra ECB/Frankfurter (hentet nå): <strong>${rate}</strong>`;
+      } else {
+        msg = `Offisiell dagskurs: <strong>${rate}</strong>`;
+      }
+
+      box.innerHTML = `<div class="rate-box ${cssClass}"><div class="rate-dot ${dotClass}"></div><span>${msg}</span><span class="rate-override-link" onclick="startOverride()">Overstyr</span></div>`;
     } else {
       const saved = loadSavedRate();
       const displayRate = saved ? parseFloat(saved.rate) : FALLBACK_RATE;
-      const displayDate = saved ? saved.date : 'ukjent dato';
+      const displayDate = _fmtDate(saved ? saved.date : null) || (saved ? saved.date : 'ukjent dato');
       input.value = displayRate;
       calcQuick();
-      box.innerHTML = `<div class="rate-box rate-warn"><div class="rate-dot rate-dot-warn"></div><span>Dagskurs ikke hentet — viser siste kjente kurs (${displayDate}): <strong>${displayRate}</strong></span><span class="rate-override-link" onclick="startOverride()">Overstyr</span></div>`;
+
+      const todayDow = new Date().getDay();
+      const isWeekendNow = todayDow === 0 || todayDow === 6;
+      const hint = isWeekendNow
+        ? ' Norges Bank publiserer ikke kurs i helgen — ny kurs mandag kl. 10:00.'
+        : ' Ny dagskurs fra Norges Bank publiseres kl. 10:00 på hverdager.';
+
+      box.innerHTML = `<div class="rate-box rate-warn"><div class="rate-dot rate-dot-warn"></div><span>Kurs ikke tilgjengelig — viser lagret kurs fra ${displayDate}: <strong>${displayRate}</strong>.${hint}</span><span class="rate-override-link" onclick="startOverride()">Overstyr</span></div>`;
     }
   }
 
@@ -1134,7 +1173,7 @@ ${klon.outerHTML}
   async function extractPdfText(file) {
     const pdfjsLib = window.pdfjsLib;
     if (!pdfjsLib) throw new Error('PDF-biblioteket (pdf.js) er ikke lastet. Sjekk internettilkoblingen og refresh siden.');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let fullText = '';
@@ -1157,7 +1196,7 @@ ${klon.outerHTML}
   async function extractPdfSkisser(file, scale = 2.0) {
     const pdfjsLib = window.pdfjsLib;
     if (!pdfjsLib) throw new Error('PDF-biblioteket (pdf.js) er ikke lastet. Sjekk internettilkoblingen og refresh siden.');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
@@ -1560,7 +1599,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     const pdfjsLib = window.pdfjsLib;
     if (!pdfjsLib) throw new Error('PDF-biblioteket (pdf.js) er ikke lastet. Sjekk internettilkoblingen og refresh siden.');
     pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      './pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const allLines = [];
