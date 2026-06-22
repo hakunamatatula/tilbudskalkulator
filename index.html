@@ -485,36 +485,14 @@
       <div>
         <div class="section-title">01 — Last opp tilbud fra produsent</div>
 
-        <!-- Fabrikk-velger -->
-        <div class="field" style="margin-bottom:16px;">
-          <div class="label">Fabrikk / produsent</div>
-          <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:4px;">
-            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text);">
-              <input type="radio" name="fabrikk" value="hctc" checked
-                style="width:auto;margin:0;accent-color:var(--accent);"
-                onchange="FABRIKK='hctc'; document.getElementById('faktor-label').textContent='Faktorpåslag (HCTC)'; oppdaterFabrikkHint();" />
-              HCTC
-            </label>
-            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text);">
-              <input type="radio" name="fabrikk" value="aradas"
-                style="width:auto;margin:0;accent-color:var(--accent);"
-                onchange="FABRIKK='aradas'; document.getElementById('faktor-label').textContent='Faktorpåslag (Aradas)'; oppdaterFabrikkHint();" />
-              Aradas (Litauen)
-            </label>
-            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text);">
-              <input type="radio" name="fabrikk" value="aldens"
-                style="width:auto;margin:0;accent-color:var(--accent);"
-                onchange="FABRIKK='aldens'; document.getElementById('faktor-label').textContent='Faktorpåslag (Aldens)'; oppdaterFabrikkHint();" />
-              Aldens (Latvia)
-            </label>
-            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text);">
-              <input type="radio" name="fabrikk" value="aliuminatas"
-                style="width:auto;margin:0;accent-color:var(--accent);"
-                onchange="FABRIKK='aliuminatas'; document.getElementById('faktor-label').textContent='Faktorpåslag (Aliuminatas)'; oppdaterFabrikkHint();" />
-              Aliuminatas (Litauen)
-            </label>
+        <!-- Auto-deteksjon av fabrikk (vises etter PDF-opplasting) -->
+        <div id="fabrikk-detect-box" style="display:none;margin-bottom:16px;">
+          <div class="label" style="margin-bottom:6px;">Fabrikk / produsent</div>
+          <div id="fabrikk-detect-badge" style="display:inline-flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--muted);">
+            <span id="fabrikk-detect-icon" style="font-size:15px;">⏳</span>
+            <span id="fabrikk-detect-tekst">Detekterer…</span>
           </div>
-          <div id="fabrikk-hint-aradas" style="display:none;font-size:12px;color:var(--muted);margin-top:6px;background:var(--gold-bg);border:1px solid var(--gold);border-radius:4px;padding:7px 10px;">
+          <div id="fabrikk-hint-aradas" style="display:none;font-size:12px;color:var(--muted);margin-top:8px;background:var(--gold-bg);border:1px solid var(--gold);border-radius:4px;padding:7px 10px;">
             💡 <strong id="fabrikk-hint-navn">Aradas:</strong> Faktorpåslag × fabrikk EUR-pris = NOK kundepris.
             For 30% dekning: faktor ≈ <span id="hint-faktor">—</span>
           </div>
@@ -803,6 +781,21 @@ ${klon.outerHTML}
     dropzone.classList.add('has-file');
     document.getElementById('drop-icon').textContent = '✓';
     document.getElementById('drop-text').textContent = f.name;
+
+    // Vis detect-boks og start auto-deteksjon
+    const detectBox = document.getElementById('fabrikk-detect-box');
+    const icon  = document.getElementById('fabrikk-detect-icon');
+    const tekst = document.getElementById('fabrikk-detect-tekst');
+    const badge = document.getElementById('fabrikk-detect-badge');
+    if (detectBox) detectBox.style.display = 'block';
+    if (icon)  icon.textContent  = '⏳';
+    if (tekst) tekst.textContent = 'Detekterer…';
+    if (badge) { badge.style.borderColor = 'var(--border)'; badge.style.color = 'var(--muted)'; }
+
+    sniffPdfText(f).then(txt => {
+      const id = detekterFabrikk(txt);
+      settFabrikk(id);
+    });
   }
 
   function setFile2(f) {
@@ -997,7 +990,57 @@ ${klon.outerHTML}
   const RATE_DATE_KEY  = 'merkapital_eur_date';
   let rateIsOfficial = false;
   let FALLBACK_RATE = 11.20; // Oppdateres automatisk når offisiell kurs hentes
-  let FABRIKK = 'hctc'; // 'hctc' | 'aradas' | 'aldens' | 'aliuminatas' — settes av fabrikk-velger i UI
+  let FABRIKK = 'hctc'; // 'hctc' | 'aradas' | 'aldens' | 'aliuminatas' — settes automatisk ved PDF-opplasting
+
+  /** Les tekst fra side 1–2 i PDF-en (rask sniff for auto-deteksjon). */
+  async function sniffPdfText(file) {
+    try {
+      const ab  = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+      let txt = '';
+      const pages = Math.min(pdf.numPages, 2);
+      for (let i = 1; i <= pages; i++) {
+        const page    = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        txt += content.items.map(it => it.str).join(' ') + ' ';
+        if (txt.length > 1500) break;
+      }
+      return txt;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /** Auto-detekterer fabrikk basert på PDF-innhold. */
+  function detekterFabrikk(txt) {
+    const u = txt.toUpperCase();
+    if (u.includes('ALIUMINATAS'))  return 'aliuminatas';
+    if (u.includes('ALDENS'))       return 'aldens';
+    if (u.includes('ARADAS'))       return 'aradas';
+    return 'hctc'; // Standard/fallback
+  }
+
+  const FABRIKK_NAVN = {
+    hctc:         'HCTC',
+    aradas:       'Aradas (Litauen)',
+    aldens:       'Aldens (Latvia)',
+    aliuminatas:  'Aliuminatas (Litauen)',
+  };
+
+  /** Setter FABRIKK og oppdaterer badge + faktor-label + hint. */
+  function settFabrikk(id) {
+    FABRIKK = id;
+    const navn = FABRIKK_NAVN[id] || id;
+    const badge  = document.getElementById('fabrikk-detect-badge');
+    const icon   = document.getElementById('fabrikk-detect-icon');
+    const tekst  = document.getElementById('fabrikk-detect-tekst');
+    if (badge)  { badge.style.borderColor = 'var(--accent)'; badge.style.color = 'var(--text)'; }
+    if (icon)   icon.textContent  = '✓';
+    if (tekst)  tekst.textContent = navn;
+    const faktorLabel = document.getElementById('faktor-label');
+    if (faktorLabel) faktorLabel.textContent = 'Faktorpåslag (' + (id === 'hctc' ? 'HCTC' : navn) + ')';
+    oppdaterFabrikkHint();
+  }
 
   // ── KUNDEPROFIL ─────────────────────────────────────────────────────────────
   // Tilpass disse verdiene per kunde/deployment (én versjon per bedrift).
@@ -1010,7 +1053,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-22-v15';
+  const APP_VERSION = '2026-06-22-v16';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -2877,39 +2920,13 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   // Bakoverkompatibel alias
   function oppdaterAradasHint() { oppdaterFabrikkHint(); }
 
-  // Hook fabrikk-bytter til hint-oppdatering og valutakurs-input
+  // Init ved DOMContentLoaded
   document.addEventListener('DOMContentLoaded', () => {
     // ── Vis kundenavn (fra KUNDE_PROFIL) i header ──
     const headerNavn = document.getElementById('header-kunde-navn');
     if (headerNavn) headerNavn.textContent = KUNDE_PROFIL.navn;
 
-    // ── Filtrer fabrikk-knapper: vis bare de som er i KUNDE_PROFIL.fabrikker ──
-    // Gjør at en annen kundes deployment automatisk skjuler irrelevante fabrikker
-    document.querySelectorAll('input[name="fabrikk"]').forEach(input => {
-      if (!KUNDE_PROFIL.fabrikker.includes(input.value)) {
-        const lbl = input.closest('label');
-        if (lbl) lbl.style.display = 'none';
-        // Fjern checked-status hvis denne fabrikken er skjult
-        if (input.checked) input.checked = false;
-      }
-    });
-    // Sørg for at første synlige fabrikk er valgt
-    const forsteRad = document.querySelector('input[name="fabrikk"]:not([style*="display:none"])');
-    if (forsteRad && !document.querySelector('input[name="fabrikk"]:checked')) {
-      forsteRad.checked = true;
-      FABRIKK = forsteRad.value;
-    }
-
-    // ── Fabrikk-endring: oppdater label og hint ──
-    document.querySelectorAll('input[name="fabrikk"]').forEach(r => {
-      r.addEventListener('change', () => {
-        FABRIKK = r.value;
-        const navnMap = { hctc:'HCTC', aradas:'Aradas', aldens:'Aldens', aliuminatas:'Aliuminatas' };
-        document.getElementById('faktor-label').textContent =
-          'Faktorpåslag (' + (navnMap[FABRIKK] || FABRIKK) + ')';
-        oppdaterFabrikkHint();
-      });
-    });
+    // Koble valutakurs-input til hint-oppdatering
     document.getElementById('valutakurs').addEventListener('input', oppdaterAradasHint);
   });
 
