@@ -11,36 +11,47 @@
      hvis fonts.googleapis.com er blokkert på bedriftsnettverket. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Playfair+Display:wght@700&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Playfair+Display:wght@700&display=swap"></noscript>
-<title>MER Kapital Tilbudsagent</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"></noscript>
+<title>Nora AI — Tilbudskalkulator</title>
 <style>
-  /* Google Fonts lastes via <link> i <head> (asynkront) — ikke @import her */
+  /* Nora AI design — noraai.no tokens */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --gold: #b8860b; --gold-light: #d4a017; --gold-bg: #fff8e6;
-    --bg: #f4f6f8; --bg2: #ffffff; --bg3: #eef1f4;
-    --border: #c8d0da; --text: #1a2233; --muted: #4a5568; --dim: #8a96a3; --green: #2d6a4f;
-    --accent: #1a3a5c; --accent-light: #e8eef6;
+    /* Nora AI fargepalett */
+    --bg:           #0A0C11;
+    --bg2:          #0E1118;
+    --bg3:          #131820;
+    --border:       rgba(255,255,255,0.09);
+    --text:         #EDEFF4;
+    --muted:        #9BA3B0;
+    --dim:          #6B7585;
+    --accent:       #6FE7D4;
+    --accent-light: rgba(111,231,212,0.10);
+    --gold:         #E8A364;
+    --gold-light:   #F0BA8A;
+    --gold-bg:      rgba(232,163,100,0.12);
+    --green:        #6FE7D4;
+    --violet:       #8B7CF6;
   }
-  body { background: var(--bg); color: var(--text); font-family: 'Source Sans 3', 'Helvetica Neue', Arial, sans-serif; font-size: 17px; line-height: 1.75; padding: 28px; }
-  .header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid var(--border); padding-bottom:18px; margin-bottom:32px; background:var(--bg2); margin:-28px -28px 32px -28px; padding:18px 28px; box-shadow:0 2px 8px rgba(0,0,0,0.07); }
-  .logo-name { font-family:'Playfair Display',serif; font-size:22px; color:var(--accent); letter-spacing:0.04em; }
-  .logo-sub { font-size:12px; letter-spacing:0.18em; color:var(--muted); text-transform:uppercase; margin-top:2px; }
-  .label { font-size:13px; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; font-weight:600; }
-  .section-title { font-size:13px; letter-spacing:0.15em; text-transform:uppercase; color:var(--accent); margin-bottom:16px; padding-bottom:8px; border-bottom:2px solid var(--border); font-weight:700; }
-  input, select { background:var(--bg2); border:2px solid var(--border); color:var(--text); padding:11px 14px; font-family:'Source Sans 3',sans-serif; font-size:16px; width:100%; outline:none; transition:border-color 0.2s; border-radius:4px; }
-  input:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(26,58,92,0.12); }
-  select option { background:#fff; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; font-size: 16px; line-height: 1.7; padding: 28px; }
+  .header { display:flex; justify-content:space-between; align-items:center; background:var(--bg2); border-bottom:1px solid var(--border); margin:-28px -28px 32px -28px; padding:16px 28px; box-shadow:0 1px 0 rgba(255,255,255,0.05); }
+  .logo-name { font-family:'Space Grotesk',sans-serif; font-size:20px; color:var(--text); letter-spacing:0.01em; font-weight:700; }
+  .logo-sub { font-size:11px; letter-spacing:0.14em; color:var(--muted); text-transform:uppercase; margin-top:3px; }
+  .label { font-size:12px; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; font-weight:600; }
+  .section-title { font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); font-weight:700; }
+  input, select { background:var(--bg3); border:1px solid var(--border); color:var(--text); padding:11px 14px; font-family:'Inter',sans-serif; font-size:15px; width:100%; outline:none; transition:border-color 0.2s; border-radius:6px; }
+  input:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(111,231,212,0.12); }
+  select option { background:var(--bg3); color:var(--text); }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:28px; }
   .grid2-params { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .field { margin-bottom:12px; }
-  .dropzone { border:2px dashed var(--border); padding:30px; text-align:center; cursor:pointer; background:var(--bg3); transition:all 0.2s; margin-bottom:20px; border-radius:6px; }
+  .dropzone { border:1px dashed rgba(111,231,212,0.3); padding:30px; text-align:center; cursor:pointer; background:var(--bg3); transition:all 0.2s; margin-bottom:20px; border-radius:8px; }
   .dropzone:hover, .dropzone.over { border-color:var(--accent); background:var(--accent-light); }
-  .dropzone.has-file { border-color:var(--green); background:#e8f5ee; }
+  .dropzone.has-file { border-color:var(--accent); border-style:solid; background:var(--accent-light); }
   .dropzone-icon { font-size:28px; margin-bottom:6px; color:var(--muted); }
   .dropzone-text { font-size:14px; color:var(--muted); }
-  .dropzone.has-file .dropzone-icon, .dropzone.has-file .dropzone-text { color:var(--green); }
+  .dropzone.has-file .dropzone-icon, .dropzone.has-file .dropzone-text { color:var(--accent); }
   /* Skjuler file-inputs visuelt men lar programmatisk .click() fungere på bedriftsnettverk.
      display:none blokkeres av noen enterprise-sikkerhetspolicies. */
   #file-input, #file-input2 {
@@ -52,10 +63,10 @@
     pointer-events: none;
     clip: rect(0,0,0,0);
   }
-  .btn { background:var(--accent); color:#fff; border:none; padding:14px 28px; font-family:'Source Sans 3',sans-serif; font-size:16px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; transition:all 0.2s; width:100%; border-radius:4px; }
-  .btn:hover:not(:disabled) { background:#254f7a; }
-  .btn:disabled { opacity:0.38; cursor:not-allowed; }
-  .error { color:#c0392b; font-size:14px; margin-top:10px; font-weight:600; }
+  .btn { background:var(--accent); color:#0A0C11; border:none; padding:14px 28px; font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; cursor:pointer; transition:all 0.2s; width:100%; border-radius:6px; }
+  .btn:hover:not(:disabled) { background:var(--gold-light); }
+  .btn:disabled { opacity:0.35; cursor:not-allowed; }
+  .error { color:#f87171; font-size:14px; margin-top:10px; font-weight:600; }
   .loading { text-align:center; padding:48px; color:var(--muted); display:none; }
   .spinner { font-size:32px; display:inline-block; animation:spin 1s linear infinite; margin-bottom:10px; color:var(--accent); }
   @keyframes spin { to { transform:rotate(360deg); } }
@@ -108,51 +119,51 @@
   .seller-block .seller-info { color:#555; }
   .cert-logos { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   .cert-logos img { height:40px; object-fit:contain; }
-  .print-btn { background:var(--accent); color:#fff; border:none; padding:13px 24px; font-family:'Source Sans 3',sans-serif; font-size:15px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; margin-top:14px; width:100%; transition:background 0.2s; border-radius:4px; }
-  .print-btn:hover { background:#254f7a; }
-  .reset-btn { background:#fff; color:var(--text); border:2px solid var(--border); padding:11px 24px; font-family:'Source Sans 3',sans-serif; font-size:14px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; margin-top:6px; width:100%; transition:all 0.2s; border-radius:4px; }
+  .print-btn { background:var(--accent); color:#0A0C11; border:none; padding:13px 24px; font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; cursor:pointer; margin-top:14px; width:100%; transition:background 0.2s; border-radius:6px; }
+  .print-btn:hover { background:var(--gold); }
+  .reset-btn { background:transparent; color:var(--muted); border:1px solid var(--border); padding:11px 24px; font-family:'Space Grotesk',sans-serif; font-size:14px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; cursor:pointer; margin-top:6px; width:100%; transition:all 0.2s; border-radius:6px; }
   .reset-btn:hover { border-color:var(--accent); color:var(--accent); }
-  .steps { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; border-top:2px solid var(--border); padding-top:24px; margin-top:8px; }
-  .step-num { font-size:13px; color:var(--accent); letter-spacing:0.18em; margin-bottom:5px; font-weight:700; }
-  .step-title { font-size:17px; font-weight:700; letter-spacing:0.02em; margin-bottom:4px; color:var(--text); }
+  .steps { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; border-top:1px solid var(--border); padding-top:24px; margin-top:8px; }
+  .step-num { font-size:12px; color:var(--accent); letter-spacing:0.18em; margin-bottom:5px; font-weight:700; font-family:'Space Grotesk',sans-serif; }
+  .step-title { font-size:16px; font-weight:700; letter-spacing:0.01em; margin-bottom:4px; color:var(--text); font-family:'Space Grotesk',sans-serif; }
   .step-desc { font-size:14px; color:var(--muted); line-height:1.65; }
   /* Hurtigkalkulator */
-  .quick-calc { background:var(--bg2); border:2px solid var(--border); padding:24px 28px; margin-bottom:28px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
-  .quick-calc-title { font-size:14px; letter-spacing:0.15em; text-transform:uppercase; color:var(--accent); margin-bottom:18px; padding-bottom:10px; border-bottom:2px solid var(--border); display:flex; align-items:center; gap:8px; font-weight:700; }
-  .quick-calc-title::before { content:'◈'; font-size:14px; color:var(--gold); }
+  .quick-calc { background:var(--bg2); border:1px solid var(--border); padding:24px 28px; margin-bottom:28px; border-radius:10px; box-shadow:0 2px 12px rgba(0,0,0,0.3); }
+  .quick-calc-title { font-size:13px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:18px; padding-bottom:10px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; font-weight:700; font-family:'Space Grotesk',sans-serif; }
+  .quick-calc-title::before { content:'◈'; font-size:13px; color:var(--gold); }
   .quick-calc-grid { display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end; }
-  .quick-calc-grid input { background:var(--bg3); border:2px solid var(--border); color:var(--text); padding:10px 13px; font-family:'Source Sans 3',sans-serif; font-size:15px; width:100%; outline:none; transition:border-color 0.2s; border-radius:4px; }
+  .quick-calc-grid input { background:var(--bg3); border:1px solid var(--border); color:var(--text); padding:10px 13px; font-family:'Inter',sans-serif; font-size:15px; width:100%; outline:none; transition:border-color 0.2s; border-radius:6px; }
   .quick-calc-grid input:focus { border-color:var(--accent); }
   .quick-calc-result { margin-top:18px; display:none; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
-  .qc-card { background:var(--bg3); border:2px solid var(--border); padding:16px 18px; border-radius:6px; }
+  .qc-card { background:var(--bg3); border:1px solid var(--border); padding:16px 18px; border-radius:8px; }
   .qc-card.highlight { border-color:var(--accent); background:var(--accent-light); }
-  .qc-card .qc-label { font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:7px; font-weight:600; }
-  .qc-card .qc-val { font-size:20px; color:var(--text); font-weight:700; }
+  .qc-card .qc-label { font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:7px; font-weight:600; }
+  .qc-card .qc-val { font-size:20px; color:var(--text); font-weight:700; font-family:'Space Grotesk',sans-serif; }
   .qc-card.highlight .qc-val { color:var(--accent); }
   .qc-card .qc-sub { font-size:12px; color:var(--dim); margin-top:4px; }
-  .qc-calc-btn { background:var(--bg3); border:2px solid var(--border); color:var(--text); padding:11px 18px; font-family:'Source Sans 3',sans-serif; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; transition:all 0.2s; border-radius:4px; }
+  .qc-calc-btn { background:var(--bg3); border:1px solid var(--border); color:var(--text); padding:11px 18px; font-family:'Space Grotesk',sans-serif; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; transition:all 0.2s; border-radius:6px; }
   .qc-calc-btn:hover { border-color:var(--accent); color:var(--accent); }
   /* Valutakurs-varsel */
-  .rate-box { background:var(--bg2); border:2px solid var(--border); padding:13px 16px; margin-bottom:16px; font-size:14px; display:flex; align-items:center; gap:10px; border-radius:6px; }
-  .rate-ok { border-color: #2d6a4f; color:#1d4d39; background:#e8f5ee; }
-  .rate-warn { border-color: #c07030; color:#7a4010; background:#fff3e6; }
-  .rate-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
-  .rate-dot-ok { background:#2d6a4f; }
-  .rate-dot-warn { background:#e07030; }
-  .rate-override-link { color:var(--accent); cursor:pointer; text-decoration:underline; font-size:13px; margin-left:auto; white-space:nowrap; font-weight:600; }
+  .rate-box { background:var(--bg2); border:1px solid var(--border); padding:12px 16px; margin-bottom:16px; font-size:13px; display:flex; align-items:center; gap:10px; border-radius:8px; color:var(--muted); }
+  .rate-ok { border-color:rgba(111,231,212,0.35); color:var(--accent); background:rgba(111,231,212,0.06); }
+  .rate-warn { border-color:rgba(232,163,100,0.35); color:var(--gold); background:var(--gold-bg); }
+  .rate-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .rate-dot-ok { background:var(--accent); }
+  .rate-dot-warn { background:var(--gold); }
+  .rate-override-link { color:var(--accent); cursor:pointer; text-decoration:underline; font-size:12px; margin-left:auto; white-space:nowrap; font-weight:600; }
   /* Modal */
-  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; }
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
   .modal-overlay.show { display:flex; }
-  .modal { background:#fff; border:2px solid var(--border); padding:32px; width:360px; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,0.18); }
-  .modal h3 { font-size:17px; color:var(--accent); font-weight:700; margin-bottom:14px; }
+  .modal { background:var(--bg2); border:1px solid var(--border); padding:32px; width:360px; border-radius:12px; box-shadow:0 16px 48px rgba(0,0,0,0.5); }
+  .modal h3 { font-size:17px; color:var(--text); font-weight:700; margin-bottom:14px; font-family:'Space Grotesk',sans-serif; }
   .modal p { font-size:14px; color:var(--muted); margin-bottom:18px; line-height:1.65; }
   .modal input { margin-bottom:18px; }
   .modal-btns { display:flex; gap:10px; }
-  .modal-btns button { flex:1; padding:11px; font-family:'Source Sans 3',sans-serif; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; border:none; cursor:pointer; transition:background 0.2s; border-radius:4px; }
-  .modal-btn-confirm { background:var(--accent); color:#fff; }
-  .modal-btn-confirm:hover { background:#254f7a; }
-  .modal-btn-cancel { background:var(--bg3); color:var(--text); border:2px solid var(--border); }
-  .modal-btn-cancel:hover { background:var(--border); }
+  .modal-btns button { flex:1; padding:11px; font-family:'Space Grotesk',sans-serif; font-size:14px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; border:none; cursor:pointer; transition:background 0.2s; border-radius:6px; }
+  .modal-btn-confirm { background:var(--accent); color:#0A0C11; }
+  .modal-btn-confirm:hover { background:var(--gold-light); }
+  .modal-btn-cancel { background:var(--bg3); color:var(--text); border:1px solid var(--border); }
+  .modal-btn-cancel:hover { border-color:var(--accent); }
 
 
 
@@ -183,59 +194,59 @@
     padding:1px 3px;
     border-radius:2px;
   }
-  .pris-val:hover { background:#f0f4ff; }
-  .pris-val:focus { background:#fffbe6; outline:2px solid #1a3a5c; border-bottom:none; }
+  .pris-val:hover { background:rgba(111,231,212,0.08); }
+  .pris-val:focus { background:rgba(111,231,212,0.12); outline:2px solid var(--accent); border-bottom:none; }
   .editable-val {
     display:inline-block;
     min-width:40px;
-    border-bottom:1px dashed #aaa;
+    border-bottom:1px dashed rgba(255,255,255,0.2);
     cursor:text;
     padding:1px 3px;
     border-radius:2px;
     transition:background 0.15s;
   }
-  .editable-val:hover { background:#f0f4ff; }
-  .editable-val:focus { background:#fffbe6; outline:2px solid #1a3a5c; border-bottom:none; }
+  .editable-val:hover { background:rgba(111,231,212,0.08); }
+  .editable-val:focus { background:rgba(111,231,212,0.12); outline:2px solid var(--accent); border-bottom:none; }
   .edited-mark {
     display:inline-block;
     width:7px; height:7px;
-    background:#e07040;
+    background:var(--gold);
     border-radius:50%;
     margin-left:5px;
     vertical-align:middle;
     flex-shrink:0;
   }
   /* Alternativ posisjon - grå/inaktiv */
-  .product-header-alt { background:#9aa5b4; color:#fff; padding:8px 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .alt-badge { display:inline-block; background:#6b7a8d; color:#fff; font-size:9px; font-weight:700; letter-spacing:0.15em; padding:2px 7px; margin-left:8px; vertical-align:middle; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .alt-note { background:#f0f2f5; border:1px solid #c0c8d4; color:#6b7a8d; font-size:11px; padding:6px 10px; font-style:italic; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .product-section-alt { opacity:0.7; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .product-header-alt { background:#2a3040; color:#9BA3B0; padding:8px 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .alt-badge { display:inline-block; background:#3a4255; color:#9BA3B0; font-size:9px; font-weight:700; letter-spacing:0.15em; padding:2px 7px; margin-left:8px; vertical-align:middle; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .alt-note { background:var(--bg3); border:1px solid var(--border); color:var(--muted); font-size:11px; padding:6px 10px; font-style:italic; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .product-section-alt { opacity:0.6; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   /* Fane-navigasjon */
   .tab-nav {
     display:flex; gap:0;
-    border-bottom:2px solid var(--accent);
+    border-bottom:1px solid var(--border);
     margin-bottom:0;
   }
   .tab-btn {
     padding:11px 28px;
-    font-family:'Source Sans 3',sans-serif;
-    font-size:14px; font-weight:700;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:13px; font-weight:700;
     letter-spacing:0.06em; text-transform:uppercase;
-    border:none; border-bottom:none;
+    border:none; border-bottom:2px solid transparent;
     cursor:pointer;
-    background:var(--bg3);
+    background:transparent;
     color:var(--muted);
-    border-radius:6px 6px 0 0;
     margin-right:4px;
-    transition:background 0.15s, color 0.15s;
+    transition:color 0.15s, border-color 0.15s;
+    margin-bottom:-1px;
   }
   .tab-btn.active {
-    background:var(--accent);
-    color:#fff;
+    background:transparent;
+    color:var(--accent);
+    border-bottom-color:var(--accent);
   }
   .tab-btn:not(.active):hover {
-    background:#dde4ef;
-    color:var(--accent);
+    color:var(--text);
   }
   .product-layout { display:flex; align-items:flex-start; gap:0; }
   .product-skisse {
@@ -243,18 +254,18 @@
     flex-shrink:0;
     padding:10px 8px;
     display:flex; flex-direction:column; align-items:center; gap:6px;
-    border-right:1px solid #dde2ea;
-    background:#fafbfc;
+    border-right:1px solid rgba(255,255,255,0.07);
+    background:var(--bg3);
     box-sizing:border-box;
     overflow:visible;
     position:relative;
     transition:background 0.15s, border-color 0.15s;
   }
-  .product-skisse.alt-skisse { border-right-color:#c0c8d4; background:#f4f5f7; }
+  .product-skisse.alt-skisse { border-right-color:rgba(255,255,255,0.05); background:rgba(255,255,255,0.02); }
   .product-skisse.skisse-drag-over {
-    background:#e8eef6 !important;
-    border-color:#1a3a5c !important;
-    outline:2px dashed #1a3a5c;
+    background:var(--accent-light) !important;
+    border-color:var(--accent) !important;
+    outline:2px dashed var(--accent);
     outline-offset:-3px;
   }
   .product-skisse img {
@@ -266,18 +277,18 @@
     margin:0 auto;
   }
   .skisse-override-btn {
-    font-size:10px; color:#888; background:none; border:1px dashed #ccc;
+    font-size:10px; color:var(--dim); background:none; border:1px dashed rgba(255,255,255,0.15);
     border-radius:3px; padding:3px 7px; cursor:pointer; width:100%;
-    font-family:'Source Sans 3',sans-serif;
+    font-family:'Inter',sans-serif;
   }
-  .skisse-override-btn:hover { color:#1a3a5c; border-color:#1a3a5c; }
+  .skisse-override-btn:hover { color:var(--accent); border-color:var(--accent); }
   .skisse-vnr {
-    font-size:11px; font-weight:700; color:#1a3a5c; text-align:center;
+    font-size:11px; font-weight:700; color:var(--accent); text-align:center;
     letter-spacing:0.08em; min-height:16px; width:100%;
     border-radius:2px; padding:1px 4px;
   }
-  .skisse-vnr:hover { background:#fffbe6; outline:1px dashed #c8a96e; cursor:text; }
-  .skisse-vnr:focus { background:#fffbe6; outline:2px solid #1a3a5c; }
+  .skisse-vnr:hover { background:var(--gold-bg); outline:1px dashed var(--gold); cursor:text; }
+  .skisse-vnr:focus { background:var(--gold-bg); outline:2px solid var(--accent); }
   @media print { .skisse-vnr:empty { display:none; } }
   .skisse-missing {
     width:100%; aspect-ratio:3/4; background:#f0f2f5;
@@ -439,7 +450,7 @@
 <div class="header">
   <div>
     <div class="logo-name">MER KAPITAL</div>
-    <div class="logo-sub">Tilbudsverktøy</div>
+    <div class="logo-sub">Tilbudsverktøy — <span id="header-kunde-navn" style="font-weight:700;"></span></div>
   </div>
   <div style="display:flex;align-items:center;gap:16px;">
     <div id="today-date" style="font-size:15px;color:var(--muted);font-weight:600;"></div>
@@ -473,6 +484,42 @@
       <!-- Venstre -->
       <div>
         <div class="section-title">01 — Last opp tilbud fra produsent</div>
+
+        <!-- Fabrikk-velger -->
+        <div class="field" style="margin-bottom:16px;">
+          <div class="label">Fabrikk / produsent</div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:4px;">
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text);">
+              <input type="radio" name="fabrikk" value="hctc" checked
+                style="width:auto;margin:0;accent-color:var(--accent);"
+                onchange="FABRIKK='hctc'; document.getElementById('faktor-label').textContent='Faktorpåslag (HCTC)'; oppdaterFabrikkHint();" />
+              HCTC
+            </label>
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text);">
+              <input type="radio" name="fabrikk" value="aradas"
+                style="width:auto;margin:0;accent-color:var(--accent);"
+                onchange="FABRIKK='aradas'; document.getElementById('faktor-label').textContent='Faktorpåslag (Aradas)'; oppdaterFabrikkHint();" />
+              Aradas (Litauen)
+            </label>
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text);">
+              <input type="radio" name="fabrikk" value="aldens"
+                style="width:auto;margin:0;accent-color:var(--accent);"
+                onchange="FABRIKK='aldens'; document.getElementById('faktor-label').textContent='Faktorpåslag (Aldens)'; oppdaterFabrikkHint();" />
+              Aldens (Latvia)
+            </label>
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text);">
+              <input type="radio" name="fabrikk" value="aliuminatas"
+                style="width:auto;margin:0;accent-color:var(--accent);"
+                onchange="FABRIKK='aliuminatas'; document.getElementById('faktor-label').textContent='Faktorpåslag (Aliuminatas)'; oppdaterFabrikkHint();" />
+              Aliuminatas (Litauen)
+            </label>
+          </div>
+          <div id="fabrikk-hint-aradas" style="display:none;font-size:12px;color:var(--muted);margin-top:6px;background:var(--gold-bg);border:1px solid var(--gold);border-radius:4px;padding:7px 10px;">
+            💡 <strong id="fabrikk-hint-navn">Aradas:</strong> Faktorpåslag × fabrikk EUR-pris = NOK kundepris.
+            For 30% dekning: faktor ≈ <span id="hint-faktor">—</span>
+          </div>
+        </div>
+
         <div class="label" style="margin-bottom:4px;">Tilbud fra produsent 1 <span style="color:var(--gold);font-size:9px;">(påkrevd)</span></div>
         <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
           <input type="file" id="file-input" accept=".pdf" onclick="event.stopPropagation()" />
@@ -541,8 +588,8 @@
           <input type="number" id="qc-rabatt" placeholder="f.eks. 40" step="0.1" oninput="calcQuick()" />
         </div>
         <div>
-          <div class="label">Faktorpåslag</div>
-          <input type="number" id="faktor" placeholder="f.eks. 9" step="0.1" oninput="syncFaktor2(); calcQuick()" />
+          <div class="label" id="faktor-label">Faktorpåslag (HCTC)</div>
+          <input type="number" id="faktor" placeholder="f.eks. 9" step="0.1" oninput="syncFaktor2(); calcQuick(); oppdaterAradasHint()" />
         </div>
       </div>
 
@@ -839,7 +886,11 @@ ${klon.outerHTML}
   }
 
   const SELGERE = {
-    'Marius': { fornavn:'Marius',  navn:'Marius Nielsen Matatula', mob:'48355995',  epost:'marius@merkapital.no'},
+    'Bente':  { fornavn:'Bente',  navn:'Bente Jul-Larsen',        mob:'98653255',  epost:'bente@norwin.no'},
+    'Grete':  { fornavn:'Grete',  navn:'Grete Holt',              mob:'47910660',  epost:'grete@norwin.no'},
+    'Marius': { fornavn:'Marius', navn:'Marius Nielsen Matatula', mob:'48355995',  epost:'marius@merkapital.no'},
+    'Per':    { fornavn:'Per',    navn:'Per Schiøtz',             mob:'90583823',  epost:'per@norwin.no'},
+    'Tom':    { fornavn:'Tom',    navn:'Tom Ektvedt',             mob:'98826002',  epost:'tom@norwin.no'},
   };
 
   function filterSelger(val, showAll) {
@@ -946,11 +997,20 @@ ${klon.outerHTML}
   const RATE_DATE_KEY  = 'merkapital_eur_date';
   let rateIsOfficial = false;
   let FALLBACK_RATE = 11.20; // Oppdateres automatisk når offisiell kurs hentes
+  let FABRIKK = 'hctc'; // 'hctc' | 'aradas' | 'aldens' | 'aliuminatas' — settes av fabrikk-velger i UI
+
+  // ── KUNDEPROFIL ─────────────────────────────────────────────────────────────
+  // Tilpass disse verdiene per kunde/deployment (én versjon per bedrift).
+  // Skjuler konfigurasjonen mellom kunder — kun aktuelle fabrikker og selgere vises.
+  const KUNDE_PROFIL = {
+    navn:      'Norwin AS',                                       // Kundens firmanavn
+    fabrikker: ['hctc', 'aradas', 'aldens', 'aliuminatas'],      // Fabrikker denne kunden bruker
+  };
 
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-05-26-v11';
+  const APP_VERSION = '2026-06-22-v15';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -1976,8 +2036,683 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // END PARSER
+  // END NORWIN PARSER
   // ══════════════════════════════════════════════════════════════════════════
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ARADAS PARSER — Parses Norwegian-language Aradas (Lithuania) PDF offers
+  // Aradas PDFs are already in Norwegian — no translation needed.
+  // Price model: NOK = faktorpåslag × EUR fabrikk-pris (direct factory price, no list/discount)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** Hoved-parser for Aradas fabrikktilbud. */
+  function parseAradasPDF(rawText, valutakurs, faktorInput) {
+    const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+    // ── HEADER ──────────────────────────────────────────────────────────────
+    let tilbudsNr = '', dato = '', prosjekt = '', kunde = '', kadr = '', epost = '', mob = '';
+
+    for (const ln of lines) {
+      let r;
+      if (!tilbudsNr && (r = ln.match(/^Tilbudsnummer\s*:\s*(.+)/i)))
+        tilbudsNr = r[1].trim().replace(/,?\s*skrevet ut.*/i, '').trim();
+      if (!prosjekt && (r = ln.match(/^Prosjektets\s+navn\s*:\s*(.+)/i)))
+        prosjekt = r[1].trim();
+      if (!kunde && (r = ln.match(/^Kunde\s*:\s*(.+)/i)))
+        kunde = r[1].trim();
+      if (!kadr && (r = ln.match(/^Adresse\s*:\s*(.+)/i)) && r[1].trim())
+        kadr = r[1].trim();
+      if (!epost && (r = ln.match(/^E-post\s*:\s*(.+)/i)) && r[1].trim())
+        epost = r[1].trim();
+      if (!mob && (r = ln.match(/^Mobil\s*:\s*(.+)/i)) && r[1].trim())
+        mob = r[1].trim();
+    }
+
+    // Extract date from "skrevet ut DD/MM/YYYY" in Tilbudsnummer line
+    const datM = rawText.match(/skrevet ut\s+(\d{2})\/(\d{2})\/(\d{4})/i);
+    if (datM) dato = `${datM[3]}-${datM[2]}-${datM[1]}`;
+    else dato = new Date().toISOString().slice(0, 10);
+
+    // ── FINN PRODUKTBLOKKER ──────────────────────────────────────────────────
+    // Aradas-format: "V1 900 x 2150 mm." eller "LD2 2100 x 3245 mm."
+    // extractPdfTextLayout grupperer "V1" og "900 x 2150 mm." på samme linje
+    const PROD_RE = /^([A-Z]{1,3}\d+[a-z]?)\s+(\d[\d\s,.]*)\s*[xX×]\s*(\d[\d\s,.]*)\s*mm\.?\s*$/i;
+    const blockStarts = [];
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(PROD_RE);
+      if (m) {
+        // Sanitize dimensions (remove internal spaces from e.g. "2 270")
+        const w = m[2].replace(/\s/g, '').replace(',', '.');
+        const h = m[3].replace(/\s/g, '').replace(',', '.');
+        blockStarts.push({ posId: m[1], posNr: blockStarts.length + 1, lineIdx: i, w, h });
+      }
+    }
+
+    if (!blockStarts.length)
+      throw new Error('Fant ingen produktposisjoner i PDF-teksten. Kontroller at riktig fabrikk er valgt (Aradas-format krever V1/V2/LD2-posisjonskoder).');
+
+    // Faktor: bruk brukerens input eller regn ut fra 30% dekning som default
+    const faktor = faktorInput && faktorInput > 0
+      ? faktorInput
+      : _r2(valutakurs / 0.70);
+
+    // Build vnrMap: {posNr: 'V1'} for rendering
+    const vnrMap = {};
+    blockStarts.forEach(bs => { vnrMap[bs.posNr] = bs.posId; });
+
+    // ── PARSE HVERT PRODUKT ──────────────────────────────────────────────────
+    const produkter = blockStarts.map((bs, idx) => {
+      const endIdx = idx + 1 < blockStarts.length ? blockStarts[idx + 1].lineIdx : lines.length;
+      const p = _parseAradasBlock(lines.slice(bs.lineIdx, endIdx), bs.posId, bs.w, bs.h, faktor);
+      p.n = bs.posNr;
+      return p;
+    });
+
+    // ── TOTALER ──────────────────────────────────────────────────────────────
+    const main   = produkter.filter(p => !p.alt);
+    const eksMva = _r2(main.reduce((s, p) => s + p.sum, 0));
+    const mva    = _r2(eksMva * 0.25);
+    const tot    = _r2(eksMva + mva);
+
+    // U-verdi og vekt fra totalseksjonen
+    let uvVal = null, vektVal = null;
+    for (const ln of lines) {
+      let r;
+      if ((r = ln.match(/[Ss]nitt\s*[Uu]-?verdi[^:]*[:\s]+([\d.,]+)/)))
+        uvVal = parseFloat(r[1].replace(',', '.'));
+      if ((r = ln.match(/[Tt]otal\s+(?:antall\s+)?vekt[^:]*[:\s]+([\d.,]+)\s*kg/)))
+        vektVal = parseFloat(r[1].replace(/[\s.]/g, '').replace(',', '.'));
+    }
+
+    const res = { t: tilbudsNr, d: dato, r: 0, kunde, kontakt: '', kadr, mob, epost, prosjekt,
+                  p: produkter, eksMva, mva, tot, _vnrMap: vnrMap, _fabrikk: 'aradas' };
+    if (uvVal   != null) res.uv   = uvVal;
+    if (vektVal != null) res.vekt = vektVal;
+    return res;
+  }
+
+  /** Parser for ett Aradas-produktblok. */
+  function _parseAradasBlock(blockLines, posId, dimW, dimH, faktor) {
+    let m2 = 0, eurPris = 0, ant = 1;
+    const specs = [];
+
+    // Felt-regex: "Label: value" eller "Label (detail): value"
+    // Aradas-spesifikke felt som mappes til norsk standard
+    const ARADAS_FIELD_RE = /^(.+?)\s*:\s*(.*)\s*$/;
+
+    // Tilstands-flagg for multi-line verdier
+    let curLabel = null, curVal = '';
+    let awaitingStk = false, awaitingAnt = false, awaitingTotVal = false;
+    let m2Found = false;
+
+    const save = () => {
+      if (curLabel && curVal.trim()) {
+        _aradasAddSpec(specs, curLabel, curVal.trim());
+      }
+      curLabel = null; curVal = '';
+    };
+
+    // Linjer å hoppe over (footer, side-header etc.)
+    const SKIP_RE = /^(Tilbud$|Kundeinformasjon$|Salg$|Produksjon$|MVA-kode|Page \d|Resirkulerbare profiler|Generelle betingelser|Notater$)/i;
+
+    // Linjer som er del av adresse/kontaktinfo-footer i Aradas PDFs
+    const FOOTER_RE = /^(Švitrigailos|Gamybos|info@aradas|Adresse:|E-post:|Tlf\.|Produksjon Adresse)/i;
+
+    for (let i = 1; i < blockLines.length; i++) {
+      const ln = blockLines[i];
+
+      if (SKIP_RE.test(ln) || FOOTER_RE.test(ln)) { save(); continue; }
+
+      // m2-linje: "1,94 m2" (første gang vi ser et tall + m2)
+      if (!m2Found) {
+        const m2m = ln.match(/^([\d,.]+)\s*m[²2]\s*$/i);
+        if (m2m) { m2 = parseFloat(m2m[1].replace(',', '.')); m2Found = true; continue; }
+      }
+
+      // Pris-linje: "Stk. prisen, € 203,29" (samme linje) eller to linjer
+      const stkPrisM = ln.match(/^Stk\.?\s+prisen[,\s]*€?\s+([\d.,]+)\s*$/i);
+      if (stkPrisM) {
+        eurPris = _parsEur(stkPrisM[1]); awaitingStk = false; save(); continue;
+      }
+      if (/^Stk\.?\s+prisen[,\s]*€?\s*$/i.test(ln)) { awaitingStk = true; save(); continue; }
+      if (awaitingStk) {
+        const v = _parsEur(ln);
+        if (v > 0) { eurPris = v; awaitingStk = false; continue; }
+      }
+
+      // Antall-linje: "Stk. 2" (samme linje) eller to linjer
+      const stkAntM = ln.match(/^Stk\.?\s+(\d+)\s*$/i);
+      if (stkAntM) { ant = parseInt(stkAntM[1]); awaitingAnt = false; save(); continue; }
+      if (/^Stk\.?\s*$/i.test(ln)) { awaitingAnt = true; save(); continue; }
+      if (awaitingAnt) {
+        const v = parseInt(ln);
+        if (!isNaN(v) && v > 0) { ant = v; awaitingAnt = false; continue; }
+      }
+
+      // Total-linje: hopp over (vi beregner selv)
+      if (/^Totalt[,\s]*€?/i.test(ln)) { awaitingTotVal = true; save(); continue; }
+      if (awaitingTotVal) { awaitingTotVal = false; continue; }
+
+      // Totalsum/MVA-linje på siste side
+      if (/^(Totalt\s+€:|Mva\s+\d|Totalt inkl)/i.test(ln)) { save(); continue; }
+
+      // "Profiler:" — section header uten verdi
+      if (/^Profiler\s*:?\s*$/i.test(ln)) { save(); continue; }
+
+      // Foringsnot-underlinjer: "venstre: 10x10, topp: 10x10, høyre: 10x10, bunn: 10x10"
+      if (/^(venstre|topp|høyre|bunn)\s*:/i.test(ln)) {
+        const existing = specs.find(s => s.l === 'Foringsnot');
+        if (existing) existing.v += ', ' + ln.replace(/\s+/g, ' ');
+        else specs.push({ l: 'Foringsnot', v: ln.replace(/\s+/g, ' ') });
+        continue;
+      }
+
+      // Monteringsmateriell-fortsettelse: "toppen,bunn,venstre,høyre"
+      if (/^(toppen|bunn|venstre|høyre)[,\s]/i.test(ln)) {
+        const existing = specs.find(s => s.l === 'Monteringsmateriell');
+        if (existing) existing.v += ' ' + ln;
+        continue;
+      }
+
+      // Felt med kolon
+      const fm = ln.match(ARADAS_FIELD_RE);
+      if (fm) {
+        save();
+        const rawLabel = fm[1].trim();
+        const rawVal   = fm[2].trim();
+
+        // Skip kontaktinfo og ikke-relevante felt
+        if (/^(Kunde|Adresse|E-post|Mobil|MVA-kode|Tilbudsnummer|Prosjektets navn|Resirkulerbare profiler)$/i.test(rawLabel)) continue;
+
+        if (rawLabel === '' || !rawVal && !_isMultilineField(rawLabel)) continue;
+
+        curLabel = rawLabel;
+        curVal   = rawVal;
+        continue;
+      }
+
+      // Kontinuasjonslinje for felt som strekker seg over flere linjer
+      if (curLabel && ln && !ln.match(/^\d+\s*stk\b/i)) {
+        curVal = (curVal ? curVal + ' ' : '') + ln;
+      }
+    }
+    save();
+
+    // Sorter specs i fornuftig rekkefølge
+    const SPEC_ORDER = ['Type', 'Åpningsretning', 'Profilfarge', 'Dreneringskapper',
+                        'Karm', 'Karm post/losholt', 'Kobling innvendig', 'Glasslist',
+                        'Glass', 'Spacer', 'Foringsnot', 'Pakninger', 'Drenering',
+                        'Monteringsmateriell', 'Beslag', 'Håndtak', 'Hengsler',
+                        'Låssylinder', 'Terskel', 'Ramme', 'Vekt/U-verdi', 'Notater'];
+    specs.sort((a, b) => {
+      const ia = SPEC_ORDER.indexOf(a.l);
+      const ib = SPEC_ORDER.indexOf(b.l);
+      if (ia === -1 && ib === -1) return 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+
+    const nok = _r2(faktor * eurPris);
+    const sum = _r2(nok * ant);
+    return { n: 0, dim: dimW + 'x' + dimH + 'mm', m2, ant, eur: eurPris, nok, sum, alt: false, s: specs };
+  }
+
+  function _parsEur(str) {
+    // "1.852,42" → 1852.42 (norsk/EU tallformat)
+    if (!str) return 0;
+    const s = str.trim().replace(/\s/g, '');
+    // Dersom det er punktum som tusen-separator (1.852,42), konverter
+    if (s.includes(',') && s.includes('.')) {
+      return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+    }
+    // Komma som desimaltegn (203,29)
+    if (s.includes(',')) return parseFloat(s.replace(',', '.')) || 0;
+    return parseFloat(s) || 0;
+  }
+
+  function _isMultilineField(label) {
+    // Felt som kan ha verdier som fortsetter på neste linje
+    return /^(Profilfarge|Dreneringskapper|Glasskassett|Kobling innvendig|Foringsnot|Notater)/i.test(label);
+  }
+
+  /** Legger til en Aradas spec-post med label-mapping til norsk standard. */
+  function _aradasAddSpec(specs, rawLabel, rawVal) {
+    const add = (l, v) => { if (v && v.trim()) specs.push({ l, v: v.trim() }); };
+
+    // Label-mapping
+    if (/^Type$/i.test(rawLabel))                           add('Type', rawVal);
+    else if (/^Tegning$/i.test(rawLabel))                   add('Åpningsretning', rawVal);
+    else if (/^Profilfarge/i.test(rawLabel))                add('Profilfarge', rawVal);
+    else if (/^Dreneringskapper/i.test(rawLabel))           add('Dreneringskapper', rawVal);
+    else if (/^Profilbasisfarge/i.test(rawLabel))           { /* skip — intern info */ }
+    else if (/^Pakninger$/i.test(rawLabel))                 add('Pakninger', rawVal);
+    else if (/^Karm post/i.test(rawLabel))                  add('Karm post/losholt', rawVal);
+    else if (/^Karm$/i.test(rawLabel))                      add('Karm', rawVal);
+    else if (/^Kobling innvendig$/i.test(rawLabel))         add('Kobling innvendig', rawVal);
+    else if (/^Glasslist$/i.test(rawLabel))                 add('Glasslist', rawVal);
+    else if (/^Glasskassett$/i.test(rawLabel))              add('Glass', rawVal);
+    else if (/^Spacer$/i.test(rawLabel))                    add('Spacer', rawVal);
+    else if (/^Foringsnot$/i.test(rawLabel))                add('Foringsnot', rawVal);
+    else if (/^Drenering$/i.test(rawLabel))                 add('Drenering', rawVal);
+    else if (/^Monteringsmateriell$/i.test(rawLabel))       add('Monteringsmateriell', rawVal);
+    else if (/^Vekt$/i.test(rawLabel) || /^Vekt,/i.test(rawLabel))
+                                                            add('Vekt/U-verdi', rawVal);
+    else if (/^Beslag$/i.test(rawLabel))                    add('Beslag', rawVal);
+    else if (/^Håndtak$/i.test(rawLabel))                   add('Håndtak', rawVal);
+    else if (/^Hengsler$/i.test(rawLabel))                  add('Hengsler', rawVal);
+    else if (/^Låssylinder$/i.test(rawLabel))               add('Låssylinder', rawVal);
+    else if (/^Terskel$/i.test(rawLabel))                   add('Terskel', rawVal);
+    else if (/^Ramme$/i.test(rawLabel))                     add('Ramme', rawVal);
+    else if (/^Notater$/i.test(rawLabel))                   add('Notater', rawVal);
+    // Andre felt med verdi: legg til som-er
+    else if (rawVal) add(rawLabel, rawVal);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ARADAS IMAGE EXTRACTOR
+  // Bruker pdf.js operator list til å finne nøyaktig plassering av
+  // produkttegninger i PDF-en og ekstraherer dem per produkt.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async function extractPdfSkisserAradas(file) {
+    const pdfjsLib = window.pdfjsLib;
+    if (!pdfjsLib) throw new Error('PDF-biblioteket ikke lastet.');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.js';
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    const skisser = {};   // {posNr: base64}
+    const vnrMap  = {};   // {posNr: 'V1'}
+    const PROD_RE = /^([A-Z]{1,3}\d+[a-z]?)\s+\d/i;
+    const scale   = 1.5;
+    let   globalSeq = 1;
+
+    for (let pn = 1; pn <= pdf.numPages; pn++) {
+      const page = await pdf.getPage(pn);
+      const vp1  = page.getViewport({ scale: 1.0 });
+      const tc   = await page.getTextContent();
+
+      // Finn produkter på denne siden (posId + y-posisjon i PDF-pts)
+      const prodItems = tc.items
+        .map(it => ({ str: it.str.trim(), y: it.transform[5], x: it.transform[4] }))
+        .filter(it => PROD_RE.test(it.str) && it.x < 60);
+
+      if (prodItems.length === 0) continue;
+      prodItems.sort((a, b) => b.y - a.y); // topp-til-bunn
+
+      // Render siden
+      const vp     = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+
+      // Hent operator list for å finne bildeposisjoner
+      let imagePlacements = [];
+      try {
+        const opList = await page.getOperatorList();
+        const OPS    = pdfjsLib.OPS;
+
+        // Spor current transformation matrix (CTM)
+        // CTM = [a, b, c, d, e, f] — standard PDF 2D affine transform
+        let ctmStack = [[1, 0, 0, 1, 0, 0]];
+        const multiplyCtm = (m1, m2) => {
+          const [a1,b1,c1,d1,e1,f1] = m1;
+          const [a2,b2,c2,d2,e2,f2] = m2;
+          return [a1*a2+c1*b2, b1*a2+d1*b2, a1*c2+c1*d2, b1*c2+d1*d2,
+                  a1*e2+c1*f2+e1, b1*e2+d1*f2+f1];
+        };
+
+        for (let oi = 0; oi < opList.fnArray.length; oi++) {
+          const fn   = opList.fnArray[oi];
+          const args = opList.argsArray[oi];
+
+          if      (fn === OPS.save)        ctmStack.push([...ctmStack[ctmStack.length-1]]);
+          else if (fn === OPS.restore)     { if (ctmStack.length > 1) ctmStack.pop(); }
+          else if (fn === OPS.transform)   ctmStack[ctmStack.length-1] = multiplyCtm(ctmStack[ctmStack.length-1], args);
+          else if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject) {
+            const [a,b,c,d,e,f] = ctmStack[ctmStack.length-1];
+            // Bildets bounding box i PDF-punkter
+            const imgW = Math.abs(a + c);
+            const imgH = Math.abs(b + d);
+            const imgX = Math.min(e, e+a, e+c, e+a+c);
+            const imgY = Math.min(f, f+b, f+d, f+b+d);
+            imagePlacements.push({ x: imgX, y: imgY, w: imgW, h: imgH });
+          }
+        }
+      } catch(e) {
+        // Fallback: ignorerer operatorer, bruker heuristisk crop
+      }
+
+      // Store tegninger: bredde OG høyde > 80pt (ikke logoer)
+      const drawings = imagePlacements.filter(img => img.w > 80 && img.h > 80);
+
+      for (let pi = 0; pi < prodItems.length; pi++) {
+        const prod      = prodItems[pi];
+        const posMatch  = prod.str.match(PROD_RE);
+        const posId     = posMatch ? posMatch[1] : `P${globalSeq}`;
+        const prodY     = prod.y; // PDF y (bunn til topp)
+        const nextProd  = prodItems[pi + 1];
+        const yLow      = nextProd ? nextProd.y : 0;
+
+        vnrMap[globalSeq] = posId;
+
+        // Finn tegningene innenfor dette produktets y-område
+        // I PDF-koordinater: produktets posId er i toppen, priser er i bunnen
+        let relevantDrawings = drawings.filter(img =>
+          img.y >= (yLow - 10) && img.y <= (prodY + 30)
+        );
+
+        // Fallback: alle store bilder på siden (for enkelt-produkt-sider)
+        if (relevantDrawings.length === 0 && prodItems.length === 1) {
+          relevantDrawings = drawings;
+        }
+
+        if (relevantDrawings.length > 0) {
+          // Ta den største tegningen
+          const drawing = relevantDrawings.sort((a, b) => (b.w * b.h) - (a.w * a.h))[0];
+
+          // Konverter fra PDF-punkter til canvas-piksler
+          // PDF y=0 er bunnen; canvas y=0 er toppen
+          const cX = Math.floor(drawing.x * scale);
+          const cW = Math.floor(drawing.w * scale);
+          const cH = Math.floor(drawing.h * scale);
+          const cY = Math.floor(vp.height - (drawing.y + drawing.h) * scale);
+
+          if (cW > 20 && cH > 20 && cX >= 0 && cY >= 0 && cX + cW <= canvas.width && cY + cH <= canvas.height) {
+            // Normaliser til maks 500px
+            const maxSide = 500;
+            const aspect  = cW / cH;
+            const nW = aspect >= 1 ? maxSide : Math.round(maxSide * aspect);
+            const nH = aspect >= 1 ? Math.round(maxSide / aspect) : maxSide;
+            const nc = document.createElement('canvas');
+            nc.width = nW; nc.height = nH;
+            const nCtx = nc.getContext('2d');
+            nCtx.fillStyle = '#ffffff'; nCtx.fillRect(0, 0, nW, nH);
+            nCtx.drawImage(canvas, cX, cY, cW, cH, 0, 0, nW, nH);
+            skisser[globalSeq] = nc.toDataURL('image/png').split(',')[1];
+          } else {
+            // Koordinater utenfor canvas — bruk side-crop fallback
+            skisser[globalSeq] = _aradasSideCrop(canvas, vp, pi, prodItems.length);
+          }
+        } else {
+          // Ingen operatorer funnet — fallback til heuristisk side-crop
+          skisser[globalSeq] = _aradasSideCrop(canvas, vp, pi, prodItems.length);
+        }
+
+        globalSeq++;
+      }
+    }
+
+    return { skisser, vnrMap };
+  }
+
+  /** Fallback: deler siden i N horisontale bånd og returnerer midtdelen av båndet. */
+  function _aradasSideCrop(canvas, vp, idx, total) {
+    const bandH = Math.floor(vp.height / total);
+    const cropY = Math.floor(bandH * idx + bandH * 0.15);
+    const cropH = Math.floor(bandH * 0.70);
+    const cropW = Math.floor(vp.width * 0.55);
+    const cc = document.createElement('canvas');
+    cc.width = cropW; cc.height = Math.max(10, cropH);
+    cc.getContext('2d').drawImage(canvas, 0, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    return cc.toDataURL('image/png').split(',')[1];
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // END ARADAS PARSER + IMAGE EXTRACTOR
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── ALDENS-PARSER (SIA "ALDENS HOLDING", Riga, Latvia) ─────────────────────────
+  // Tilbudsformat: engelsk, produkter på venstre side, priser på høyre side
+  // Tekstekstraksjon gir: alle "Pos. ALU-N  [system] (B=W, H=H)" + "Pcs." FØRST,
+  // deretter alle "Total without VAT: X,XX" priser i samme rekkefølge.
+  function parseAldensPDF(rawText, valutakurs, faktorInput) {
+    function parseEurNum(s) {
+      if (!s) return 0;
+      s = s.trim().replace(/[^\d., ]/g, '').trim();
+      // "1 296,64" (eurostil) eller "1296.64"
+      if (s.includes(',')) return parseFloat(s.replace(/[\s]/g,'').replace(',','.')) || 0;
+      return parseFloat(s.replace(/\s/g,'')) || 0;
+    }
+
+    // Prosjektinfo
+    let prosjekt = '';
+    const projM = rawText.match(/Project:\s*(.+)/);
+    if (projM) prosjekt = projM[1].trim();
+
+    let dato = '';
+    const dateM = rawText.match(/(\d{2}\.\d{2}\.\d{4})/);
+    if (dateM) dato = dateM[1];
+
+    // System/serienavn (f.eks. "MB-79N E")
+    const sysM = rawText.match(/systems:\s*\(([^)]+)\)/);
+    const systemNavn = sysM ? sysM[1].trim() : '';
+
+    // Farger
+    const colorM = rawText.match(/Profile colour:\s*(.+)/);
+    const farge = colorM ? colorM[1].trim() : '';
+
+    // Glass
+    const glassM = rawText.match(/Glasses:\s*(.+)/);
+    const glass = glassM ? glassM[1].trim() : '';
+
+    // Finn alle produktposisjoner: "Pos. ALU-N  [system] ..." med evt. fortsettelse på neste linje
+    const products = [];
+    const lines = rawText.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i].trim();
+      const posM = l.match(/^Pos\.\s+(ALU-\d+[a-zA-Z]*)\s+(.*)/);
+      if (!posM) continue;
+      const posId = posM[1];
+      let descFull = posM[2];
+      // Samle neste linjer frem til (B= ... H=...) er funnet
+      for (let j = i+1; j < Math.min(i+4, lines.length); j++) {
+        const nxt = lines[j].trim();
+        if (!nxt || nxt.match(/^(Pcs\.|Construction:|Price:|SUM:|\d+$)/)) break;
+        descFull += ' ' + nxt;
+        if (nxt.includes(')')) break;
+      }
+      // Parse mål fra "(B=1 390, H=2 390)"
+      const dimM = descFull.match(/\(B=([\d\s]+),\s*H=([\d\s]+)\)/);
+      const dimW = dimM ? parseInt(dimM[1].replace(/\s/g,'')) : 0;
+      const dimH = dimM ? parseInt(dimM[2].replace(/\s/g,'')) : 0;
+
+      // Beskrivelse uten mål-parentes
+      const desc = descFull.replace(/\(B=.*?\)/,'').trim();
+
+      // Finn Pcs. i nærmeste linjer etter posisjonen
+      let pcs = 1;
+      for (let j = i+1; j < Math.min(i+6, lines.length); j++) {
+        const pcsM = lines[j].trim().match(/^Pcs\.:\s*(\d+)/);
+        if (pcsM) { pcs = parseInt(pcsM[1]); break; }
+      }
+      products.push({ posId, desc, dimW, dimH, pcs });
+    }
+
+    if (products.length === 0) {
+      throw new Error('Fant ingen produktposisjoner (Aldens). Sjekk at riktig fabrikk er valgt.');
+    }
+
+    // Finn alle "Total without VAT: X,XX" priser i tekstens rekkefølge
+    const vatPrices = [];
+    for (const l of lines) {
+      const vatM = l.trim().match(/^Total without VAT:\s*([\d\s,\.]+)/);
+      if (vatM) vatPrices.push(parseEurNum(vatM[1]));
+    }
+
+    const faktor = faktorInput || _r2(valutakurs / 0.70);
+
+    const finalProducts = products.map((prod, i) => {
+      const eurSum    = vatPrices[i] || 0;
+      const eurPerStk = prod.pcs > 0 ? _r2(eurSum / prod.pcs) : eurSum;
+      const nokPerStk = _r2(eurPerStk * faktor);
+      const sum       = _r2(nokPerStk * prod.pcs);
+      const dimStr    = prod.dimW && prod.dimH ? `${prod.dimW}×${prod.dimH} mm` : '';
+      const specs     = [];
+      if (prod.desc) specs.push({ l:'Type',    v: prod.desc.replace(/\(B=.*?\)/,'').replace(/\s+/g,' ').trim() });
+      if (dimStr)    specs.push({ l:'Mål',     v: dimStr });
+      if (systemNavn) specs.push({ l:'System', v: systemNavn });
+      if (farge)     specs.push({ l:'Farge',   v: farge });
+      if (glass)     specs.push({ l:'Glass',   v: glass });
+      return { n:i+1, dim:dimStr, m2:_r2(prod.dimW*prod.dimH/1e6*prod.pcs), ant:prod.pcs,
+               eur:eurPerStk, nok:nokPerStk, sum, alt:false, s:specs, _posId:prod.posId };
+    });
+
+    // Tillegg (hardware, pakking, levering) som separat linje
+    const extras = [];
+    const hwM    = rawText.match(/Hardware\s*\([^)]*\):\s*([\d\s,\.]+)\s*Eur/i);
+    const packM  = rawText.match(/Packing:\s*([\d\s,\.]+)\s*Eur/i);
+    const delivM = rawText.match(/Delivery:\s*([\d\s,\.]+)\s*Eur/i);
+    if (hwM)    extras.push(`Hardware: ${parseEurNum(hwM[1]).toFixed(2)} EUR`);
+    if (packM)  extras.push(`Pakking: ${parseEurNum(packM[1]).toFixed(2)} EUR`);
+    if (delivM) extras.push(`Levering: ${parseEurNum(delivM[1]).toFixed(2)} EUR`);
+    if (extras.length > 0 && finalProducts.length > 0) {
+      finalProducts[finalProducts.length-1].s.push({ l:'Tillegg fra fabrikk', v: extras.join(' | ') });
+    }
+
+    const eksMva = _r2(finalProducts.reduce((s,p) => s + p.sum, 0));
+    const mva    = _r2(eksMva * 0.25);
+    const tot    = _r2(eksMva + mva);
+
+    return {
+      t:'', d:dato, r:0,
+      kunde: (typeof KUNDE_PROFIL !== 'undefined' ? KUNDE_PROFIL.navn : 'Norwin AS'),
+      kontakt:'', kadr:'', mob:'', epost:'',
+      prosjekt, uv:'', vekt:'',
+      p: finalProducts, eksMva, mva, tot,
+      _vnrMap: Object.fromEntries(finalProducts.map((p,i) => [i+1, p._posId || `ALU-${i+1}`])),
+      _fabrikk: 'aldens'
+    };
+  }
+
+  // ── ALIUMINATAS-PARSER (ALIUMINATAS UAB, Vilnius, Lithuania) ──────────────────
+  // Tilbudsformat: engelsk, ett produkt per side, ALU-N header etter "Nx  seq"-linje
+  // Bildeblokker er JPEG-er embeddet i PDF (bruker Aradas-ekstraktor for bilder).
+  function parseAliuminatasPDF(rawText, valutakurs, faktorInput) {
+    function parseEurNum(s) {
+      if (!s) return 0;
+      s = s.trim().replace(/[^\d., ]/g, '').trim();
+      if (s.includes(',')) return parseFloat(s.replace(/[\s]/g,'').replace(',','.')) || 0;
+      return parseFloat(s.replace(/\s/g,'')) || 0;
+    }
+
+    // Tilbudsnummer og dato
+    let tilbudsNr = '';
+    const offerM = rawText.match(/OFFER No\.\s+(\S+)/);
+    if (offerM) tilbudsNr = offerM[1];
+
+    let dato = '';
+    const dateM = rawText.match(/OFFER DATE\s+(\d{4}-\d{2}-\d{2})/);
+    if (dateM) dato = dateM[1].split('-').reverse().join('.');
+
+    // Prosjekt
+    let prosjekt = '';
+    const projM = rawText.match(/PROJECT\s+(.+?)(?:\n|AGREEMENT)/);
+    if (projM) prosjekt = projM[1].trim();
+
+    // Finn alle "ALU-N" blokkstarter, og gå bakover for å finne antall (Nx)
+    const products = [];
+    const aluRe = /^(ALU-\d+[a-zA-Z]*)\s*$/gm;
+    let m;
+    while ((m = aluRe.exec(rawText)) !== null) {
+      const posId = m[1];
+      // Se bakover (maks 150 tegn) etter "Nx  seq"-mønster
+      const before = rawText.slice(Math.max(0, m.index - 150), m.index);
+      const qtyM   = before.match(/(\d+)x\s+\d+\s*\n\s*$/);
+      const qty     = qtyM ? parseInt(qtyM[1]) : 1;
+
+      // Finn slutten av denne blokken — neste ALU-N-linje eller ALIUMINATAS-footer
+      const rest     = rawText.slice(m.index);
+      const nextAlu  = rest.search(/\n(ALU-\d+[a-zA-Z]*)\s*\n/);
+      const footer   = rest.indexOf('ALIUMINATAS UAB');
+      let endOff     = Math.min(
+        nextAlu  > 0 ? nextAlu  : Infinity,
+        footer   > 0 ? footer   : Infinity,
+        2500
+      );
+      if (!isFinite(endOff)) endOff = rest.length;
+      const block = rest.slice(0, endOff);
+
+      // Mål "1390 mm x 2390 mm"
+      const dimM = block.match(/(\d{3,4})\s*mm\s*x\s*(\d{3,4})\s*mm/);
+      const dimW = dimM ? parseInt(dimM[1]) : 0;
+      const dimH = dimM ? parseInt(dimM[2]) : 0;
+      const dimStr = dimW && dimH ? `${dimW}×${dimH} mm` : '';
+
+      // System
+      const sysM = block.match(/Reynaers\s+[\w]+(?:\s+\d+)?/);
+      const system = sysM ? sysM[0].trim() : '';
+
+      // U-verdi
+      const uM   = block.match(/Uw value:\s*([\d,\.]+)\s*W/);
+      const uVal = uM ? uM[1].replace(',','.') : '';
+
+      // Pris: "= X XXX,XX EUR" (enkelt) eller "Nx X,XX EUR = TOTAL EUR" (flere)
+      let eurPerStk = 0;
+      const qtyPriceM  = block.match(/(\d+)x\s+([\d\s,\.]+)\s*EUR\s*=\s*([\d\s,\.]+)\s*EUR/);
+      const singleM    = block.match(/=\s*([\d\s,\.]+)\s*EUR\s*\n/);
+      if (qtyPriceM) {
+        eurPerStk = parseEurNum(qtyPriceM[2]);
+      } else if (singleM) {
+        const total = parseEurNum(singleM[1]);
+        eurPerStk   = qty > 1 ? _r2(total / qty) : total;
+      }
+
+      const nokPerStk = _r2(eurPerStk * (faktorInput || _r2(valutakurs / 0.70)));
+      const sum       = _r2(nokPerStk * qty);
+
+      // Specs
+      const specs = [];
+      if (system) specs.push({ l:'System', v:system });
+      if (dimStr) specs.push({ l:'Mål',    v:dimStr });
+      if (uVal)   specs.push({ l:'U-verdi',v:uVal+' W/(m²K)' });
+
+      // Farge (tekst mellom "Colours:\n" og neste overskrift)
+      const colorM = block.match(/Colours:\s*\n([\s\S]+?)(?=Glazing:|Panel:|Door hardware:|Bottom|Sum)/);
+      if (colorM) {
+        const c = colorM[1].trim().replace(/\s+/g,' ').substring(0,80);
+        if (c) specs.push({ l:'Farge', v:c });
+      }
+
+      // Glass eller panel
+      const glazM  = block.match(/Glazing:\s*\n([\s\S]+?)(?=Warm Edge|Door hardware:|Bottom|Sum)/);
+      const panelM = block.match(/Panel:\s*\n([\s\S]+?)(?=Door hardware:|Bottom|Sum)/);
+      if (glazM) {
+        const g = glazM[1].trim().replace(/\s+/g,' ').substring(0,100);
+        if (g) specs.push({ l:'Glass', v:g });
+      } else if (panelM) {
+        const p = panelM[1].trim().replace(/\s+/g,' ').substring(0,80);
+        if (p) specs.push({ l:'Panel', v:p });
+      }
+
+      products.push({
+        n: products.length+1, dim:dimStr,
+        m2: _r2(dimW*dimH/1e6*qty), ant:qty,
+        eur:eurPerStk, nok:nokPerStk, sum,
+        alt:false, s:specs, _posId:posId
+      });
+    }
+
+    if (products.length === 0) {
+      throw new Error('Fant ingen produktposisjoner (Aliuminatas). Sjekk at riktig fabrikk er valgt.');
+    }
+
+    const faktor = faktorInput || _r2(valutakurs / 0.70);
+    const eksMva = _r2(products.reduce((s,p) => s + p.sum, 0));
+    const mva    = _r2(eksMva * 0.25);
+    const tot    = _r2(eksMva + mva);
+
+    return {
+      t:tilbudsNr, d:dato, r:0,
+      kunde: (typeof KUNDE_PROFIL !== 'undefined' ? KUNDE_PROFIL.navn : 'Norwin AS'),
+      kontakt:'', kadr:'', mob:'', epost:'',
+      prosjekt, uv:'', vekt:'',
+      p:products, eksMva, mva, tot,
+      _vnrMap: Object.fromEntries(products.map((p,i) => [i+1, p._posId || `ALU-${i+1}`])),
+      _fabrikk: 'aliuminatas'
+    };
+  }
 
   async function runAgent() {
     const errEl = document.getElementById('error-msg');
@@ -1990,23 +2725,84 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     document.getElementById('loading').style.display = 'block';
 
     try {
-      // Trekk ut layout-tekst og parse P1 deterministisk
-      const pdfText1 = await extractPdfTextLayout(selectedFile);
-      const res1     = parseNorwinPDF(pdfText1, valutakurs);
+      let resFinal, skisser = {}, vnrMap = {};
 
-      let resFinal = res1;
+      const JPEG_FABRIKKER = ['aradas', 'aldens', 'aliuminatas'];
 
-      // Hvis P2 er lastet opp — parse og slå sammen
-      if (selectedFile2) {
-        const pdfText2 = await extractPdfTextLayout(selectedFile2);
-        const res2     = parseNorwinPDF(pdfText2, valutakurs);
+      if (JPEG_FABRIKKER.includes(FABRIKK)) {
+        // ── JPEG-FABRIKK-FLYT (Aradas / Aldens / Aliuminatas) ───────────────
+        const pdfText1  = await extractPdfTextLayout(selectedFile);
+        const faktorInp = parseNum(document.getElementById('faktor').value);
 
-        const alleProdukter = [...(res1.p || []), ...(res2.p || [])];
-        const mainPosAll    = alleProdukter.filter(p => !p.alt);
-        const eksMva = _r2(mainPosAll.reduce((a, p) => a + (p.sum || 0), 0));
-        const mva    = _r2(eksMva * 0.25);
-        const tot    = _r2(eksMva + mva);
-        resFinal = { ...res1, p: alleProdukter, eksMva, mva, tot };
+        let res1;
+        if (FABRIKK === 'aradas')       res1 = parseAradasPDF(pdfText1, valutakurs, faktorInp);
+        else if (FABRIKK === 'aldens')  res1 = parseAldensPDF(pdfText1, valutakurs, faktorInp);
+        else                            res1 = parseAliuminatasPDF(pdfText1, valutakurs, faktorInp);
+
+        // Hent skisser via Aradas-ekstraktor (fungerer for alle JPEG-baserte fabrikker)
+        try {
+          const result = await extractPdfSkisserAradas(selectedFile);
+          if (result && result.skisser) {
+            skisser = result.skisser;
+            vnrMap = Object.assign({}, result.vnrMap || {}, res1._vnrMap || {});
+          }
+        } catch(e) { console.warn('Bilde-ekstraksjon feilet:', e); }
+
+        // P2 støttes (f.eks. to leverandørtilbud for samme prosjekt)
+        if (selectedFile2) {
+          const pdfText2 = await extractPdfTextLayout(selectedFile2);
+          let res2;
+          if (FABRIKK === 'aradas')       res2 = parseAradasPDF(pdfText2, valutakurs, faktorInp);
+          else if (FABRIKK === 'aldens')  res2 = parseAldensPDF(pdfText2, valutakurs, faktorInp);
+          else                            res2 = parseAliuminatasPDF(pdfText2, valutakurs, faktorInp);
+          const numP1 = (res1.p || []).length;
+          (res2.p || []).forEach((p, i) => {
+            const newN = numP1 + i + 1;
+            vnrMap[newN] = res2._vnrMap ? res2._vnrMap[p.n] : `P${newN}`;
+            p.n = newN;
+          });
+          const alleProdukter = [...(res1.p || []), ...(res2.p || [])];
+          const main   = alleProdukter.filter(p => !p.alt);
+          const eksMva = _r2(main.reduce((s, p) => s + p.sum, 0));
+          const mva    = _r2(eksMva * 0.25);
+          const tot    = _r2(eksMva + mva);
+          resFinal = { ...res1, p: alleProdukter, eksMva, mva, tot };
+        } else {
+          resFinal = res1;
+        }
+
+        window._faktorTilbud = faktorInp || _r2(valutakurs / 0.70);
+
+      } else {
+        // ── NORWIN/HCTC-FLYT (uendret) ───────────────────────────────────────
+        const pdfText1 = await extractPdfTextLayout(selectedFile);
+        const res1     = parseNorwinPDF(pdfText1, valutakurs);
+
+        resFinal = res1;
+
+        if (selectedFile2) {
+          const pdfText2 = await extractPdfTextLayout(selectedFile2);
+          const res2     = parseNorwinPDF(pdfText2, valutakurs);
+          const alleProdukter = [...(res1.p || []), ...(res2.p || [])];
+          const mainPosAll    = alleProdukter.filter(p => !p.alt);
+          const eksMva = _r2(mainPosAll.reduce((a, p) => a + (p.sum || 0), 0));
+          const mva    = _r2(eksMva * 0.25);
+          const tot    = _r2(eksMva + mva);
+          resFinal = { ...res1, p: alleProdukter, eksMva, mva, tot };
+        }
+
+        // Hent skisser via Norwin-ekstraktor
+        try {
+          const result = await extractPdfSkisser(selectedFile);
+          if (result && typeof result === 'object' && !Array.isArray(result) && result.skisser) {
+            skisser = result.skisser;
+            vnrMap  = result.vnrMap || {};
+          } else {
+            skisser = result || [];
+          }
+        } catch(e) {}
+
+        window._faktorTilbud = _r2((1 - (resFinal.r || 35) / 100) / 0.70 * valutakurs);
       }
 
       const selger = getSelger();
@@ -2033,21 +2829,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 
       window._prosjektNavn = prosjekt;
       window._valutakurs   = valutakurs;
-      window._faktorTilbud = _r2((1 - (resFinal.r || 35) / 100) / 0.70 * valutakurs);
       window._tilbudsNr    = resFinal.t || '';
-
-      // Hent skisser fra P1-PDF
-      let skisser = [];
-      let vnrMap  = {};
-      try {
-        const result = await extractPdfSkisser(selectedFile);
-        if (result && typeof result === 'object' && !Array.isArray(result) && result.skisser) {
-          skisser = result.skisser;
-          vnrMap  = result.vnrMap || {};
-        } else {
-          skisser = result || [];
-        }
-      } catch(e) {}
 
       renderOffer(resFinal, { kundeNavn, kundeKontakt, kundeAdresse, kundeMob, kundeEpost, prosjekt, selger, today, skisser, vnrMap });
 
@@ -2076,6 +2858,60 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     document.getElementById('tab-btn-tilbud').classList.toggle('active', fane === 'tilbud');
     document.getElementById('tab-btn-hurtig').classList.toggle('active', fane === 'hurtig');
   }
+
+  /** Oppdaterer fabrikk-hintboksen med beregnet faktor for 30% dekning. */
+  function oppdaterFabrikkHint() {
+    const hintBox    = document.getElementById('fabrikk-hint-aradas');
+    const hintFaktor = document.getElementById('hint-faktor');
+    const hintNavn   = document.getElementById('fabrikk-hint-navn');
+    if (!hintBox) return;
+    const JPEG_FABRIKKER = ['aradas', 'aldens', 'aliuminatas'];
+    if (!JPEG_FABRIKKER.includes(FABRIKK)) { hintBox.style.display = 'none'; return; }
+    hintBox.style.display = '';
+    const navnMap = { aradas:'Aradas', aldens:'Aldens', aliuminatas:'Aliuminatas' };
+    if (hintNavn) hintNavn.textContent = (navnMap[FABRIKK] || FABRIKK) + ':';
+    const kurs = parseNum(document.getElementById('valutakurs').value) || FALLBACK_RATE;
+    const f30  = (kurs / 0.70).toFixed(2).replace('.', ',');
+    if (hintFaktor) hintFaktor.textContent = f30;
+  }
+  // Bakoverkompatibel alias
+  function oppdaterAradasHint() { oppdaterFabrikkHint(); }
+
+  // Hook fabrikk-bytter til hint-oppdatering og valutakurs-input
+  document.addEventListener('DOMContentLoaded', () => {
+    // ── Vis kundenavn (fra KUNDE_PROFIL) i header ──
+    const headerNavn = document.getElementById('header-kunde-navn');
+    if (headerNavn) headerNavn.textContent = KUNDE_PROFIL.navn;
+
+    // ── Filtrer fabrikk-knapper: vis bare de som er i KUNDE_PROFIL.fabrikker ──
+    // Gjør at en annen kundes deployment automatisk skjuler irrelevante fabrikker
+    document.querySelectorAll('input[name="fabrikk"]').forEach(input => {
+      if (!KUNDE_PROFIL.fabrikker.includes(input.value)) {
+        const lbl = input.closest('label');
+        if (lbl) lbl.style.display = 'none';
+        // Fjern checked-status hvis denne fabrikken er skjult
+        if (input.checked) input.checked = false;
+      }
+    });
+    // Sørg for at første synlige fabrikk er valgt
+    const forsteRad = document.querySelector('input[name="fabrikk"]:not([style*="display:none"])');
+    if (forsteRad && !document.querySelector('input[name="fabrikk"]:checked')) {
+      forsteRad.checked = true;
+      FABRIKK = forsteRad.value;
+    }
+
+    // ── Fabrikk-endring: oppdater label og hint ──
+    document.querySelectorAll('input[name="fabrikk"]').forEach(r => {
+      r.addEventListener('change', () => {
+        FABRIKK = r.value;
+        const navnMap = { hctc:'HCTC', aradas:'Aradas', aldens:'Aldens', aliuminatas:'Aliuminatas' };
+        document.getElementById('faktor-label').textContent =
+          'Faktorpåslag (' + (navnMap[FABRIKK] || FABRIKK) + ')';
+        oppdaterFabrikkHint();
+      });
+    });
+    document.getElementById('valutakurs').addEventListener('input', oppdaterAradasHint);
+  });
 
   // ── Versjonsoverføring: lagre selgerendringer per ordrenummer i localStorage ──
 
@@ -3100,7 +3936,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       </div>
 
       <div class="offer-top">
-        <div class="offer-logo"><img src="${IMG_LOGO}" alt="MER Kapital logo" /></div>
+        <div class="offer-logo"><img src="${IMG_LOGO}" alt="Norwin logo" /></div>
         <div class="offer-title-block">
           <h1>TILBUD</h1>
           <div class="offer-date">${res.dato || info.today}</div>
@@ -3252,4 +4088,4 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   }, true); // capture-fase: kjør før andre handlers
 </script>
 </body>
-</html>                                                                                                                                                                                                                                                                        
+</html>
