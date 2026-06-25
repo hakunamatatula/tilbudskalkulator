@@ -168,6 +168,30 @@
 
 
 
+  /* Skjul fabrikk/produsent-felt — kun intern bruk */
+  #fabrikk-detect-box { display: none !important; }
+
+  /* ── Login-overlay ─────────────────────────────────────────────────── */
+  .login-overlay { display:none; position:fixed; inset:0; background:var(--bg); z-index:9999; align-items:center; justify-content:center; }
+  .login-overlay.show { display:flex; }
+  .login-box { background:var(--bg2); border:1px solid var(--border); padding:40px; width:420px; border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,0.6); }
+  .login-logo { font-family:'Space Grotesk',sans-serif; font-size:22px; font-weight:700; color:var(--text); margin-bottom:4px; }
+  .login-sub { font-size:12px; color:var(--muted); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:28px; }
+  .login-error { color:#f87171; font-size:13px; margin-top:-4px; margin-bottom:10px; min-height:18px; font-weight:600; }
+
+  /* ── Admin-panel ────────────────────────────────────────────────────── */
+  .admin-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:2000; align-items:flex-start; justify-content:flex-end; backdrop-filter:blur(4px); }
+  .admin-overlay.show { display:flex; }
+  .admin-panel { background:var(--bg2); border-left:1px solid var(--border); width:460px; height:100%; overflow-y:auto; padding:28px; box-shadow:-8px 0 40px rgba(0,0,0,0.5); }
+  .admin-section { margin-bottom:28px; border-bottom:1px solid var(--border); padding-bottom:20px; }
+  .admin-section:last-child { border-bottom:none; }
+  .admin-section-title { font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:14px; font-weight:700; font-family:'Space Grotesk',sans-serif; }
+  .user-row { display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--bg3); border-radius:6px; margin-bottom:8px; font-size:13px; }
+  .user-email { flex:1; color:var(--text); }
+  .user-role { font-size:11px; color:var(--accent); background:var(--accent-light); border:1px solid rgba(111,231,212,0.3); border-radius:12px; padding:2px 10px; white-space:nowrap; }
+  .user-del-btn { background:none; border:1px solid rgba(248,113,113,0.4); color:#f87171; border-radius:4px; padding:4px 10px; cursor:pointer; font-size:11px; font-family:'Inter',sans-serif; }
+  .user-del-btn:hover { background:rgba(248,113,113,0.12); }
+
   @media print {
     body { background:white; padding:0; }
     .no-print { display:none !important; }
@@ -447,6 +471,67 @@
 </head>
 <body>
 
+<!-- ── Login-overlay ───────────────────────────────────────────────────── -->
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <div class="login-logo">Nora AI</div>
+    <div class="login-sub">Tilbudskalkulator — Logg inn</div>
+    <div class="field"><div class="label">E-post</div>
+      <input type="email" id="login-email" placeholder="din@epost.no" autocomplete="username"
+        onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()" /></div>
+    <div class="field" style="margin-bottom:6px;"><div class="label">Passord</div>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')loggInn()" /></div>
+    <div class="login-error" id="login-error"></div>
+    <button class="btn" onclick="loggInn()">→ &nbsp;Logg inn</button>
+  </div>
+</div>
+
+<!-- ── Admin-panel (slideout) ──────────────────────────────────────────── -->
+<div class="admin-overlay" id="admin-overlay" onclick="if(event.target===this)lukkAdminPanel()">
+  <div class="admin-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;color:var(--text);">Admin</div>
+      <button onclick="lukkAdminPanel()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+
+    <div class="admin-section">
+      <div class="admin-section-title">Logo i kundetilbud</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Last opp SVG/PNG (maks 200×60&nbsp;px).</div>
+      <input type="file" id="logo-file-input" accept=".svg,.png,.jpg,.jpeg" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="lastOppLogo(this)" />
+      <div id="logo-preview" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:16px;text-align:center;min-height:56px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;">
+        <span style="color:var(--muted);font-size:13px;" id="logo-preview-text">Ingen egendefinert logo</span>
+      </div>
+      <button class="btn" onclick="document.getElementById('logo-file-input').click()" style="margin-bottom:8px;">↑ &nbsp;Last opp logo</button>
+      <button onclick="nullstillLogo()" style="width:100%;background:transparent;border:1px solid var(--border);color:var(--muted);padding:10px;border-radius:6px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;margin-top:4px;">↺ &nbsp;Tilbakestill til standard</button>
+    </div>
+
+    <div class="admin-section">
+      <div class="admin-section-title">Brukere</div>
+      <div id="user-list" style="margin-bottom:16px;"></div>
+      <div style="padding:16px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;font-weight:600;">Legg til bruker</div>
+        <div class="field"><div class="label">E-post</div><input type="email" id="ny-epost" placeholder="bruker@eksempel.no" /></div>
+        <div class="field"><div class="label">Passord (minst 6 tegn)</div><input type="password" id="ny-pass" placeholder="Velg passord" /></div>
+        <div class="field"><div class="label">Rolle</div>
+          <select id="ny-rolle">
+            <option value="bruker">Bruker</option>
+            <option value="kunde-admin">Kunde Admin</option>
+            <option value="admin">Admin (Nora AI)</option>
+          </select></div>
+        <div class="error" id="ny-bruker-feil" style="margin-bottom:6px;font-size:12px;"></div>
+        <button class="btn" onclick="leggTilBruker()">+ &nbsp;Legg til bruker</button>
+      </div>
+    </div>
+
+    <div class="admin-section">
+      <div class="admin-section-title">Innlogget</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px;" id="innlogget-info">—</div>
+      <button onclick="loggUt()" style="width:100%;background:transparent;border:1px solid rgba(248,113,113,0.35);color:#f87171;padding:10px;border-radius:6px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;">→ &nbsp;Logg ut</button>
+    </div>
+  </div>
+</div>
+
 <div class="header">
   <div>
     <div class="logo-name">MER KAPITAL</div>
@@ -461,24 +546,18 @@
 
 <div class="no-print" id="form-area">
 
-  <!-- Fane-navigasjon -->
-  <div class="tab-nav">
-    <button class="tab-btn active" id="tab-btn-tilbud" onclick="byttFane('tilbud')">Tilbudskalkulator</button>
-    <button class="tab-btn" id="tab-btn-hurtig" onclick="byttFane('hurtig')">Hurtigkalkulator</button>
-  </div>
-
   <!-- Felles: Valutakurs (alltid synlig) -->
   <div class="quick-calc" style="border-radius:0 0 6px 6px;margin-top:0;">
     <div id="rate-status-box" style="margin-bottom:12px;"></div>
     <div style="display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:end;">
       <div>
         <div class="label">Valutakurs EUR/NOK <span style="color:var(--muted);font-size:12px;font-weight:400;">(redigerbar)</span></div>
-        <input type="number" id="valutakurs" value="11.20" step="0.001" placeholder="f.eks. 11.20" style="font-weight:700;color:var(--accent);font-size:18px;" oninput="calcQuick()" />
+        <input type="number" id="valutakurs" value="11.20" step="0.001" placeholder="f.eks. 11.20" style="font-weight:700;color:var(--accent);font-size:18px;" oninput="oppdaterAradasHint()" />
       </div>
     </div>
   </div>
 
-  <!-- FANE: Tilbudskalkulator -->
+  <!-- Tilbudskalkulator -->
   <div id="fane-tilbud">
     <div class="grid2" style="margin-top:0;">
       <!-- Venstre -->
@@ -534,7 +613,7 @@
             <button type="button"
               style="background:var(--bg3);border:2px solid var(--border);border-left:none;color:var(--muted);padding:0 12px;cursor:pointer;font-size:14px;border-radius:0 4px 4px 0;"
               onmousedown="event.preventDefault(); const i=document.getElementById('selger'); i.focus(); filterSelger(i.value, true);">▾</button>
-            <div id="selger-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:2px solid var(--accent);z-index:100;border-radius:0 0 4px 4px;box-shadow:0 4px 12px rgba(0,0,0,0.12);"></div>
+            <div id="selger-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:2px solid var(--accent);z-index:100;border-radius:0 0 6px 6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden;"></div>
           </div>
         </div>
       </div>
@@ -550,74 +629,9 @@
     </div>
   </div>
 
-  <!-- FANE: Hurtigkalkulator -->
-  <div id="fane-hurtig" style="display:none;">
-    <div class="quick-calc" style="margin-top:16px;">
-      <div class="quick-calc-title">Hurtigkalkulator — Fortjeneste</div>
-
-      <div style="font-size:13px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:0.08em;">Tilbud fra produsent 1</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:16px;">
-        <div>
-          <div class="label">Totalsum fra leverandør (EUR)</div>
-          <input type="number" id="qc-eur" placeholder="f.eks. 100 000" step="0.01" oninput="calcQuick()" />
-        </div>
-        <div>
-          <div class="label">Rabatt fra leverandør %</div>
-          <input type="number" id="qc-rabatt" placeholder="f.eks. 40" step="0.1" oninput="calcQuick()" />
-        </div>
-        <div>
-          <div class="label" id="faktor-label">Faktorpåslag (HCTC)</div>
-          <input type="number" id="faktor" placeholder="f.eks. 9" step="0.1" oninput="syncFaktor2(); calcQuick(); oppdaterAradasHint()" />
-        </div>
-      </div>
-
-      <div style="font-size:13px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:0.08em;">Tilbud fra produsent 2 <span style="color:var(--dim);font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;">(valgfritt)</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:16px;">
-        <div>
-          <div class="label">Totalsum fra leverandør (EUR)</div>
-          <input type="number" id="qc-eur2" placeholder="f.eks. 50 000" step="0.01" oninput="calcQuick()" />
-        </div>
-        <div>
-          <div class="label">Rabatt fra leverandør %</div>
-          <input type="number" id="qc-rabatt2" placeholder="f.eks. 45" step="0.1" oninput="calcQuick()" />
-        </div>
-        <div>
-          <div class="label">Faktorpåslag <span style="color:var(--dim);font-size:12px;">(kan overstyres)</span></div>
-          <input type="number" id="faktor2" placeholder="Som TP1" step="0.1" oninput="faktor2Dirty=true; calcQuick()" />
-        </div>
-      </div>
-
-      <button class="btn" onclick="calcQuick()" style="margin-bottom:16px;">◈ &nbsp;Beregn fortjeneste</button>
-
-      <div class="quick-calc-result" id="qc-result">
-        <div class="qc-card">
-          <div class="qc-label">Kostpris NOK (P1)</div>
-          <div class="qc-val" id="qc-kostpris">—</div>
-          <div class="qc-sub">Nettopris EUR × valutakurs</div>
-        </div>
-        <div class="qc-card" id="qc-card-p2" style="display:none;">
-          <div class="qc-label">Kostpris NOK (P2)</div>
-          <div class="qc-val" id="qc-kostpris2">—</div>
-          <div class="qc-sub">Nettopris EUR × valutakurs</div>
-        </div>
-        <div class="qc-card">
-          <div class="qc-label">Kostpris NOK (total)</div>
-          <div class="qc-val" id="qc-kostpris-tot">—</div>
-          <div class="qc-sub" id="qc-kostpris-tot-sub">P1 + P2</div>
-        </div>
-        <div class="qc-card">
-          <div class="qc-label">Salgspris NOK (ekskl. MVA)</div>
-          <div class="qc-val" id="qc-salgspris">—</div>
-          <div class="qc-sub" id="qc-salgspris-sub">Faktor × listepris EUR</div>
-        </div>
-        <div class="qc-card highlight">
-          <div class="qc-label">Fortjeneste</div>
-          <div class="qc-val" id="qc-fortjeneste">—</div>
-          <div class="qc-sub" id="qc-prosent">— %</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Skjulte hjelpeinputs for faktor (brukes av JPEG-fabrikker og VITRON) -->
+  <input type="number" id="faktor"  value="" step="0.1" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;" />
+  <input type="number" id="faktor2" value="" step="0.1" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;" />
 
 </div>
 
@@ -894,7 +908,7 @@ ${klon.outerHTML}
     if (matches.length === 0) { dd.style.display = 'none'; return; }
     dd.innerHTML = matches.map((k, i) =>
       `<div data-idx="${i}" data-val="${k}"
-        style="padding:11px 14px;cursor:pointer;font-family:'Source Sans 3',sans-serif;font-size:16px;color:#1a2233;background:#fff;"
+        style="padding:11px 14px;cursor:pointer;font-family:'Inter',sans-serif;font-size:15px;color:var(--text);background:var(--bg2);border-bottom:1px solid var(--border);"
         onmousedown="document.getElementById('selger').value='${k}';document.getElementById('selger-dropdown').style.display='none';selgerActiveIdx=-1;"
         onmouseover="setSelgerActive(${i})"
         onmouseout="setSelgerActive(-1)">${k}</div>`
@@ -909,13 +923,13 @@ ${klon.outerHTML}
     const dd = document.getElementById('selger-dropdown');
     const items = dd.querySelectorAll('[data-idx]');
     items.forEach(el => {
-      el.style.background = '#fff';
-      el.style.color = '#1a2233';
+      el.style.background = 'var(--bg2)';
+      el.style.color = 'var(--text)';
     });
     selgerActiveIdx = idx;
     if (idx >= 0 && idx < items.length) {
-      items[idx].style.background = '#1a3a5c';
-      items[idx].style.color = '#ffffff';
+      items[idx].style.background = 'var(--accent-light)';
+      items[idx].style.color = 'var(--accent)';
       items[idx].scrollIntoView({ block: 'nearest' });
     }
   }
@@ -1017,11 +1031,14 @@ ${klon.outerHTML}
     if (u.includes('ALIUMINATAS'))  return 'aliuminatas';
     if (u.includes('ALDENS'))       return 'aldens';
     if (u.includes('ARADAS'))       return 'aradas';
+    // VITRON: polsk produsent, ALIPLAST GENESIS I+-system
+    if (u.includes('VITRON') || u.includes('ALIPLAST') || /POS\.\s*\d+\s+GENESIS/.test(u)) return 'vitron';
     return 'hctc'; // Standard/fallback
   }
 
   const FABRIKK_NAVN = {
     hctc:         'HCTC',
+    vitron:       'Vitron / GENESIS (Polen)',
     aradas:       'Aradas (Litauen)',
     aldens:       'Aldens (Latvia)',
     aliuminatas:  'Aliuminatas (Litauen)',
@@ -1047,13 +1064,13 @@ ${klon.outerHTML}
   // Skjuler konfigurasjonen mellom kunder — kun aktuelle fabrikker og selgere vises.
   const KUNDE_PROFIL = {
     navn:      'Norwin AS',                                       // Kundens firmanavn
-    fabrikker: ['hctc', 'aradas', 'aldens', 'aliuminatas'],      // Fabrikker denne kunden bruker
+    fabrikker: ['hctc', 'vitron', 'aradas', 'aldens', 'aliuminatas'], // Fabrikker denne kunden bruker
   };
 
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-22-v16';
+  const APP_VERSION = '2026-06-25-v19';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -1803,6 +1820,131 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     if (uvVal   != null) res.uv   = uvVal;
     if (vektVal != null) res.vekt = vektVal;
     return res;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // VITRON / ALIPLAST GENESIS PARSER
+  // Format: polsk produsent, GENESIS I+-system. Tabellbasert PDF.
+  // Posisjoner identifiseres med "Pos. N GENESIS - ..." (kolonnetittel i tabell).
+  // Priser er netto EUR (ingen liste/rabatt-struktur).
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** Parser for Vitron/GENESIS fabrikktilbud. */
+  function parseVitronPDF(rawText, valutakurs, faktorInp) {
+    const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+    // ── HEADER ────────────────────────────────────────────────────────────
+    let offerNum = '', dato = '', kunde = '';
+
+    for (let i = 0; i < lines.length; i++) {
+      const ln = lines[i];
+      let r;
+      // Tilbudsnummer: "PZA0566-2026" eller "Offer: PZA..."
+      if (!offerNum && (r = ln.match(/(?:^|:\s*)(PZA[\w\-]+)/i))) offerNum = r[1];
+      if (!offerNum && /^Offer:?\s*$/i.test(ln) && i + 1 < lines.length) {
+        const r2 = lines[i+1].match(/^(PZA[\w\-]+)/i);
+        if (r2) offerNum = r2[1];
+      }
+      // Dato: "19.06.2026"
+      if (!dato && (r = ln.match(/\b(\d{2})\.(\d{2})\.(\d{4})\b/))) dato = `${r[3]}-${r[2]}-${r[1]}`;
+      // Kundenavn: "Recipient: NorWin Q Sor Aurdal ..."
+      if (!kunde && (r = ln.match(/^Recipient:\s*(.+)/i))) kunde = r[1].trim();
+    }
+
+    // ── FINN PRODUKTBLOKKER ────────────────────────────────────────────────
+    // Starter med "Pos. N GENESIS..." (evt. med posisjonsnummer på samme linje)
+    const blockStarts = [];
+    for (let i = 0; i < lines.length; i++) {
+      const r = lines[i].match(/(?:^|\s)Pos\.\s*(\d+)\s+(.+)/i);
+      if (r) blockStarts.push({ posNr: parseInt(r[1]), lineIdx: i });
+    }
+
+    if (!blockStarts.length)
+      throw new Error('Fant ingen produktposisjoner (Vitron/GENESIS-format). Kontroller at riktig fabrikktilbud er lastet opp.');
+
+    // ── PARSE HVERT PRODUKT ───────────────────────────────────────────────
+    const faktor = faktorInp > 0 ? faktorInp : _r2(valutakurs / 0.70);
+    const produkter = blockStarts.map((bs, idx) => {
+      const endIdx = idx + 1 < blockStarts.length ? blockStarts[idx+1].lineIdx : lines.length;
+      return _parseVitronBlock(lines.slice(bs.lineIdx, endIdx), bs.posNr, faktor);
+    });
+
+    // Finn nettototal fra PDF (siste side)
+    let netTotal = null;
+    for (const ln of lines) {
+      const r = ln.match(/Net\s+total[:\s]+([\d\s]+[,.][\d]{2})\s*(?:EUR)?/i);
+      if (r) netTotal = _vitronNum(r[1]);
+    }
+
+    const main   = produkter.filter(p => !p.alt);
+    const eksMva = netTotal
+      ? _r2(netTotal * faktor)
+      : _r2(main.reduce((s, p) => s + p.sum, 0));
+    const mva    = _r2(eksMva * 0.25);
+    const tot    = _r2(eksMva + mva);
+
+    return {
+      t: offerNum, d: dato, r: 0, kunde, kontakt: '', kadr: '', mob: '', epost: '', prosjekt: '',
+      p: produkter, eksMva, mva, tot,
+      _fabrikk: 'vitron'
+    };
+  }
+
+  /** Konverterer "2 117,18" eller "2117.18" til float. */
+  function _vitronNum(s) {
+    return parseFloat(String(s).replace(/\s/g, '').replace(',', '.')) || 0;
+  }
+
+  /** Parses én produktblokk fra Vitron-PDF. */
+  function _parseVitronBlock(blockLines, posNr, faktor) {
+    let dim = '', ant = 1, eurUnit = 0;
+    let posKode = '';
+    const kommentarer = [];
+    const allPrices = [];
+
+    const fullText = blockLines.join('\n');
+
+    // Dimensjon fra "(B=1 390, H=2 390)"
+    const dimM = fullText.match(/\(B=([\d\s]+),\s*H=([\d\s]+)\)/i);
+    if (dimM) dim = `${dimM[1].replace(/\s/g,'')}x${dimM[2].replace(/\s/g,'')}mm`;
+
+    // Antall fra "x 2" (ikke del av dimensjon)
+    const qM = fullText.match(/\bx\s*([1-9]\d?)\b(?!\s*\d)/i);
+    if (qM) ant = parseInt(qM[1]);
+
+    // Priser: "2 117,18", "1 648,58" o.l. (minst 2 desimaler, >10)
+    const PRICE_RE = /\b(\d{1,3}(?:\s\d{3})*),(\d{2})\b/g;
+    let pm;
+    while ((pm = PRICE_RE.exec(fullText)) !== null) {
+      const val = _vitronNum(pm[1] + ',' + pm[2]);
+      if (val > 10) allPrices.push(val);
+    }
+
+    // Posisjonskode: ALU-1, ALU-2 ...
+    const aluM = fullText.match(/\b(ALU-\d+)\b/i);
+    if (aluM) posKode = aluM[1];
+
+    // Spesifikasjon/kommentarer (linjer med "- tekst")
+    const seenK = new Set();
+    for (const ln of blockLines) {
+      if (/^-\s+\S/.test(ln)) {
+        const c = ln.replace(/^-\s+/, '').trim();
+        if (!seenK.has(c)) { seenK.add(c); kommentarer.push(c); }
+      }
+    }
+
+    // Første pris = enhetspris EUR (netto, uten rabatt)
+    eurUnit = allPrices.length > 0 ? allPrices[0] : 0;
+
+    const nok = _r2(eurUnit * faktor);
+    const sum = _r2(nok * ant);
+
+    const s = [];
+    if (posKode) s.push({ l: 'Kode',           v: posKode });
+    if (kommentarer.length) s.push({ l: 'Spesifikasjon', v: kommentarer.join('\n') });
+
+    return { n: posNr, dim, m2: 0, ant, eur: eurUnit, nok, sum, alt: false, s,
+             _posId: posKode || `VIT-${posNr}` };
   }
 
   function _parseBlock(blockLines, posNr, faktor) {
@@ -2815,6 +2957,26 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
         }
 
         window._faktorTilbud = faktorInp || _r2(valutakurs / 0.70);
+
+      } else if (FABRIKK === 'vitron') {
+        // ── VITRON / ALIPLAST GENESIS-FLYT ───────────────────────────────────
+        const pdfText1  = await extractPdfTextLayout(selectedFile);
+        const faktorInp = parseNum(document.getElementById('faktor').value);
+        const res1      = parseVitronPDF(pdfText1, valutakurs, faktorInp);
+        resFinal = res1;
+
+        if (selectedFile2) {
+          const pdfText2 = await extractPdfTextLayout(selectedFile2);
+          const res2     = parseVitronPDF(pdfText2, valutakurs, faktorInp);
+          const numP1    = (res1.p || []).length;
+          (res2.p || []).forEach((p, i) => { p.n = numP1 + i + 1; });
+          const alleProdukter = [...(res1.p || []), ...(res2.p || [])];
+          const main2  = alleProdukter.filter(p => !p.alt);
+          const eksMva2 = _r2(main2.reduce((s, p) => s + p.sum, 0));
+          resFinal = { ...res1, p: alleProdukter, eksMva: eksMva2, mva: _r2(eksMva2 * 0.25), tot: _r2(eksMva2 * 1.25) };
+        }
+
+        window._faktorTilbud = faktorInp > 0 ? faktorInp : _r2(valutakurs / 0.70);
 
       } else {
         // ── NORWIN/HCTC-FLYT (uendret) ───────────────────────────────────────
@@ -3953,7 +4115,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       </div>
 
       <div class="offer-top">
-        <div class="offer-logo"><img src="${IMG_LOGO}" alt="Norwin logo" /></div>
+        <div class="offer-logo"><img src="${(function(){try{return localStorage.getItem('norwin_kalk_logo')||IMG_LOGO;}catch(e){return IMG_LOGO;}}())}" alt="Logo" /></div>
         <div class="offer-title-block">
           <h1>TILBUD</h1>
           <div class="offer-date">${res.dato || info.today}</div>
@@ -4103,6 +4265,248 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     sel.removeAllRanges();
     sel.addRange(range);
   }, true); // capture-fase: kjør før andre handlers
+
+  // ════════════════════════════════════════════════════════════════════════
+  // LOGIN / ADMIN-SYSTEM
+  // Klient-side SHA-256 auth. Brukere i localStorage. Sesjon i sessionStorage.
+  // ════════════════════════════════════════════════════════════════════════
+
+  const LS_USERS   = 'norwin_kalk_users';
+  const SS_SESSION = 'norwin_kalk_session';
+
+  // Standard-brukere (opprettes automatisk hvis ingen brukere finnes i DB)
+  const STANDARD_BRUKERE_HASH = [
+    { epost: 'marius@norwin.no',     rolle: 'kunde-admin', passHash: null, passKlar: 'Norwin2026!'    },
+    { epost: 'marius@merkapital.no', rolle: 'admin',       passHash: null, passKlar: 'Nora2026!'      },
+  ];
+
+  /** SHA-256 via Web Crypto API. Returnerer hex-streng. */
+  async function sha256(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function hentBrukere() {
+    try { return JSON.parse(localStorage.getItem(LS_USERS)) || []; }
+    catch(e) { return []; }
+  }
+
+  function lagreBrukere(arr) {
+    try { localStorage.setItem(LS_USERS, JSON.stringify(arr)); }
+    catch(e) {}
+  }
+
+  function hentSession() {
+    try { return JSON.parse(sessionStorage.getItem(SS_SESSION)); }
+    catch(e) { return null; }
+  }
+
+  function settSession(sess) {
+    try { sessionStorage.setItem(SS_SESSION, JSON.stringify(sess)); }
+    catch(e) {}
+  }
+
+  function slettSession() {
+    try { sessionStorage.removeItem(SS_SESSION); }
+    catch(e) {}
+  }
+
+  /** Vis/skjul Admin-knappen basert på rolle. */
+  function oppdaterAdminKnapp(rolle) {
+    const btn = document.querySelector('button[onclick="visAdminPanel()"]');
+    if (!btn) return;
+    if (rolle === 'admin' || rolle === 'kunde-admin') {
+      btn.style.display = '';
+    } else {
+      btn.style.display = 'none';
+    }
+  }
+
+  /** Logg inn: hash passord, sjekk mot DB, sett sesjon. */
+  async function loggInn() {
+    const epost = (document.getElementById('login-email').value || '').trim().toLowerCase();
+    const pass  = document.getElementById('login-pass').value || '';
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = '';
+
+    if (!epost || !pass) { errEl.textContent = 'Fyll inn e-post og passord.'; return; }
+
+    const brukere = hentBrukere();
+    const hash    = await sha256(pass);
+    const bruker  = brukere.find(b => b.epost === epost && b.passHash === hash);
+
+    if (!bruker) {
+      errEl.textContent = 'Feil e-post eller passord.';
+      return;
+    }
+
+    settSession({ epost: bruker.epost, rolle: bruker.rolle });
+
+    const overlay = document.getElementById('login-overlay');
+    if (overlay) { overlay.classList.remove('show'); overlay.style.display = 'none'; }
+
+    oppdaterAdminKnapp(bruker.rolle);
+
+    const innloggetEl = document.getElementById('innlogget-info');
+    if (innloggetEl) innloggetEl.textContent = `${bruker.epost} (${bruker.rolle})`;
+
+    oppdaterLogoPreview();
+  }
+
+  /** Logg ut: slett sesjon og vis login-overlay. */
+  function loggUt() {
+    slettSession();
+    const overlay = document.getElementById('login-overlay');
+    if (overlay) { overlay.style.display = 'flex'; overlay.classList.add('show'); }
+    lukkAdminPanel();
+    document.getElementById('login-email').value = '';
+    document.getElementById('login-pass').value  = '';
+    document.getElementById('login-error').textContent = '';
+  }
+
+  /** Vis admin-panel (kun for admin/kunde-admin). */
+  function visAdminPanel() {
+    const sess = hentSession();
+    if (!sess || (sess.rolle !== 'admin' && sess.rolle !== 'kunde-admin')) return;
+    oppdaterBrukerListe();
+    oppdaterLogoPreview();
+    const innloggetEl = document.getElementById('innlogget-info');
+    if (innloggetEl) innloggetEl.textContent = `${sess.epost} (${sess.rolle})`;
+    const panel = document.getElementById('admin-overlay');
+    if (panel) { panel.style.display = 'flex'; }
+  }
+
+  function lukkAdminPanel() {
+    const panel = document.getElementById('admin-overlay');
+    if (panel) panel.style.display = 'none';
+  }
+
+  /** Oppdater bruker-listen i admin-panelet. */
+  function oppdaterBrukerListe() {
+    const brukere = hentBrukere();
+    const sess    = hentSession();
+    const listEl  = document.getElementById('user-list');
+    if (!listEl) return;
+
+    if (brukere.length === 0) {
+      listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;">Ingen brukere registrert.</div>';
+      return;
+    }
+
+    listEl.innerHTML = brukere.map(b => `
+      <div class="user-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+        <div>
+          <div class="user-email" style="font-size:14px;color:var(--text);font-weight:600;">${b.epost}</div>
+          <div class="user-role" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;">${b.rolle}</div>
+        </div>
+        ${b.epost !== sess?.epost
+          ? `<button class="user-del-btn" onclick="slettBruker('${b.epost}')"
+               style="background:transparent;border:1px solid rgba(248,113,113,0.3);color:#f87171;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;">
+               Slett
+             </button>`
+          : '<span style="font-size:11px;color:var(--muted);">(deg)</span>'}
+      </div>
+    `).join('');
+  }
+
+  /** Legg til ny bruker. */
+  async function leggTilBruker() {
+    const epost = (document.getElementById('ny-epost').value || '').trim().toLowerCase();
+    const pass  = document.getElementById('ny-pass').value || '';
+    const rolle = document.getElementById('ny-rolle').value;
+    const feilEl = document.getElementById('ny-bruker-feil');
+    feilEl.textContent = '';
+
+    if (!epost || !pass) { feilEl.textContent = 'Fyll inn e-post og passord.'; return; }
+    if (pass.length < 6) { feilEl.textContent = 'Passordet må ha minst 6 tegn.'; return; }
+
+    const brukere = hentBrukere();
+    if (brukere.find(b => b.epost === epost)) { feilEl.textContent = 'Brukeren finnes allerede.'; return; }
+
+    const hash = await sha256(pass);
+    brukere.push({ epost, rolle, passHash: hash });
+    lagreBrukere(brukere);
+
+    document.getElementById('ny-epost').value = '';
+    document.getElementById('ny-pass').value  = '';
+    oppdaterBrukerListe();
+  }
+
+  /** Slett bruker. */
+  function slettBruker(epost) {
+    if (!confirm(`Slett brukeren ${epost}?`)) return;
+    const brukere = hentBrukere().filter(b => b.epost !== epost);
+    lagreBrukere(brukere);
+    oppdaterBrukerListe();
+  }
+
+  /** Last opp egendefinert logo til localStorage. */
+  function lastOppLogo(input) {
+    const fil = input.files[0];
+    if (!fil) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try { localStorage.setItem('norwin_kalk_logo', e.target.result); }
+      catch(err) { alert('Klarte ikke lagre logo (for stor fil?).'); return; }
+      oppdaterLogoPreview();
+    };
+    reader.readAsDataURL(fil);
+  }
+
+  /** Oppdater logopreviw i admin-panelet. */
+  function oppdaterLogoPreview() {
+    const previewEl  = document.getElementById('logo-preview');
+    const previewTxt = document.getElementById('logo-preview-text');
+    if (!previewEl) return;
+    const lagret = localStorage.getItem('norwin_kalk_logo');
+    if (lagret) {
+      previewEl.innerHTML = `<img src="${lagret}" alt="Logo" style="max-height:48px;max-width:100%;object-fit:contain;" />`;
+    } else {
+      previewEl.innerHTML = '<span style="color:var(--muted);font-size:13px;" id="logo-preview-text">Ingen egendefinert logo</span>';
+    }
+  }
+
+  /** Tilbakestill logo til standard. */
+  function nullstillLogo() {
+    try { localStorage.removeItem('norwin_kalk_logo'); }
+    catch(e) {}
+    oppdaterLogoPreview();
+  }
+
+  /** Sjekk innlogging ved sideinnlasting. Opprett standard-brukere ved behov. */
+  (async function sjekkInnlogging() {
+    // Initialiser standard-brukere hvis tomme
+    let brukere = hentBrukere();
+    if (brukere.length === 0) {
+      const initBrukere = [];
+      for (const b of STANDARD_BRUKERE_HASH) {
+        const hash = await sha256(b.passKlar);
+        initBrukere.push({ epost: b.epost, rolle: b.rolle, passHash: hash });
+      }
+      lagreBrukere(initBrukere);
+      brukere = initBrukere;
+    }
+
+    // Sjekk eksisterende sesjon
+    const sess = hentSession();
+    const overlay = document.getElementById('login-overlay');
+
+    if (sess && sess.epost && sess.rolle) {
+      // Gyldig sesjon — bekreft at brukeren fortsatt finnes i DB
+      const funnet = brukere.find(b => b.epost === sess.epost);
+      if (funnet) {
+        if (overlay) { overlay.style.display = 'none'; overlay.classList.remove('show'); }
+        oppdaterAdminKnapp(sess.rolle);
+        oppdaterLogoPreview();
+        return;
+      }
+    }
+
+    // Ingen/ugyldig sesjon — vis login
+    if (overlay) { overlay.style.display = 'flex'; overlay.classList.add('show'); }
+    oppdaterAdminKnapp(null);
+  })();
+
 </script>
 </body>
 </html>
