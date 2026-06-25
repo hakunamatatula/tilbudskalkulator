@@ -1070,7 +1070,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-25-v21';
+  const APP_VERSION = '2026-06-25-v23';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -1670,9 +1670,14 @@ FORENKLINGSREGLER FOR SPESIFIKASJONER (følg alltid):
 - Huller til montering: "Huller till montage: MS14+ADJUFIX" → felt "Huller til montering": "MS14+ADJUFIX". Hvis "1pcs Adjufix in the top (center)" også finnes → "MS14+ADJUFIX 4 på hver side og 1 i topp senter".
 - Fritekst-noter (se FRITEKST-OVERSETTELSER) samles i felt "Øvrig", kommaseparert. Utelat "No warranty".
 - Generelt: Fjern overflødige ord, hold verdiene korte og presise.
+- VIKTIG FELTFORDELING: Type-feltet inneholder KUN produktnavnet/modellen (f.eks. "NORDIC utadslående inngangsdør"). Legg ALDRI Tresort, Malingfarge, Glass eller andre spesifikasjoner inn i Type-feltet. Hvert felt skal alltid være eget separat element i s-arrayen.
+- Glass: Ta med HELE glassbeskrivelsen fra dokumentet, inkludert fullstendige tekniske detaljer i parentes (f.eks. U-verdi, glassfylling, avstandskinner, varmkant). Eksempel: "33.1TH/18Ar/4/16Ar/4ESG.TH (33.1LA Thermofloat /x/ Float 4 /x/ ESG Thermofloat 4mm Ar, Ug=0,55) (Avstandskinner: Varmkant CH ultra RAL9004 sort)"
+- Not for foringer: Legg alltid som eget felt "Not for foringer" direkte i s-arrayen (ikke i Øvrig).
+- Terskel/Dørterskel: Behold materiale og beskrivelse (f.eks. "Oljet eik" eller "Alu DAFA 68/62").
+- Vekt og Uw: Legg direkte i s-arrayen som egne felt "Vekt" og "Uw" (ikke i Øvrig).
 
 FELTREKKEFØLGE FOR DØRER (følg denne rekkefølgen i "s"-arrayen):
-Type, Tresort, Maling inne, Maling ute, Glass, Beslag, Hengsler, Håndtak, Låsesystem, Bunnglasslist, Pakninger, Glassforsegling, Terskel, Åpningsretning, Huller til montering, Øvrig
+Type, Tresort, Maling inne, Maling ute, Glass, Beslag, Hengsler, Håndtak, Låsesystem, Bunnglasslist, Pakninger, Glassforsegling, Terskel, Not for foringer, Åpningsretning, Huller til montering, Vekt, Uw, Øvrig
 
 FELTREKKEFØLGE FOR VINDUER (følg denne rekkefølgen i "s"-arrayen):
 Type, Tresort, Maling inne, Maling ute, Glass, Beslag, Hengsler, Brems, Håndtak, Sprosser, Sprosse bredde, Bunnglasslist, Pakninger, Glassforsegling, Spor i underkant, Åpningsretning, Nosis, Huller til montering, Øvrig
@@ -2681,48 +2686,69 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     const glassM = rawText.match(/Glasses:\s*(.+)/);
     const glass = glassM ? glassM[1].trim() : '';
 
-    // Finn alle produktposisjoner: "Pos. ALU-N  [system] ..." med evt. fortsettelse på neste linje
+    // Finn alle produktposisjoner: "Pos. ALU-N  [system] ..."
+    // Merk: PDF-teksten er to-kolonne layout der pdfplumber fletter linjene etter y-posisjon.
+    // Venstre kolonne (x<300): posId, dimensjoner, Pcs., spesifikasjonsverdier
+    // Høyre kolonne (x>300): Lock 1/2, Strike plate, Wire, Cylinder, osv. (labels uten verdier)
     const products = [];
     const lines = rawText.split('\n');
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i].trim();
       const posM = l.match(/^Pos\.\s+(ALU-\d+[a-zA-Z]*)\s+(.*)/);
       if (!posM) continue;
-      const posId = posM[1];
-      let descFull = posM[2];
-      // Samle neste linjer frem til (B= ... H=...) er funnet
-      for (let j = i+1; j < Math.min(i+4, lines.length); j++) {
-        const nxt = lines[j].trim();
-        if (!nxt || nxt.match(/^(Pcs\.|Construction:|Price:|SUM:|\d+$)/)) break;
-        descFull += ' ' + nxt;
-        if (nxt.includes(')')) break;
+      const posId  = posM[1];
+      // Bug-fix #2: Ta kun tekst fra selve Pos.-linjen (f.eks. "MB-78EI Display" / "MB-78EI Doors").
+      // Ikke bygg videre med neste linjer — de inneholder høyrekolonne-labels som "Lock 2:" som
+      // forurenser Type-feltet.
+      const typeStr = posM[2].replace(/\s+/g,' ').trim();
+
+      // Søk etter mål "(B=W, H=H)" på Pos.-linjen eller de neste 5 linjene
+      let dimW = 0, dimH = 0;
+      const dimWindow = lines.slice(i, i+6).join(' ');
+      const dimM = dimWindow.match(/\(B=([\d\s]+),\s*H=([\d\s]+)\)/);
+      if (dimM) {
+        dimW = parseInt(dimM[1].replace(/\s/g,''));
+        dimH = parseInt(dimM[2].replace(/\s/g,''));
       }
-      // Parse mål fra "(B=1 390, H=2 390)"
-      const dimM = descFull.match(/\(B=([\d\s]+),\s*H=([\d\s]+)\)/);
-      const dimW = dimM ? parseInt(dimM[1].replace(/\s/g,'')) : 0;
-      const dimH = dimM ? parseInt(dimM[2].replace(/\s/g,'')) : 0;
 
-      // Beskrivelse uten mål-parentes
-      const desc = descFull.replace(/\(B=.*?\)/,'').trim();
-
-      // Finn Pcs. i nærmeste linjer etter posisjonen
+      // Bug-fix #1: Pcs.: og tallet ligger på ulike linjer i pdfplumber-output.
+      // Format: "Pcs.:" på en linje, så "Wire:" (høyrekolonne), så selve tallet (venstrekol).
+      // Søk etter "Pcs.:" og hent første rene tall-linje etterpå.
       let pcs = 1;
-      for (let j = i+1; j < Math.min(i+6, lines.length); j++) {
-        const pcsM = lines[j].trim().match(/^Pcs\.:\s*(\d+)/);
-        if (pcsM) { pcs = parseInt(pcsM[1]); break; }
+      let pcsLineFound = false;
+      for (let j = i+1; j < Math.min(i+14, lines.length); j++) {
+        const l2 = lines[j].trim();
+        if (/^Pcs\.:/.test(l2)) {
+          pcsLineFound = true;
+          const sameM = l2.match(/Pcs\.:\s*(\d+)/);
+          if (sameM) { pcs = parseInt(sameM[1]); break; }
+        } else if (pcsLineFound && /^\d+$/.test(l2)) {
+          pcs = parseInt(l2);
+          break;
+        }
+        // Stopp søket hvis vi treffer neste produkt eller prisseksjon
+        if (/^(Total without VAT:|SUM:|Pos\.\s)/.test(l2)) break;
       }
-      products.push({ posId, desc, dimW, dimH, pcs });
+      products.push({ posId, desc: typeStr, dimW, dimH, pcs });
     }
 
     if (products.length === 0) {
       throw new Error('Fant ingen produktposisjoner (Aldens). Sjekk at riktig fabrikk er valgt.');
     }
 
-    // Finn alle "Total without VAT: X,XX" priser i tekstens rekkefølge
+    // Bug-fix #3: "Total without VAT:" og prisen er på ulike linjer i pdfplumber-output.
+    // Søk etter label-linjen og hent prisen fra neste linje hvis den ikke er på samme linje.
     const vatPrices = [];
-    for (const l of lines) {
-      const vatM = l.trim().match(/^Total without VAT:\s*([\d\s,\.]+)/);
-      if (vatM) vatPrices.push(parseEurNum(vatM[1]));
+    for (let j = 0; j < lines.length; j++) {
+      const l2 = lines[j].trim();
+      if (/^Total without VAT:/.test(l2)) {
+        const sameM = l2.match(/Total without VAT:\s*([\d\s,\.]+)/);
+        if (sameM && sameM[1].trim()) {
+          vatPrices.push(parseEurNum(sameM[1]));
+        } else if (j + 1 < lines.length) {
+          vatPrices.push(parseEurNum(lines[j+1].trim()));
+        }
+      }
     }
 
     const faktor = faktorInput || _r2(valutakurs / 0.70);
@@ -2734,7 +2760,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       const sum       = _r2(nokPerStk * prod.pcs);
       const dimStr    = prod.dimW && prod.dimH ? `${prod.dimW}×${prod.dimH} mm` : '';
       const specs     = [];
-      if (prod.desc) specs.push({ l:'Type',    v: prod.desc.replace(/\(B=.*?\)/,'').replace(/\s+/g,' ').trim() });
+      if (prod.desc) specs.push({ l:'Type',    v: prod.desc });
       if (dimStr)    specs.push({ l:'Mål',     v: dimStr });
       if (systemNavn) specs.push({ l:'System', v: systemNavn });
       if (farge)     specs.push({ l:'Farge',   v: farge });
@@ -3957,10 +3983,10 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 
   function renderOffer(res, info) {
     const VILKAR = [
-      'Varene utleveres på Svartdalsveien 39A, 0678 Oslo, hvis ikke annet er avtalt.',
+      'Varene utleveres på Gullerød Gård, Hortensveien 273, hvis ikke annet er avtalt.',
       'Tilbudet forutsetter innbetaling av 25% ved bestilling og er gyldig i 14 dager.',
       'Akseptert tilbud av kunde betyr at kunden har kontrollert, forstått og akseptert tilbudet.',
-      'MER Kapital AS har salgspant i varene inntil fullstendig oppgjør er mottatt.',
+      'Norwin AS har salgspant i varene inntil fullstendig oppgjør er mottatt.',
       'Generell garantiperiode er 5 år.'
     ];
     const produkter = res.p || res.produkter || [];
