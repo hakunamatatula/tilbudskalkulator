@@ -895,7 +895,7 @@ ${klon.outerHTML}
   const SELGERE = {
     'Bente':  { fornavn:'Bente',  navn:'Bente Jul-Larsen',        mob:'98653255',  epost:'bente@norwin.no'},
     'Grete':  { fornavn:'Grete',  navn:'Grete Holt',              mob:'47910660',  epost:'grete@norwin.no'},
-    'Marius': { fornavn:'Marius', navn:'Marius Nielsen Matatula', mob:'48355995',  epost:'marius@merkapital.no'},
+    'Marius': { fornavn:'Marius', navn:'Marius Nielsen Matatula', mob:'48355995',  epost:'marius@norwin.no'},
     'Per':    { fornavn:'Per',    navn:'Per Schiøtz',             mob:'90583823',  epost:'per@norwin.no'},
     'Tom':    { fornavn:'Tom',    navn:'Tom Ektvedt',             mob:'98826002',  epost:'tom@norwin.no'},
   };
@@ -1070,7 +1070,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-25-v20';
+  const APP_VERSION = '2026-06-25-v21';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
