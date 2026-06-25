@@ -1070,7 +1070,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-25-v23';
+  const APP_VERSION = '2026-06-25-v25';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -2653,100 +2653,140 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   // ══════════════════════════════════════════════════════════════════════════
 
   // ── ALDENS-PARSER (SIA "ALDENS HOLDING", Riga, Latvia) ─────────────────────────
-  // Tilbudsformat: engelsk, produkter på venstre side, priser på høyre side
-  // Tekstekstraksjon gir: alle "Pos. ALU-N  [system] (B=W, H=H)" + "Pcs." FØRST,
-  // deretter alle "Total without VAT: X,XX" priser i samme rekkefølge.
+  // Tilbudsformat: engelsk, to-kolonne-layout.
+  //
+  // VIKTIG — LETTER-SPACING:
+  // Aldens' PDF lagrer hvert tegn som et eget posisjonert tekstelement.
+  // extractPdfTextLayout grupperer etter y-posisjon (8pt terskel) og gir dermed
+  // linjer som "P o s . A L U - 1 M B - 7 8 E I D i s p l a y L o c k 2 :" — ett
+  // mellomrom per tegn. I tillegg smelter venstre og høyre kolonne fordi de er
+  // innenfor 8pt vertikalt. Resultat:
+  //   "Pos.ALU-1MB-78EIDisplayLock2:"   (Pos. + Lock 1: sammenslått)
+  //   "windows(B=1390,H=2390)Strikeplate1:"
+  //   "Pcs.:Strikeplate2:"
+  //   "1Wire:"                          (antall + Wire: sammenslått)
+  //   "TotalwithoutVAT:"
+  //   "2723,56"                         (pris på neste linje)
+  //
+  // Pre-prosessering: kollapser letter-spacete linjer (>60% enkeltkarakterer).
   function parseAldensPDF(rawText, valutakurs, faktorInput) {
     function parseEurNum(s) {
       if (!s) return 0;
-      s = s.trim().replace(/[^\d., ]/g, '').trim();
-      // "1 296,64" (eurostil) eller "1296.64"
-      if (s.includes(',')) return parseFloat(s.replace(/[\s]/g,'').replace(',','.')) || 0;
-      return parseFloat(s.replace(/\s/g,'')) || 0;
+      s = s.trim().replace(/[^\d.,]/g, '');
+      if (s.includes(',')) return parseFloat(s.replace(',','.')) || 0;
+      return parseFloat(s) || 0;
     }
 
-    // Prosjektinfo
+    // Kollapser letter-spacet linje: "P o s ." → "Pos."
+    function collapseLS(line) {
+      const tokens = line.trim().split(' ');
+      if (tokens.length < 4) return line.trim();
+      const singleCount = tokens.filter(t => t.length <= 2).length;
+      if (singleCount / tokens.length >= 0.60) return tokens.join('');
+      return line.trim();
+    }
+
+    const lines = rawText.split('\n').map(collapseLS).filter(l => l.length > 0);
+    const processedText = lines.join('\n');
+
+    // Prosjektinfo — fungerer på kollapsert tekst
     let prosjekt = '';
-    const projM = rawText.match(/Project:\s*(.+)/);
-    if (projM) prosjekt = projM[1].trim();
+    const projM = processedText.match(/Project:([^\n]+)/);
+    if (projM) prosjekt = projM[1].replace(/\(Norwin\)/i,'').replace(/[_]/g,' ').trim();
 
     let dato = '';
-    const dateM = rawText.match(/(\d{2}\.\d{2}\.\d{4})/);
+    const dateM = processedText.match(/(\d{2}\.\d{2}\.\d{4})/);
     if (dateM) dato = dateM[1];
 
-    // System/serienavn (f.eks. "MB-79N E")
-    const sysM = rawText.match(/systems:\s*\(([^)]+)\)/);
+    // System-kode, f.eks. "MB-78EI" — hent fra "(MB-78EI)" i header
+    const sysM = processedText.match(/systems:\(([^)]+)\)/i) || processedText.match(/\((MB-[\w-]+)\)/i);
     const systemNavn = sysM ? sysM[1].trim() : '';
 
-    // Farger
-    const colorM = rawText.match(/Profile colour:\s*(.+)/);
-    const farge = colorM ? colorM[1].trim() : '';
+    // Farge og glass — best-effort (kan mislykkes på kollapsert tekst)
+    const colorM = processedText.match(/Profilecolour:([^\n]+)/i) || processedText.match(/Profile colour:\s*(.+)/);
+    const farge = colorM ? colorM[1].replace(/Lacqueredtypical\.?/i,'Lacquered typical').trim() : '';
 
-    // Glass
-    const glassM = rawText.match(/Glasses:\s*(.+)/);
+    const glassM = processedText.match(/Glasses:([^\n]+)/i);
     const glass = glassM ? glassM[1].trim() : '';
 
-    // Finn alle produktposisjoner: "Pos. ALU-N  [system] ..."
-    // Merk: PDF-teksten er to-kolonne layout der pdfplumber fletter linjene etter y-posisjon.
-    // Venstre kolonne (x<300): posId, dimensjoner, Pcs., spesifikasjonsverdier
-    // Høyre kolonne (x>300): Lock 1/2, Strike plate, Wire, Cylinder, osv. (labels uten verdier)
+    // ── PRODUKTPOSISJONER ────────────────────────────────────────────────────
+    // Etter kollapsing er linjen: "Pos.ALU-1MB-78EIDisplayLock2:"
+    // posId = "ALU-1" (ALU + tall, stopp ved bokstav etter siste siffer)
+    // type  = alt mellom posId og "Lock" → "MB-78EIDisplay" → de-CamelCase → "MB-78EI Display"
     const products = [];
-    const lines = rawText.split('\n');
     for (let i = 0; i < lines.length; i++) {
-      const l = lines[i].trim();
-      const posM = l.match(/^Pos\.\s+(ALU-\d+[a-zA-Z]*)\s+(.*)/);
+      const l = lines[i];
+      // Matcher "Pos." etterfulgt av "ALU-N" (med eller uten mellomrom pga. kollapsing)
+      const posM = l.match(/^Pos\.?\s*(ALU-\d+)/i);
       if (!posM) continue;
-      const posId  = posM[1];
-      // Bug-fix #2: Ta kun tekst fra selve Pos.-linjen (f.eks. "MB-78EI Display" / "MB-78EI Doors").
-      // Ikke bygg videre med neste linjer — de inneholder høyrekolonne-labels som "Lock 2:" som
-      // forurenser Type-feltet.
-      const typeStr = posM[2].replace(/\s+/g,' ').trim();
+      const posId = posM[1];
 
-      // Søk etter mål "(B=W, H=H)" på Pos.-linjen eller de neste 5 linjene
+      // Alt etter posId: "MB-78EIDisplayLock2:" eller "MB-78EIDoors Lock1:" (mellomrom mulig)
+      const afterPosId = l.slice(l.indexOf(posId) + posId.length);
+      // Fjern høyrekolonne-labels: Lock N: og Strikeplate N:
+      const typeRaw = afterPosId
+        .replace(/Lock\d*:?.*/i, '')
+        .replace(/Strikeplate.*/i, '')
+        .replace(/\s+/g, '')
+        .trim();
+      // De-CamelCase: "MB-78EIDisplay" → "MB-78EI Display"
+      // Sett inn mellomrom foran stor bokstav som følger annen stor + liten: EI→D → "EI D"
+      const typeStr = typeRaw.replace(/([A-Z0-9])([A-Z][a-z])/g, '$1 $2').trim();
+
+      // Mål: "(B=1390,H=2390)" — med eller uten mellomrom
       let dimW = 0, dimH = 0;
       const dimWindow = lines.slice(i, i+6).join(' ');
-      const dimM = dimWindow.match(/\(B=([\d\s]+),\s*H=([\d\s]+)\)/);
+      const dimM = dimWindow.match(/\(B=\s*(\d[\d\s]*),\s*H=\s*(\d[\d\s]*)\)/);
       if (dimM) {
         dimW = parseInt(dimM[1].replace(/\s/g,''));
         dimH = parseInt(dimM[2].replace(/\s/g,''));
       }
 
-      // Bug-fix #1: Pcs.: og tallet ligger på ulike linjer i pdfplumber-output.
-      // Format: "Pcs.:" på en linje, så "Wire:" (høyrekolonne), så selve tallet (venstrekol).
-      // Søk etter "Pcs.:" og hent første rene tall-linje etterpå.
+      // Pcs.-søk: kollapsert format "Pcs.:Strikeplate2:" → pcsLineFound
+      // Neste linje starter med antallet: "1Wire:" eller "2Wire:" → hent ledende tall
       let pcs = 1;
       let pcsLineFound = false;
-      for (let j = i+1; j < Math.min(i+14, lines.length); j++) {
-        const l2 = lines[j].trim();
-        if (/^Pcs\.:/.test(l2)) {
+      for (let j = i+1; j < Math.min(i+18, lines.length); j++) {
+        const l2 = lines[j];
+        if (/^Pcs\.?:/i.test(l2)) {
           pcsLineFound = true;
-          const sameM = l2.match(/Pcs\.:\s*(\d+)/);
+          const sameM = l2.match(/Pcs\.?:\s*(\d+)/i);
           if (sameM) { pcs = parseInt(sameM[1]); break; }
-        } else if (pcsLineFound && /^\d+$/.test(l2)) {
-          pcs = parseInt(l2);
-          break;
+        } else if (pcsLineFound) {
+          const leadM = l2.match(/^(\d+)/);
+          if (leadM) { pcs = parseInt(leadM[1]); break; }
         }
-        // Stopp søket hvis vi treffer neste produkt eller prisseksjon
-        if (/^(Total without VAT:|SUM:|Pos\.\s)/.test(l2)) break;
+        if (/^(Totalwithout|Total\s*without|Pos\.)/i.test(l2)) break;
       }
       products.push({ posId, desc: typeStr, dimW, dimH, pcs });
     }
 
     if (products.length === 0) {
-      throw new Error('Fant ingen produktposisjoner (Aldens). Sjekk at riktig fabrikk er valgt.');
+      // Debug: vis de første linjene slik pdf.js ekstraherte dem
+      const rawPreview = rawText.split('\n').slice(0, 12).map((l,i) => `${i}: ${l.slice(0,80)}`).join('\n');
+      const collPreview = lines.slice(0, 12).map((l,i) => `${i}: ${l.slice(0,80)}`).join('\n');
+      console.error('[Aldens debug] RAW linjer:\n' + rawPreview);
+      console.error('[Aldens debug] Kollapsede linjer:\n' + collPreview);
+      throw new Error(
+        'Fant ingen produktposisjoner (Aldens). Sjekk at riktig fabrikk er valgt.\n\n' +
+        'Debug — råtekst fra PDF (linje 0-11):\n' + rawPreview +
+        '\n\nKollapsert:\n' + collPreview
+      );
     }
 
-    // Bug-fix #3: "Total without VAT:" og prisen er på ulike linjer i pdfplumber-output.
-    // Søk etter label-linjen og hent prisen fra neste linje hvis den ikke er på samme linje.
+    // ── PRISER ───────────────────────────────────────────────────────────────
+    // "TotalwithoutVAT:" (kollapsert) etterfulgt av pris på neste linje: "2723,56"
+    // Eller med mellomrom: "Total without VAT:" med pris på neste linje eller samme linje
     const vatPrices = [];
     for (let j = 0; j < lines.length; j++) {
-      const l2 = lines[j].trim();
-      if (/^Total without VAT:/.test(l2)) {
-        const sameM = l2.match(/Total without VAT:\s*([\d\s,\.]+)/);
+      const l2 = lines[j];
+      if (/Total.*without.*VAT/i.test(l2)) {
+        const sameM = l2.match(/VAT:\s*([\d,\.]+)/i);
         if (sameM && sameM[1].trim()) {
           vatPrices.push(parseEurNum(sameM[1]));
         } else if (j + 1 < lines.length) {
-          vatPrices.push(parseEurNum(lines[j+1].trim()));
+          const nextVal = parseEurNum(lines[j+1].replace(/[^0-9,\.]/g,''));
+          if (nextVal > 0) vatPrices.push(nextVal);
         }
       }
     }
@@ -2771,9 +2811,9 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 
     // Tillegg (hardware, pakking, levering) som separat linje
     const extras = [];
-    const hwM    = rawText.match(/Hardware\s*\([^)]*\):\s*([\d\s,\.]+)\s*Eur/i);
-    const packM  = rawText.match(/Packing:\s*([\d\s,\.]+)\s*Eur/i);
-    const delivM = rawText.match(/Delivery:\s*([\d\s,\.]+)\s*Eur/i);
+    const hwM    = processedText.match(/Hardware[^:]*:\s*([\d,\.]+)\s*Eur/i);
+    const packM  = processedText.match(/Packing:\s*([\d,\.]+)\s*Eur/i);
+    const delivM = processedText.match(/Delivery:\s*([\d,\.]+)\s*Eur/i);
     if (hwM)    extras.push(`Hardware: ${parseEurNum(hwM[1]).toFixed(2)} EUR`);
     if (packM)  extras.push(`Pakking: ${parseEurNum(packM[1]).toFixed(2)} EUR`);
     if (delivM) extras.push(`Levering: ${parseEurNum(delivM[1]).toFixed(2)} EUR`);
