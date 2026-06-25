@@ -467,7 +467,7 @@
     }
   }
 </style>
-<script src="./pdf.min.js"></script>
+<script src="https://hakunamatatula.github.io/tilbudskalkulator/pdf.min.js"></script>
 </head>
 <body>
 
@@ -1070,7 +1070,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-25-v19';
+  const APP_VERSION = '2026-06-25-v20';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -1312,7 +1312,7 @@ ${klon.outerHTML}
   async function extractPdfText(file) {
     const pdfjsLib = window.pdfjsLib;
     if (!pdfjsLib) throw new Error('PDF-biblioteket (pdf.js) er ikke lastet. Sjekk internettilkoblingen og refresh siden.');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://hakunamatatula.github.io/tilbudskalkulator/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let fullText = '';
@@ -1335,7 +1335,7 @@ ${klon.outerHTML}
   async function extractPdfSkisser(file, scale = 2.0) {
     const pdfjsLib = window.pdfjsLib;
     if (!pdfjsLib) throw new Error('PDF-biblioteket (pdf.js) er ikke lastet. Sjekk internettilkoblingen og refresh siden.');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://hakunamatatula.github.io/tilbudskalkulator/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
@@ -1737,8 +1737,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   async function extractPdfTextLayout(file) {
     const pdfjsLib = window.pdfjsLib;
     if (!pdfjsLib) throw new Error('PDF-biblioteket (pdf.js) er ikke lastet. Sjekk internettilkoblingen og refresh siden.');
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      './pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://hakunamatatula.github.io/tilbudskalkulator/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const allLines = [];
@@ -2503,7 +2502,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   async function extractPdfSkisserAradas(file) {
     const pdfjsLib = window.pdfjsLib;
     if (!pdfjsLib) throw new Error('PDF-biblioteket ikke lastet.');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://hakunamatatula.github.io/tilbudskalkulator/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
