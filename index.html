@@ -1070,7 +1070,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-25-v25';
+  const APP_VERSION = '2026-06-25-v26';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -2710,67 +2710,68 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     const glass = glassM ? glassM[1].trim() : '';
 
     // ── PRODUKTPOSISJONER ────────────────────────────────────────────────────
-    // Etter kollapsing er linjen: "Pos.ALU-1MB-78EIDisplayLock2:"
-    // posId = "ALU-1" (ALU + tall, stopp ved bokstav etter siste siffer)
-    // type  = alt mellom posId og "Lock" → "MB-78EIDisplay" → de-CamelCase → "MB-78EI Display"
+    // pdf.js gir NORMAL tekst fra Aldens-PDFer, men med mellomrom rundt bindestreker:
+    //   "Pos. ALU - 1 MB - 78EI Display Lock 1:"   (venstre + høyre kolonne smeltet)
+    //   "windows (B = 1 390, H = 2 390) Strike plate 1:"
+    //   "Pcs. : 1"  eller  "Pcs.: 1"
+    //   "Total without VAT : 2723,56"
+    // Regex-er må håndtere "ALU - 1" og "B = 1 390" med valgfrie mellomrom.
     const products = [];
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i];
-      // Matcher "Pos." etterfulgt av "ALU-N" (med eller uten mellomrom pga. kollapsing)
-      const posM = l.match(/^Pos\.?\s*(ALU-\d+)/i);
+      // "Pos. ALU - 1 ..." — ALU etterfulgt av valgfrie mellomrom rundt bindestrek og tall
+      const posM = l.match(/^Pos\.\s+ALU\s*-\s*(\d+)\s*(.*)/i);
       if (!posM) continue;
-      const posId = posM[1];
+      const posId = 'ALU-' + posM[1];
 
-      // Alt etter posId: "MB-78EIDisplayLock2:" eller "MB-78EIDoors Lock1:" (mellomrom mulig)
-      const afterPosId = l.slice(l.indexOf(posId) + posId.length);
-      // Fjern høyrekolonne-labels: Lock N: og Strikeplate N:
-      const typeRaw = afterPosId
-        .replace(/Lock\d*:?.*/i, '')
-        .replace(/Strikeplate.*/i, '')
-        .replace(/\s+/g, '')
+      // Alt etter ALU-N på Pos.-linjen, men stopp ved "Lock N:" (høyrekolonne-label)
+      // "MB - 78EI Display Lock 1:" → normaliser bindestreker → "MB-78EI Display"
+      const typeStr = posM[2]
+        .replace(/\s*Lock\s*\d*\s*:?.*/i, '')       // fjern "Lock 1:" suffix
+        .replace(/\s*Strike\s*plate.*/i, '')          // fjern "Strike plate N:" suffix
+        .replace(/\s*-\s*/g, '-')                     // "MB - 78EI" → "MB-78EI"
+        .replace(/\s+/g, ' ')
         .trim();
-      // De-CamelCase: "MB-78EIDisplay" → "MB-78EI Display"
-      // Sett inn mellomrom foran stor bokstav som følger annen stor + liten: EI→D → "EI D"
-      const typeStr = typeRaw.replace(/([A-Z0-9])([A-Z][a-z])/g, '$1 $2').trim();
 
-      // Mål: "(B=1390,H=2390)" — med eller uten mellomrom
+      // Mål: "(B = 1 390, H = 2 390)" — mellomrom rundt = og i tall er ok
       let dimW = 0, dimH = 0;
       const dimWindow = lines.slice(i, i+6).join(' ');
-      const dimM = dimWindow.match(/\(B=\s*(\d[\d\s]*),\s*H=\s*(\d[\d\s]*)\)/);
+      const dimM = dimWindow.match(/\(\s*B\s*=\s*([\d\s]+),\s*H\s*=\s*([\d\s]+)\)/);
       if (dimM) {
         dimW = parseInt(dimM[1].replace(/\s/g,''));
         dimH = parseInt(dimM[2].replace(/\s/g,''));
       }
 
-      // Pcs.-søk: kollapsert format "Pcs.:Strikeplate2:" → pcsLineFound
-      // Neste linje starter med antallet: "1Wire:" eller "2Wire:" → hent ledende tall
+      // Pcs.-søk: "Pcs. : 1" eller "Pcs.: 1" — mellomrom rundt punktum og kolon er mulig
       let pcs = 1;
       let pcsLineFound = false;
       for (let j = i+1; j < Math.min(i+18, lines.length); j++) {
         const l2 = lines[j];
-        if (/^Pcs\.?:/i.test(l2)) {
+        if (/^Pcs\s*\.?\s*:/i.test(l2)) {
           pcsLineFound = true;
-          const sameM = l2.match(/Pcs\.?:\s*(\d+)/i);
+          const sameM = l2.match(/Pcs\s*\.?\s*:\s*(\d+)/i);
           if (sameM) { pcs = parseInt(sameM[1]); break; }
         } else if (pcsLineFound) {
           const leadM = l2.match(/^(\d+)/);
           if (leadM) { pcs = parseInt(leadM[1]); break; }
         }
-        if (/^(Totalwithout|Total\s*without|Pos\.)/i.test(l2)) break;
+        if (/^(Total\s*without|Pos\.)/i.test(l2)) break;
       }
       products.push({ posId, desc: typeStr, dimW, dimH, pcs });
     }
 
     if (products.length === 0) {
-      // Debug: vis de første linjene slik pdf.js ekstraherte dem
-      const rawPreview = rawText.split('\n').slice(0, 12).map((l,i) => `${i}: ${l.slice(0,80)}`).join('\n');
-      const collPreview = lines.slice(0, 12).map((l,i) => `${i}: ${l.slice(0,80)}`).join('\n');
-      console.error('[Aldens debug] RAW linjer:\n' + rawPreview);
-      console.error('[Aldens debug] Kollapsede linjer:\n' + collPreview);
+      // Diagnostikk: finn Pos.-linjer spesifikt og vis de første 30 linjene
+      const allLines = rawText.split('\n');
+      const posLines = allLines.filter(l => /Pos\./i.test(l)).slice(0, 5)
+        .map((l, i) => `Pos${i}: ${l.slice(0, 100)}`).join('\n');
+      const rawPreview = allLines.slice(0, 30).map((l, i) => `${i}: ${l.slice(0, 100)}`).join('\n');
+      console.error('[Aldens debug] Pos.-linjer:\n' + posLines);
+      console.error('[Aldens debug] RAW linje 0-29:\n' + rawPreview);
       throw new Error(
-        'Fant ingen produktposisjoner (Aldens). Sjekk at riktig fabrikk er valgt.\n\n' +
-        'Debug — råtekst fra PDF (linje 0-11):\n' + rawPreview +
-        '\n\nKollapsert:\n' + collPreview
+        'Fant ingen produktposisjoner i Aldens-tilbudet.\n\n' +
+        'Pos.-linjer funnet:\n' + (posLines || '(ingen)') +
+        '\n\nRåtekst linje 0-29:\n' + rawPreview
       );
     }
 
