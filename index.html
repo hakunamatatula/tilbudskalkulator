@@ -1070,7 +1070,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-25-v26';
+  const APP_VERSION = '2026-06-26-v27';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -2792,34 +2792,62 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       }
     }
 
+    // Beskrivelse-felt fra PDF-header (norsk oversettelse)
+    const konstM = processedText.match(/Number of constructions\s*:\s*(\d+)/i);
+    const areaM  = processedText.match(/Total surface\s*:\s*([\d,\.]+)/i);
+    const circM  = processedText.match(/Total circuit\s*:\s*([\d,\.]+)/i);
+    const antallKonst  = konstM ? konstM[1] : '';
+    const totalAreal   = areaM  ? areaM[1].replace(',','.') : '';
+    const totalOmkrets = circM  ? circM[1].replace(',','.') : '';
+
     const faktor = faktorInput || _r2(valutakurs / 0.70);
 
-    const finalProducts = products.map((prod, i) => {
+    // Tillegg fra fabrikk (hardware, pakking, levering) — legges i EUR-kostnad for marginberegning
+    // men vises IKKE i kundetilbudet (kun til selger)
+    const hwM    = processedText.match(/Hardware[^:]*:\s*([\d,\.]+)\s*Eur/i);
+    const packM  = processedText.match(/Packing:\s*([\d,\.]+)\s*Eur/i);
+    const delivM = processedText.match(/Delivery:\s*([\d,\.]+)\s*Eur/i);
+    const hwAmt    = hwM    ? parseEurNum(hwM[1])    : 0;
+    const packAmt  = packM  ? parseEurNum(packM[1])  : 0;
+    const delivAmt = delivM ? parseEurNum(delivM[1]) : 0;
+    const extrasEurTotal = _r2(hwAmt + packAmt + delivAmt);
+
+    let finalProducts = products.map((prod, i) => {
       const eurSum    = vatPrices[i] || 0;
       const eurPerStk = prod.pcs > 0 ? _r2(eurSum / prod.pcs) : eurSum;
       const nokPerStk = _r2(eurPerStk * faktor);
       const sum       = _r2(nokPerStk * prod.pcs);
       const dimStr    = prod.dimW && prod.dimH ? `${prod.dimW}×${prod.dimH} mm` : '';
       const specs     = [];
-      if (prod.desc) specs.push({ l:'Type',    v: prod.desc });
-      if (dimStr)    specs.push({ l:'Mål',     v: dimStr });
+      if (prod.desc)  specs.push({ l:'Type',   v: prod.desc });
+      // Mål vises ikke i speslikasjoner — dimensjon er allerede i tabellhodet
       if (systemNavn) specs.push({ l:'System', v: systemNavn });
-      if (farge)     specs.push({ l:'Farge',   v: farge });
-      if (glass)     specs.push({ l:'Glass',   v: glass });
+      if (farge)      specs.push({ l:'Farge',  v: farge });
+      if (glass)      specs.push({ l:'Glass',  v: glass });
       return { n:i+1, dim:dimStr, m2:_r2(prod.dimW*prod.dimH/1e6*prod.pcs), ant:prod.pcs,
                eur:eurPerStk, nok:nokPerStk, sum, alt:false, s:specs, _posId:prod.posId };
     });
 
-    // Tillegg (hardware, pakking, levering) som separat linje
-    const extras = [];
-    const hwM    = processedText.match(/Hardware[^:]*:\s*([\d,\.]+)\s*Eur/i);
-    const packM  = processedText.match(/Packing:\s*([\d,\.]+)\s*Eur/i);
-    const delivM = processedText.match(/Delivery:\s*([\d,\.]+)\s*Eur/i);
-    if (hwM)    extras.push(`Hardware: ${parseEurNum(hwM[1]).toFixed(2)} EUR`);
-    if (packM)  extras.push(`Pakking: ${parseEurNum(packM[1]).toFixed(2)} EUR`);
-    if (delivM) extras.push(`Levering: ${parseEurNum(delivM[1]).toFixed(2)} EUR`);
-    if (extras.length > 0 && finalProducts.length > 0) {
-      finalProducts[finalProducts.length-1].s.push({ l:'Tillegg fra fabrikk', v: extras.join(' | ') });
+    // Distribuer EUR-tillegg proporsjonalt til hvert produkts EUR-kostnad
+    // NOK-salgspris og sum til kunden forblir uendret — marginen justeres ned
+    const eurBase = finalProducts.reduce((s,p) => s + (p.eur * p.ant), 0);
+    if (extrasEurTotal > 0 && eurBase > 0) {
+      finalProducts = finalProducts.map(prod => {
+        const andel   = _r2(extrasEurTotal * (prod.eur * prod.ant) / eurBase);
+        const nyEur   = prod.ant > 0 ? _r2(prod.eur + andel / prod.ant) : prod.eur;
+        return { ...prod, eur: nyEur };
+      });
+    }
+
+    // Legg til selger-info på siste produkt (no-print — vises ikke i utskrift)
+    if (extrasEurTotal > 0 && finalProducts.length > 0) {
+      const extrasNok = _r2(extrasEurTotal * faktor);
+      const linjer = [];
+      if (hwAmt)    linjer.push(`Beslag/saging: ${hwAmt.toFixed(2)} EUR`);
+      if (packAmt)  linjer.push(`Pakking: ${packAmt.toFixed(2)} EUR`);
+      if (delivAmt) linjer.push(`Levering: ${delivAmt.toFixed(2)} EUR`);
+      linjer.push(`Totalt: ${extrasEurTotal.toFixed(2)} EUR (≈ kr ${formatNOK(extrasNok)} eks. MVA)`);
+      finalProducts[finalProducts.length-1].s.push({ l:'_selger_tillegg', v: linjer.join(' | ') });
     }
 
     const eksMva = _r2(finalProducts.reduce((s,p) => s + p.sum, 0));
@@ -2833,7 +2861,10 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       prosjekt, uv:'', vekt:'',
       p: finalProducts, eksMva, mva, tot,
       _vnrMap: Object.fromEntries(finalProducts.map((p,i) => [i+1, p._posId || `ALU-${i+1}`])),
-      _fabrikk: 'aldens'
+      _fabrikk: 'aldens',
+      _antallKonst: antallKonst,
+      _totalAreal: totalAreal,
+      _totalOmkrets: totalOmkrets
     };
   }
 
@@ -3736,6 +3767,10 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       rader = Object.entries(spek).filter(([k,v])=>v).map(([k,v])=>({ l:k, v }));
     }
 
+    // Trekk ut selger-tillegg (vises kun for selger, ikke i utskrift)
+    const selgerTillegg = rader.filter(s => s.l === '_selger_tillegg');
+    rader = rader.filter(s => s.l !== '_selger_tillegg');
+
     // Normaliser feltnavn
     rader = rader.map(s => ({
       ...s,
@@ -3851,7 +3886,12 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
           title="Klikk for å redigere">${s.v}</span>
         <span class="edited-mark" id="mark_${id}" style="display:none;"></span>
       </div>`;
-    }).join('');
+    }).join('') + (selgerTillegg.length > 0
+      ? selgerTillegg.map(s => `<div class="no-print" style="background:#fffbe6;border:1px solid #e8c97a;border-radius:4px;padding:6px 10px;margin-top:8px;font-size:11px;color:#7a5a00;">
+          <strong style="display:block;margin-bottom:2px;">&#9888; Tillegg fra fabrikk (kun synlig for selger):</strong>
+          ${s.v.split(' | ').map(l=>`<span style="display:block;">${l}</span>`).join('')}
+        </div>`).join('')
+      : '');
   }
 
   function sjekkEndring(el) {
@@ -4240,6 +4280,16 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
           title="Klikk for å legge til informasjon til kunden"></div>
       </div>
 
+      ${(res._antallKonst || res._totalAreal || res._totalOmkrets) ? `
+      <div style="background:#f5f7fa;border:1px solid #e0e5ee;border-radius:6px;padding:10px 16px;margin-bottom:16px;font-size:12px;color:#555;">
+        <strong style="color:#1a3a5c;text-transform:uppercase;font-size:10px;letter-spacing:0.1em;">Omfang</strong>
+        <div style="margin-top:4px;display:flex;gap:20px;flex-wrap:wrap;">
+          ${res._antallKonst  ? `<span>Antall konstruksjoner: <strong>${res._antallKonst}</strong></span>` : ''}
+          ${res._totalAreal   ? `<span>Totalt areal: <strong>${res._totalAreal}&nbsp;m²</strong></span>` : ''}
+          ${res._totalOmkrets ? `<span>Total karmomkrets: <strong>${res._totalOmkrets}&nbsp;m</strong></span>` : ''}
+        </div>
+      </div>` : ''}
+
       ${produktSeksjoner}
 
       <div class="price-table-wrapper">
@@ -4274,8 +4324,8 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
         ${VILKAR.map((v,vi)=>`<p contenteditable="true" class="editable-val"
           data-produkt="Vilkår" data-felt="Vilkår ${vi+1}" data-original="${v.replace(/"/g,'&quot;')}"
           onblur="sjekkEndring(this)"
-          style="min-height:1.2em;"
-          title="Klikk for å redigere">${vi+1}. ${v}</p>`).join('')}
+          style="display:block;min-height:1.2em;margin:0 0 3px 0;"
+          title="Klikk for å redigere">${vi+1}. ${v}</p>`).join('\n')}
       </div>
 
       <div class="offer-footer">
