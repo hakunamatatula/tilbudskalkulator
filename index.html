@@ -1070,7 +1070,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-26-v27';
+  const APP_VERSION = '2026-06-26-v28';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -2652,6 +2652,98 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   // END ARADAS PARSER + IMAGE EXTRACTOR
   // ══════════════════════════════════════════════════════════════════════════
 
+  // ── ALDENS BILDEKSTRAKTOR ─────────────────────────────────────────────────
+  // Aldens-PDFen har ett produkt per side med ett teknisk tegning i midten.
+  // Produktsider identifiseres ved teksten "Pos. ALU - N" i tekstlaget.
+  // Den største bildeforekomsten per side hentes og lagres som base64 PNG.
+  async function extractAldensSketches(file) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://hakunamatatula.github.io/tilbudskalkulator/pdf.worker.min.js';
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    const skisser = {};  // { produktNr: base64 }
+    const scale   = 1.5;
+    let   seqNr   = 1;   // teller for produkter funnet
+
+    const multiplyCtm = (m1, m2) => {
+      const [a1,b1,c1,d1,e1,f1] = m1, [a2,b2,c2,d2,e2,f2] = m2;
+      return [a1*a2+c1*b2, b1*a2+d1*b2, a1*c2+c1*d2, b1*c2+d1*d2,
+              a1*e2+c1*f2+e1, b1*e2+d1*f2+f1];
+    };
+
+    for (let pn = 1; pn <= pdf.numPages; pn++) {
+      const page = await pdf.getPage(pn);
+      const tc   = await page.getTextContent();
+
+      // Sjekk om dette er en produktside (inneholder "Pos." + "ALU")
+      const sideTekst = tc.items.map(i => i.str).join(' ');
+      if (!/Pos\./i.test(sideTekst) || !/ALU/i.test(sideTekst)) continue;
+
+      const prodNr = seqNr++;
+
+      // Render siden til canvas
+      const vp     = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+
+      // Finn bildeposisjoner via operator list (CTM-sporing)
+      let imagePlacements = [];
+      try {
+        const opList = await page.getOperatorList();
+        const OPS    = pdfjsLib.OPS;
+        let ctmStack = [[1, 0, 0, 1, 0, 0]];
+
+        for (let oi = 0; oi < opList.fnArray.length; oi++) {
+          const fn   = opList.fnArray[oi];
+          const args = opList.argsArray[oi];
+          if      (fn === OPS.save)      ctmStack.push([...ctmStack[ctmStack.length-1]]);
+          else if (fn === OPS.restore)   { if (ctmStack.length > 1) ctmStack.pop(); }
+          else if (fn === OPS.transform) ctmStack[ctmStack.length-1] = multiplyCtm(ctmStack[ctmStack.length-1], args);
+          else if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject) {
+            const [a,b,c,d,e,f] = ctmStack[ctmStack.length-1];
+            const imgW = Math.abs(a + c), imgH = Math.abs(b + d);
+            const imgX = Math.min(e, e+a, e+c, e+a+c);
+            const imgY = Math.min(f, f+b, f+d, f+b+d);
+            imagePlacements.push({ x: imgX, y: imgY, w: imgW, h: imgH });
+          }
+        }
+      } catch(e) { console.warn('[Aldens skisse] Operator list feil side ' + pn, e); }
+
+      // Ta den største tegningen (min 80×80 pt for å utelukke logoer)
+      const drawings = imagePlacements.filter(img => img.w > 80 && img.h > 80);
+      if (drawings.length === 0) { skisser[prodNr] = null; continue; }
+
+      const drawing = drawings.sort((a, b) => (b.w*b.h) - (a.w*a.h))[0];
+
+      // Konverter fra PDF-punkter til canvas-piksler
+      const cX = Math.floor(drawing.x * scale);
+      const cW = Math.floor(drawing.w * scale);
+      const cH = Math.floor(drawing.h * scale);
+      const cY = Math.floor(vp.height - (drawing.y + drawing.h) * scale);
+
+      if (cW > 20 && cH > 20 && cX >= 0 && cY >= 0 &&
+          cX + cW <= canvas.width && cY + cH <= canvas.height) {
+        // Normaliser til maks 500px
+        const maxSide = 500;
+        const aspect  = cW / cH;
+        const nW = aspect >= 1 ? maxSide : Math.round(maxSide * aspect);
+        const nH = aspect >= 1 ? Math.round(maxSide / aspect) : maxSide;
+        const nc = document.createElement('canvas');
+        nc.width = nW; nc.height = nH;
+        const nCtx = nc.getContext('2d');
+        nCtx.fillStyle = '#ffffff';
+        nCtx.fillRect(0, 0, nW, nH);
+        nCtx.drawImage(canvas, cX, cY, cW, cH, 0, 0, nW, nH);
+        skisser[prodNr] = nc.toDataURL('image/png').split(',')[1];
+      } else {
+        skisser[prodNr] = null;
+      }
+    }
+
+    return { skisser };
+  }
+
   // ── ALDENS-PARSER (SIA "ALDENS HOLDING", Riga, Latvia) ─────────────────────────
   // Tilbudsformat: engelsk, to-kolonne-layout.
   //
@@ -3021,9 +3113,10 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
         else if (FABRIKK === 'aldens')  res1 = parseAldensPDF(pdfText1, valutakurs, faktorInp);
         else                            res1 = parseAliuminatasPDF(pdfText1, valutakurs, faktorInp);
 
-        // Hent skisser via Aradas-ekstraktor (fungerer for alle JPEG-baserte fabrikker)
+        // Hent skisser — Aldens bruker dedikert ekstraktor (ett produkt per side)
         try {
-          const result = await extractPdfSkisserAradas(selectedFile);
+          const extractFn = (FABRIKK === 'aldens') ? extractAldensSketches : extractPdfSkisserAradas;
+          const result = await extractFn(selectedFile);
           if (result && result.skisser) {
             skisser = result.skisser;
             vnrMap = Object.assign({}, result.vnrMap || {}, res1._vnrMap || {});
