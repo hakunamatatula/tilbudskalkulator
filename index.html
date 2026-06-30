@@ -485,9 +485,13 @@
     <div style="text-align:right;margin-bottom:8px;">
       <a href="#" onclick="glemtPassord();return false;" style="font-size:12px;color:var(--accent);text-decoration:none;opacity:0.8;">Glemt passord?</a>
     </div>
-    <div id="glemt-passord-msg" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;font-size:13px;color:var(--muted);line-height:1.6;">
-      Kontakt administrator for å tilbakestille passord:<br>
-      <a href="mailto:marius.matatula@gmail.com?subject=Tilbudskalkulator%20-%20Tilbakestill%20passord" style="color:var(--accent);text-decoration:none;font-weight:600;">marius.matatula@gmail.com</a>
+    <div id="glemt-passord-msg" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;font-size:13px;color:var(--muted);line-height:1.7;">
+      <div style="font-weight:600;color:var(--text);margin-bottom:8px;">Tilbakestill innlogging</div>
+      Klikk knappen under for å nullstille alle brukere og logge inn med standard-passord:<br>
+      <span style="color:var(--text);font-family:monospace;font-size:12px;">marius@merkapital.no</span> &nbsp;/&nbsp; <span style="color:var(--text);font-family:monospace;font-size:12px;">Nora2026!</span><br>
+      <button onclick="tilbakestillBrukere()" style="margin-top:10px;background:var(--accent);color:#0a1628;border:none;border-radius:6px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;letter-spacing:0.04em;">
+        ↺ &nbsp;Tilbakestill til standard-innlogging
+      </button>
     </div>
     <div class="login-error" id="login-error"></div>
     <button class="btn" onclick="loggInn()">→ &nbsp;Logg inn</button>
@@ -4632,6 +4636,24 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   function glemtPassord() {
     const msg = document.getElementById('glemt-passord-msg');
     if (msg) msg.style.display = msg.style.display === 'none' ? 'block' : 'none';
+  }
+
+  /** Nullstill alle brukere og opprett standard-brukere på nytt. */
+  async function tilbakestillBrukere() {
+    try { localStorage.removeItem('norwin_kalk_users'); } catch(e) {}
+    try { sessionStorage.removeItem('norwin_kalk_session'); } catch(e) {}
+    const initBrukere = [];
+    for (const b of STANDARD_BRUKERE_HASH) {
+      const hash = await sha256(b.passKlar);
+      initBrukere.push({ epost: b.epost, rolle: b.rolle, passHash: hash });
+    }
+    try { localStorage.setItem('norwin_kalk_users', JSON.stringify(initBrukere)); } catch(e) {}
+    document.getElementById('login-email').value = 'marius@merkapital.no';
+    document.getElementById('login-pass').value  = 'Nora2026!';
+    document.getElementById('login-error').textContent = '';
+    const msg = document.getElementById('glemt-passord-msg');
+    if (msg) msg.style.display = 'none';
+    await loggInn();
   }
 
   /** Logg inn: hash passord, sjekk mot DB, sett sesjon. */
