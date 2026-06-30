@@ -74,7 +74,7 @@
   #result { display:none; }
 
   /* Offer doc styles */
-  .offer-doc { background:#fff; color:#111; padding:40px; font-family:Arial,sans-serif; margin-top:28px; max-width:800px; }
+  .offer-doc { background:#fff; color:#111; padding:40px; font-family:Arial,sans-serif; margin-top:28px; max-width:1140px; width:100%; box-sizing:border-box; }
   .offer-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; border-bottom:3px solid #1a3a5c; padding-bottom:16px; }
   .offer-logo img { max-height:60px; max-width:200px; }
   .offer-title-block { text-align:right; }
@@ -340,7 +340,7 @@
   .hide-prices .price-table th.price-col,
   .hide-prices .price-table td.price-col { display:none !important; }
   /* FortjenestePanel i resultatvisning */
-  .margin-panel { background:#eef4fb; border:2px solid #c8d0da; border-left:5px solid #1a3a5c; padding:18px 22px; margin:18px 0; border-radius:6px; font-family:'Source Sans 3',sans-serif; max-width:800px; box-sizing:border-box; }
+  .margin-panel { background:#eef4fb; border:2px solid #c8d0da; border-left:5px solid #1a3a5c; padding:18px 22px; margin:18px 0; border-radius:6px; font-family:'Source Sans 3',sans-serif; max-width:1140px; width:100%; box-sizing:border-box; }
   .margin-panel-title { font-size:13px; letter-spacing:0.12em; text-transform:uppercase; color:#1a3a5c; font-weight:700; margin-bottom:12px; }
   .margin-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
   .margin-item { background:#fff; border:2px solid #c8d0da; padding:12px 16px; border-radius:4px; }
@@ -2672,14 +2672,37 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   // Aldens-PDFen har ett produkt per side med ett teknisk tegning i midten.
   // Produktsider identifiseres ved teksten "Pos. ALU - N" i tekstlaget.
   // Den største bildeforekomsten per side hentes og lagres som base64 PNG.
-  /** Fallback for Aldens: klipp midtre del av siden der tegningen typisk er */
-  function _aldensCenterCrop(canvas) {
-    // Aldens PDF: teknisk tegning er i sentrum av siden
-    // ca. venstre 15%→68%, topp 8%→88%
-    const cX = Math.floor(canvas.width  * 0.15);
-    const cY = Math.floor(canvas.height * 0.08);
-    const cW = Math.floor(canvas.width  * 0.53);
-    const cH = Math.floor(canvas.height * 0.80);
+  /**
+   * Fallback for Aldens: klipp ett horisontalt bånd av siden.
+   * idx = produkt-indeks på siden (0-basert), total = antall produkter på siden.
+   */
+  function _aldensBandCrop(canvas, vp, idx, total) {
+    const bandH = Math.floor(vp.height / total);
+    const startY = Math.floor(bandH * idx);
+    const cX = Math.floor(canvas.width * 0.04);
+    const cY = Math.max(0, startY + Math.floor(bandH * 0.04));
+    const cW = Math.floor(canvas.width * 0.58);
+    const cH = Math.min(Math.floor(bandH * 0.90), canvas.height - cY);
+    const maxSide = 500;
+    const aspect  = cW / Math.max(cH, 1);
+    const nW = aspect >= 1 ? maxSide : Math.round(maxSide * aspect);
+    const nH = aspect >= 1 ? Math.round(maxSide / aspect) : maxSide;
+    const nc = document.createElement('canvas');
+    nc.width = nW; nc.height = nH;
+    const nCtx = nc.getContext('2d');
+    nCtx.fillStyle = '#ffffff';
+    nCtx.fillRect(0, 0, nW, nH);
+    nCtx.drawImage(canvas, cX, cY, cW, cH, 0, 0, nW, nH);
+    return nc.toDataURL('image/png').split(',')[1];
+  }
+
+  /** Klipp ett enkelt bilde fra canvas og normaliser til maks 500px */
+  function _cropCanvasRegion(canvas, cX_raw, cY_raw, cW_raw, cH_raw) {
+    const cX = Math.max(0, Math.floor(cX_raw));
+    const cY = Math.max(0, Math.floor(cY_raw));
+    const cW = Math.min(Math.floor(cW_raw), canvas.width  - cX);
+    const cH = Math.min(Math.floor(cH_raw), canvas.height - cY);
+    if (cW < 20 || cH < 20) return null;
     const maxSide = 500;
     const aspect  = cW / cH;
     const nW = aspect >= 1 ? maxSide : Math.round(maxSide * aspect);
@@ -2700,7 +2723,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 
     const skisser = {};  // { produktNr: base64 }
     const scale   = 1.5;
-    let   seqNr   = 1;   // teller for produkter funnet
+    let   seqNr   = 1;   // global sekvensteller
 
     const multiplyCtm = (m1, m2) => {
       const [a1,b1,c1,d1,e1,f1] = m1, [a2,b2,c2,d2,e2,f2] = m2;
@@ -2712,23 +2735,34 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       const page = await pdf.getPage(pn);
       const tc   = await page.getTextContent();
 
-      // Sjekk om dette er en produktside — prøv begge: sammensatt og adskilt tekst
-      const sideTekstSamlet  = tc.items.map(i => i.str).join('');
-      const sideTekstMellom  = tc.items.map(i => i.str).join(' ');
-      const erProduktSide =
-        (/Pos/i.test(sideTekstSamlet)  && /ALU/i.test(sideTekstSamlet)) ||
-        (/Pos\./i.test(sideTekstMellom) && /ALU/i.test(sideTekstMellom));
-      if (!erProduktSide) continue;
+      // ── Kollapser letter-spacet tekst: grupper items per Y-linje ──
+      const lineMap = new Map(); // roundedY → samlet tekst
+      for (const item of tc.items) {
+        const ry = Math.round(item.transform[5] / 6) * 6;
+        lineMap.set(ry, (lineMap.get(ry) || '') + item.str);
+      }
+      const allCollapsed = Array.from(lineMap.values()).join('\n');
 
-      const prodNr = seqNr++;
+      // Finn ALU-posisjoner på siden (kan være 0, 1 eller 2+)
+      const aluMatches = allCollapsed.match(/Pos\.?ALU-\d+/gi) || [];
+      if (aluMatches.length === 0) continue;
 
-      // Render siden til canvas
+      const numProds = aluMatches.length;
+
+      // Finn Y-koordinater (pdf.js user space: Y fra bunn) for hvert Pos.-treff
+      // Sortert synkende (høyest på siden = størst Y = øverst)
+      const prodYCoords = [];
+      for (const [ry, line] of [...lineMap.entries()].sort((a, b) => b[0] - a[0])) {
+        if (/Pos\.?ALU-\d+/i.test(line)) prodYCoords.push(ry);
+      }
+
+      // Render siden
       const vp     = page.getViewport({ scale });
       const canvas = document.createElement('canvas');
       canvas.width = vp.width; canvas.height = vp.height;
       await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
 
-      // Finn bildeposisjoner via operator list (CTM-sporing)
+      // Finn bildeplasseringer via operator list (CTM-sporing)
       let imagePlacements = [];
       try {
         const opList = await page.getOperatorList();
@@ -2743,7 +2777,6 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
           else if (fn === OPS.transform) ctmStack[ctmStack.length-1] = multiplyCtm(ctmStack[ctmStack.length-1], args);
           else if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject) {
             const [a,b,c,d,e,f] = ctmStack[ctmStack.length-1];
-            // Støtter både vanlig [w,0,0,h] og speilet [w,0,0,-h] CTM
             const imgW = Math.abs(a) + Math.abs(c);
             const imgH = Math.abs(b) + Math.abs(d);
             const imgX = Math.min(e, e+a, e+c, e+a+c);
@@ -2753,46 +2786,33 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
         }
       } catch(e) { console.warn('[Aldens skisse] Operator list feil side ' + pn, e); }
 
-      // Ta den største tegningen (min 80×80 pt for å utelukke logoer)
-      const drawings = imagePlacements.filter(img => img.w > 80 && img.h > 80);
+      // Filtrer til tegninger (min 80×80 pt), sorter topp-til-bunn (synkende Y)
+      const drawings = imagePlacements
+        .filter(img => img.w > 80 && img.h > 80)
+        .sort((a, b) => b.y - a.y);  // høyest Y (øverst på siden) først
 
-      // Ingen raster-bilde funnet → tegningen er trolig vektor; bruk center-crop
-      if (drawings.length === 0) {
-        skisser[prodNr] = _aldensCenterCrop(canvas);
-        continue;
+      // ── Match hvert produkt til et bilde 1:1 etter posisjon (topp→bunn) ──
+      for (let pi = 0; pi < numProds; pi++) {
+        const curSeqNr = seqNr + pi;
+
+        if (drawings[pi]) {
+          const drawing = drawings[pi];
+          // Konverter PDF user-space → canvas piksler
+          const b64 = _cropCanvasRegion(
+            canvas,
+            drawing.x * scale,
+            vp.height - (drawing.y + drawing.h) * scale,
+            drawing.w * scale,
+            drawing.h * scale
+          );
+          skisser[curSeqNr] = b64 || _aldensBandCrop(canvas, vp, pi, numProds);
+        } else {
+          // Ingen raster-bilde — tegningen er vektor; klipp bånd for dette produktet
+          skisser[curSeqNr] = _aldensBandCrop(canvas, vp, pi, numProds);
+        }
       }
 
-      const drawing = drawings.sort((a, b) => (b.w*b.h) - (a.w*a.h))[0];
-
-      // Konverter fra PDF-punkter til canvas-piksler
-      const cX_raw = drawing.x * scale;
-      const cY_raw = vp.height - (drawing.y + drawing.h) * scale;
-      const cW_raw = drawing.w * scale;
-      const cH_raw = drawing.h * scale;
-
-      // Klem koordinater innenfor canvas-grenser (handles litt utenfor-grense)
-      const cX = Math.max(0, Math.floor(cX_raw));
-      const cY = Math.max(0, Math.floor(cY_raw));
-      const cW = Math.min(Math.floor(cW_raw), canvas.width  - cX);
-      const cH = Math.min(Math.floor(cH_raw), canvas.height - cY);
-
-      if (cW > 40 && cH > 40) {
-        // Normaliser til maks 500px
-        const maxSide = 500;
-        const aspect  = cW / cH;
-        const nW = aspect >= 1 ? maxSide : Math.round(maxSide * aspect);
-        const nH = aspect >= 1 ? Math.round(maxSide / aspect) : maxSide;
-        const nc = document.createElement('canvas');
-        nc.width = nW; nc.height = nH;
-        const nCtx = nc.getContext('2d');
-        nCtx.fillStyle = '#ffffff';
-        nCtx.fillRect(0, 0, nW, nH);
-        nCtx.drawImage(canvas, cX, cY, cW, cH, 0, 0, nW, nH);
-        skisser[prodNr] = nc.toDataURL('image/png').split(',')[1];
-      } else {
-        // Koordinater for små eller ugyldig — bruk center-crop fallback
-        skisser[prodNr] = _aldensCenterCrop(canvas);
-      }
+      seqNr += numProds;  // hopp over like mange som vi fant på denne siden
     }
 
     return { skisser };
