@@ -482,6 +482,13 @@
     <div class="field" style="margin-bottom:6px;"><div class="label">Passord</div>
       <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"
         onkeydown="if(event.key==='Enter')loggInn()" /></div>
+    <div style="text-align:right;margin-bottom:8px;">
+      <a href="#" onclick="glemtPassord();return false;" style="font-size:12px;color:var(--accent);text-decoration:none;opacity:0.8;">Glemt passord?</a>
+    </div>
+    <div id="glemt-passord-msg" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;font-size:13px;color:var(--muted);line-height:1.6;">
+      Kontakt administrator for å tilbakestille passord:<br>
+      <a href="mailto:marius.matatula@gmail.com?subject=Tilbudskalkulator%20-%20Tilbakestill%20passord" style="color:var(--accent);text-decoration:none;font-weight:600;">marius.matatula@gmail.com</a>
+    </div>
     <div class="login-error" id="login-error"></div>
     <button class="btn" onclick="loggInn()">→ &nbsp;Logg inn</button>
   </div>
@@ -1075,7 +1082,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-30-v29';
+  const APP_VERSION = '2026-06-30-v30';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -4619,6 +4626,12 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     } else {
       btn.style.display = 'none';
     }
+  }
+
+  /** Vis/skjul "glemt passord"-melding. */
+  function glemtPassord() {
+    const msg = document.getElementById('glemt-passord-msg');
+    if (msg) msg.style.display = msg.style.display === 'none' ? 'block' : 'none';
   }
 
   /** Logg inn: hash passord, sjekk mot DB, sett sesjon. */
