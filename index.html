@@ -340,7 +340,7 @@
   .hide-prices .price-table th.price-col,
   .hide-prices .price-table td.price-col { display:none !important; }
   /* FortjenestePanel i resultatvisning */
-  .margin-panel { background:#eef4fb; border:2px solid #c8d0da; border-left:5px solid #1a3a5c; padding:18px 22px; margin:18px 0; border-radius:6px; font-family:'Source Sans 3',sans-serif; }
+  .margin-panel { background:#eef4fb; border:2px solid #c8d0da; border-left:5px solid #1a3a5c; padding:18px 22px; margin:18px 0; border-radius:6px; font-family:'Source Sans 3',sans-serif; max-width:800px; box-sizing:border-box; }
   .margin-panel-title { font-size:13px; letter-spacing:0.12em; text-transform:uppercase; color:#1a3a5c; font-weight:700; margin-bottom:12px; }
   .margin-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
   .margin-item { background:#fff; border:2px solid #c8d0da; padding:12px 16px; border-radius:4px; }
@@ -648,6 +648,11 @@
       <div class="margin-item"><div class="mi-label">Salgspris (ekskl. MVA)</div><div class="mi-val" id="mp-salgspris">—</div></div>
       <div class="margin-item good"><div class="mi-label">Fortjeneste (kr)</div><div class="mi-val" id="mp-fortjeneste">—</div></div>
       <div class="margin-item good"><div class="mi-label">Fortjenestemargin</div><div class="mi-val" id="mp-margin">—</div></div>
+    </div>
+    <div id="mp-extras-note" style="display:none;margin-top:10px;padding:8px 12px;background:#fffbe6;border:1px solid #e8c97a;border-radius:4px;font-size:11px;color:#7a5a00;line-height:1.5;">
+      <strong>⚠ Tillegg fra fabrikk inkludert i kostpris:</strong>
+      <span id="mp-extras-linjer"></span>
+      <div style="margin-top:4px;color:#5a4200;font-style:italic;">Tallene i parantes viser fortjeneste/margin etter tillegg fra fabrikk er trukket fra.</div>
     </div>
   </div>
   <div class="offer-doc" id="offer-doc"></div>
@@ -1070,7 +1075,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-26-v28';
+  const APP_VERSION = '2026-06-30-v29';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -2656,6 +2661,27 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   // Aldens-PDFen har ett produkt per side med ett teknisk tegning i midten.
   // Produktsider identifiseres ved teksten "Pos. ALU - N" i tekstlaget.
   // Den største bildeforekomsten per side hentes og lagres som base64 PNG.
+  /** Fallback for Aldens: klipp midtre del av siden der tegningen typisk er */
+  function _aldensCenterCrop(canvas) {
+    // Aldens PDF: teknisk tegning er i sentrum av siden
+    // ca. venstre 15%→68%, topp 8%→88%
+    const cX = Math.floor(canvas.width  * 0.15);
+    const cY = Math.floor(canvas.height * 0.08);
+    const cW = Math.floor(canvas.width  * 0.53);
+    const cH = Math.floor(canvas.height * 0.80);
+    const maxSide = 500;
+    const aspect  = cW / cH;
+    const nW = aspect >= 1 ? maxSide : Math.round(maxSide * aspect);
+    const nH = aspect >= 1 ? Math.round(maxSide / aspect) : maxSide;
+    const nc = document.createElement('canvas');
+    nc.width = nW; nc.height = nH;
+    const nCtx = nc.getContext('2d');
+    nCtx.fillStyle = '#ffffff';
+    nCtx.fillRect(0, 0, nW, nH);
+    nCtx.drawImage(canvas, cX, cY, cW, cH, 0, 0, nW, nH);
+    return nc.toDataURL('image/png').split(',')[1];
+  }
+
   async function extractAldensSketches(file) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://hakunamatatula.github.io/tilbudskalkulator/pdf.worker.min.js';
     const arrayBuffer = await file.arrayBuffer();
@@ -2675,9 +2701,13 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       const page = await pdf.getPage(pn);
       const tc   = await page.getTextContent();
 
-      // Sjekk om dette er en produktside (inneholder "Pos." + "ALU")
-      const sideTekst = tc.items.map(i => i.str).join(' ');
-      if (!/Pos\./i.test(sideTekst) || !/ALU/i.test(sideTekst)) continue;
+      // Sjekk om dette er en produktside — prøv begge: sammensatt og adskilt tekst
+      const sideTekstSamlet  = tc.items.map(i => i.str).join('');
+      const sideTekstMellom  = tc.items.map(i => i.str).join(' ');
+      const erProduktSide =
+        (/Pos/i.test(sideTekstSamlet)  && /ALU/i.test(sideTekstSamlet)) ||
+        (/Pos\./i.test(sideTekstMellom) && /ALU/i.test(sideTekstMellom));
+      if (!erProduktSide) continue;
 
       const prodNr = seqNr++;
 
@@ -2702,7 +2732,9 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
           else if (fn === OPS.transform) ctmStack[ctmStack.length-1] = multiplyCtm(ctmStack[ctmStack.length-1], args);
           else if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject) {
             const [a,b,c,d,e,f] = ctmStack[ctmStack.length-1];
-            const imgW = Math.abs(a + c), imgH = Math.abs(b + d);
+            // Støtter både vanlig [w,0,0,h] og speilet [w,0,0,-h] CTM
+            const imgW = Math.abs(a) + Math.abs(c);
+            const imgH = Math.abs(b) + Math.abs(d);
             const imgX = Math.min(e, e+a, e+c, e+a+c);
             const imgY = Math.min(f, f+b, f+d, f+b+d);
             imagePlacements.push({ x: imgX, y: imgY, w: imgW, h: imgH });
@@ -2712,18 +2744,28 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 
       // Ta den største tegningen (min 80×80 pt for å utelukke logoer)
       const drawings = imagePlacements.filter(img => img.w > 80 && img.h > 80);
-      if (drawings.length === 0) { skisser[prodNr] = null; continue; }
+
+      // Ingen raster-bilde funnet → tegningen er trolig vektor; bruk center-crop
+      if (drawings.length === 0) {
+        skisser[prodNr] = _aldensCenterCrop(canvas);
+        continue;
+      }
 
       const drawing = drawings.sort((a, b) => (b.w*b.h) - (a.w*a.h))[0];
 
       // Konverter fra PDF-punkter til canvas-piksler
-      const cX = Math.floor(drawing.x * scale);
-      const cW = Math.floor(drawing.w * scale);
-      const cH = Math.floor(drawing.h * scale);
-      const cY = Math.floor(vp.height - (drawing.y + drawing.h) * scale);
+      const cX_raw = drawing.x * scale;
+      const cY_raw = vp.height - (drawing.y + drawing.h) * scale;
+      const cW_raw = drawing.w * scale;
+      const cH_raw = drawing.h * scale;
 
-      if (cW > 20 && cH > 20 && cX >= 0 && cY >= 0 &&
-          cX + cW <= canvas.width && cY + cH <= canvas.height) {
+      // Klem koordinater innenfor canvas-grenser (handles litt utenfor-grense)
+      const cX = Math.max(0, Math.floor(cX_raw));
+      const cY = Math.max(0, Math.floor(cY_raw));
+      const cW = Math.min(Math.floor(cW_raw), canvas.width  - cX);
+      const cH = Math.min(Math.floor(cH_raw), canvas.height - cY);
+
+      if (cW > 40 && cH > 40) {
         // Normaliser til maks 500px
         const maxSide = 500;
         const aspect  = cW / cH;
@@ -2737,7 +2779,8 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
         nCtx.drawImage(canvas, cX, cY, cW, cH, 0, 0, nW, nH);
         skisser[prodNr] = nc.toDataURL('image/png').split(',')[1];
       } else {
-        skisser[prodNr] = null;
+        // Koordinater for små eller ugyldig — bruk center-crop fallback
+        skisser[prodNr] = _aldensCenterCrop(canvas);
       }
     }
 
@@ -2931,15 +2974,15 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       });
     }
 
-    // Legg til selger-info på siste produkt (no-print — vises ikke i utskrift)
-    if (extrasEurTotal > 0 && finalProducts.length > 0) {
-      const extrasNok = _r2(extrasEurTotal * faktor);
-      const linjer = [];
-      if (hwAmt)    linjer.push(`Beslag/saging: ${hwAmt.toFixed(2)} EUR`);
-      if (packAmt)  linjer.push(`Pakking: ${packAmt.toFixed(2)} EUR`);
-      if (delivAmt) linjer.push(`Levering: ${delivAmt.toFixed(2)} EUR`);
-      linjer.push(`Totalt: ${extrasEurTotal.toFixed(2)} EUR (≈ kr ${formatNOK(extrasNok)} eks. MVA)`);
-      finalProducts[finalProducts.length-1].s.push({ l:'_selger_tillegg', v: linjer.join(' | ') });
+    // Bygg selger-tillegg info (vises under totaler, ikke i produktspesifikasjon)
+    let selgerTilleggLinjer = [];
+    let extrasNok = 0;
+    if (extrasEurTotal > 0) {
+      extrasNok = _r2(extrasEurTotal * faktor);
+      if (hwAmt)    selgerTilleggLinjer.push(`Beslag/saging: ${hwAmt.toFixed(2)} EUR`);
+      if (packAmt)  selgerTilleggLinjer.push(`Pakking: ${packAmt.toFixed(2)} EUR`);
+      if (delivAmt) selgerTilleggLinjer.push(`Levering: ${delivAmt.toFixed(2)} EUR`);
+      selgerTilleggLinjer.push(`Totalt: ${extrasEurTotal.toFixed(2)} EUR (≈ kr ${formatNOK(extrasNok)} eks. MVA)`);
     }
 
     const eksMva = _r2(finalProducts.reduce((s,p) => s + p.sum, 0));
@@ -2956,7 +2999,10 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       _fabrikk: 'aldens',
       _antallKonst: antallKonst,
       _totalAreal: totalAreal,
-      _totalOmkrets: totalOmkrets
+      _totalOmkrets: totalOmkrets,
+      _selgerTilleggLinjer: selgerTilleggLinjer,
+      _extrasNok: extrasNok,
+      _extrasEur: extrasEurTotal
     };
   }
 
@@ -4113,24 +4159,59 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       salgsprisEksMva += nokPrisPerStk * p.ant;
 
       // Kostpris = EUR listepris × (1 - rabatt%) × valutakurs
+      // NB: for Aldens er EUR-feltet allerede inkludert tillegg (hardware/pakk/levering)
       const rabatt = (p.rabatt || 0) / 100;
       kostprisNok += p.eur * (1 - rabatt) * p.ant * valutakurs;
     });
 
-    const fortjeneste = salgsprisEksMva - kostprisNok;
-    const margin = salgsprisEksMva > 0 ? (fortjeneste / salgsprisEksMva * 100) : 0;
+    // Tillegg fra fabrikk (Aldens) — brukes til å vise to sett med tall
+    const tilleggNok = window._aldensTilleggNok || 0;
+    const harTillegg = tilleggNok > 0;
+
+    // Uten tillegg = ren produktmargin (hoved-tall)
+    const kostprisUtenTillegg = kostprisNok - tilleggNok;
+    const fortjUten  = salgsprisEksMva - kostprisUtenTillegg;
+    const marginUten = salgsprisEksMva > 0 ? (fortjUten / salgsprisEksMva * 100) : 0;
+
+    // Med tillegg = faktisk kostnad inkl. hardware/pakk/levering (parentes-tall)
+    const fortjMed  = salgsprisEksMva - kostprisNok;
+    const marginMed = salgsprisEksMva > 0 ? (fortjMed / salgsprisEksMva * 100) : 0;
 
     const panel = document.getElementById('margin-panel');
     if (!panel) return;
     panel.style.display = 'block';
-    document.getElementById('mp-kostpris').textContent = 'kr ' + formatNOK(kostprisNok);
-    document.getElementById('mp-salgspris').textContent = 'kr ' + formatNOK(salgsprisEksMva);
-    document.getElementById('mp-fortjeneste').textContent = 'kr ' + formatNOK(fortjeneste);
-    const marginEl = document.getElementById('mp-margin');
-    marginEl.textContent = margin.toFixed(1) + ' %';
+
+    document.getElementById('mp-kostpris').textContent   = 'kr ' + formatNOK(harTillegg ? kostprisUtenTillegg : kostprisNok);
+    document.getElementById('mp-salgspris').textContent  = 'kr ' + formatNOK(salgsprisEksMva);
+
+    // Fortjeneste: viser uten tillegg som hovedtall, med tillegg i parentes
+    document.getElementById('mp-fortjeneste').textContent = harTillegg
+      ? `kr ${formatNOK(fortjUten)}  (kr ${formatNOK(fortjMed)})`
+      : `kr ${formatNOK(fortjMed)}`;
+
+    // Margin: samme mønster
+    document.getElementById('mp-margin').textContent = harTillegg
+      ? `${marginUten.toFixed(1)} %  (${marginMed.toFixed(1)} %)`
+      : `${marginMed.toFixed(1)} %`;
+
     const items = panel.querySelectorAll('.margin-item');
-    items[2].className = 'margin-item ' + (fortjeneste >= 0 ? 'good' : 'warn');
-    items[3].className = 'margin-item ' + (margin >= 25 ? 'good' : margin < 15 ? 'warn' : '');
+    items[2].className = 'margin-item ' + (fortjUten >= 0 ? 'good' : 'warn');
+    items[3].className = 'margin-item ' + (marginUten >= 25 ? 'good' : marginUten < 15 ? 'warn' : '');
+
+    // Vis/skjul extras-note i TILBUDSØKONOMI
+    const extrasNote = document.getElementById('mp-extras-note');
+    if (extrasNote) {
+      if (harTillegg) {
+        extrasNote.style.display = 'block';
+        const linjerEl = document.getElementById('mp-extras-linjer');
+        if (linjerEl) {
+          const linjer = window._aldensTilleggLinjer || [];
+          linjerEl.innerHTML = linjer.map(l => ` <span style="display:block;margin-top:1px;">${l}</span>`).join('');
+        }
+      } else {
+        extrasNote.style.display = 'none';
+      }
+    }
   }
 
   function oppdaterTotaler() {
@@ -4178,6 +4259,10 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       rabatt: rabattPst,
       alt: p.alt||false
     }));
+
+    // Lagre Aldens-tillegg globalt for marginsberegning
+    window._aldensTilleggNok   = res._extrasNok  || 0;
+    window._aldensTilleggLinjer = res._selgerTilleggLinjer || [];
 
     // Produktseksjoner med enhetspris, totalpris, alternativ-merking og kommentarfelt
     const produktSeksjoner = produkter.map((p,i) => {
@@ -4405,6 +4490,11 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
           <div class="total-row"><span>Total inkl. MVA</span><span id="total-inkl-mva">kr ${formatNOK(res.tot||res.totalInklMVA)}</span></div>
         </div>
       </div>
+      ${(res._selgerTilleggLinjer && res._selgerTilleggLinjer.length > 0) ? `
+      <div class="no-print" style="margin-top:10px;background:#fffbe6;border:1px solid #e8c97a;border-radius:4px;padding:8px 14px;font-size:11.5px;color:#7a5a00;">
+        <strong>⚠ Tillegg fra fabrikk (kun synlig for selger):</strong>
+        ${res._selgerTilleggLinjer.map(l => `<span style="display:block;margin-top:2px;">${l}</span>`).join('')}
+      </div>` : ''}
       ${(res.uv || res.vekt) ? `
       <div style="margin-top:10px;font-size:12px;color:#555;display:flex;gap:24px;padding:8px 4px;border-top:1px solid #dde2ea;">
         ${res.uv  ? `<span>Gjennomsnittlig U-verdi: <strong>${res.uv}</strong></span>` : ''}
