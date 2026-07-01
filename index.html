@@ -1086,7 +1086,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-06-30-v30';
+  const APP_VERSION = '2026-07-01-v31';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -2736,24 +2736,30 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       const tc   = await page.getTextContent();
 
       // ── Kollapser letter-spacet tekst: grupper items per Y-linje ──
+      // Bruker 8pt toleranse (som extractPdfTextLayout) slik at "Pos." og "ALU-N"
+      // på samme linje alltid havner i samme gruppe uavhengig av PDF-versjon.
       const lineMap = new Map(); // roundedY → samlet tekst
       for (const item of tc.items) {
-        const ry = Math.round(item.transform[5] / 6) * 6;
+        const ry = Math.round(item.transform[5] / 8) * 8;
         lineMap.set(ry, (lineMap.get(ry) || '') + item.str);
       }
       const allCollapsed = Array.from(lineMap.values()).join('\n');
 
-      // Finn ALU-posisjoner på siden (kan være 0, 1 eller 2+)
-      const aluMatches = allCollapsed.match(/Pos\.?ALU-\d+/gi) || [];
+      // Finn ALU-posisjoner på siden (kan være 0, 1 eller 2+).
+      // Regex bruker ALU\s*-\s*\d+ for å håndtere varianter med og uten mellomrom:
+      //   "Pos.ALU-1MB-78EI..." (letter-spacet, sammenslått uten mellomrom)
+      //   "Pos. ALU-1 MB-78EI..." (normalformat med mellomrom)
+      //   "Pos. ALU - 1 MB - 78EI..." (mellomrom rundt bindestrek)
+      const aluMatches = allCollapsed.match(/ALU\s*-\s*\d+/gi) || [];
       if (aluMatches.length === 0) continue;
 
       const numProds = aluMatches.length;
 
-      // Finn Y-koordinater (pdf.js user space: Y fra bunn) for hvert Pos.-treff
+      // Finn Y-koordinater (pdf.js user space: Y fra bunn) for hvert ALU-treff
       // Sortert synkende (høyest på siden = størst Y = øverst)
       const prodYCoords = [];
       for (const [ry, line] of [...lineMap.entries()].sort((a, b) => b[0] - a[0])) {
-        if (/Pos\.?ALU-\d+/i.test(line)) prodYCoords.push(ry);
+        if (/ALU\s*-\s*\d+/i.test(line)) prodYCoords.push(ry);
       }
 
       // Render siden
