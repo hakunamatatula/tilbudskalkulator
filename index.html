@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta name="app-version" content="2026-09-09-v53"/>
+<meta name="app-version" content="2026-09-09-v54"/>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
 <meta http-equiv="Pragma" content="no-cache"/>
 <meta http-equiv="Expires" content="0"/>
@@ -1279,7 +1279,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-09-09-v53';
+  const APP_VERSION = '2026-09-09-v54';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -2458,6 +2458,17 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
         rf['_notat'] = (rf['_notat'] ? rf['_notat'] + ' | ' : '') + ln.trim();
         continue;
       }
+      // Vekt og Uw star som egne linjer per posisjon ("Vekt 97 kg." og
+      // "Uw <= 1.06."). De lignet nok pa kolonneoverskriftene i prisdelen, og
+      // ble derfor kastet av NOISE_RE for de rakk a bli felt. Fanges her, FOR
+      // stoyfilteret, slik at en overskrift uten verdi fortsatt siles bort.
+      let mVU;
+      if ((mVU = ln.match(/^(?:Vekt|Weight)\s+([\d\s.,]+\s*kg)\s*\.?$/i))) {
+        save(); rf['vekt_pos'] = mVU[1].replace(/\s+/g, ' ').trim(); continue;
+      }
+      if ((mVU = ln.match(/^Uw\s*(<?\s*=?\s*\d+(?:[.,]\d+)?)\s*\.?$/i))) {
+        save(); rf['uw_pos'] = mVU[1].replace(/\s+/g, '').replace('<=', '<= ').trim(); continue;
+      }
       if (NOISE_RE.test(ln)) { save(); continue; }
 
       // Fix 3: Hopp over løse tallkoder fra tegningsetiketter ("1", "60", "30 x 40", "6161", "115 x 135")
@@ -2492,6 +2503,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     add('Maling ute',  uteM  ? _xlColor(uteM[1].trim())  : '');
 
     add('Glass', _xlGlass(rf['glass'] || ''));
+    add('Avstandsskinner', _xlAvstandsskinner(rf['glass'] || ''));
 
     // Frames/hardware → Beslag + Hengsler + Brems + Håndtak + Ventilasjon
     const fh = _xlFrames(rf['frames/hardware'] || '');
@@ -2540,6 +2552,8 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     if (bgRaw) add('Spor i underkant', bgRaw.replace('V1 / L', 'V1/L').trim());
 
     add('Åpningsretning', _xlSeenFrom(rf['seen_from'] || ''));
+    add('Vekt', rf['vekt_pos'] || '');
+    add('Uw',   rf['uw_pos']   || '');
 
     return s;
   }
@@ -2618,9 +2632,23 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       .replace(/\s{2,}/g, ' ')
       .trim();
   }
+  // Fabrikken oppgir avstandsskinnene i en egen parentes bakerst i glassfeltet:
+  // "(Avstandskinner: Varmkant CH ultra RAL9016 hvit)". Merk stavematen i
+  // kilden, med en s. Den skal ut som eget felt, ikke ligge inne i glassteksten.
+  // Monsteret defineres inne i hver funksjon, ikke som felles konstant, fordi
+  // testoppsettet trekker ut funksjonene enkeltvis fra denne filen.
+  function _xlAvstandsskinner(raw) {
+    if (!raw) return '';
+    const AVSTAND_RE = /\(\s*(?:avstand[s]?skinn\w*|spacers?|warm\s*edge)\s*:?\s*([^)]*)\)/i;
+    const m = raw.replace(/\s{2,}/g, ' ').match(AVSTAND_RE);
+    return m && m[1] ? m[1].replace(/\s+/g, ' ').trim() : '';
+  }
   function _xlGlass(raw) {
     if (!raw) return '';
-    const r = raw.replace(/\s{2,}/g, ' ').trim();
+    // Avstandsskinnene hentes ut for seg (_xlAvstandsskinner) og fjernes her,
+    // slik at de ikke presenteres to steder.
+    const AVSTAND_RE = /\(\s*(?:avstand[s]?skinn\w*|spacers?|warm\s*edge)\s*:?\s*([^)]*)\)/i;
+    const r = raw.replace(/\s{2,}/g, ' ').replace(AVSTAND_RE, '').replace(/\s{2,}/g, ' ').trim();
     // Noen posisjoner har ulikt glass i hvert felt, nummerert "#1:" og "#2:"
     // (f.eks. et fast midtfelt med bedre U-verdi). Tidligere ble kun den første
     // koden med, og resten kastet — kunden fikk da feil glasspesifikasjon.
@@ -2630,7 +2658,9 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       for (const del of deler) {
         const nr = (del.match(/^#\s*(\d)\s*:/) || [])[1];
         const k  = (del.match(/\b\d[\dA-Za-z.]*(?:\/[\dA-Za-z.]+){2,}\b/) || [])[0] || '';
-        if (nr && k) ut.push('#' + nr + ': ' + k);
+        // Den forklarende parentesen (glasstype, gassfylling, U-verdi) skal med.
+        const tek = (del.match(/\(([^)]*)\)/) || [])[1];
+        if (nr && k) ut.push('#' + nr + ': ' + k + (tek ? ' (' + tek.replace(/\s+/g, ' ').trim() + ')' : ''));
       }
       if (ut.length) return ut.join(', ');
     }
@@ -2642,7 +2672,11 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     // Står det beskrivende tekst FORAN koden (f.eks. "Rectangle glass (450x750mm,
     // 1pcs)"), ble den tidligere kastet sammen med koden. Nå beholdes begge deler.
     const pre = _xlGlassOrd(r.slice(0, r.indexOf(kode)).replace(/^[\s*•\-]+/, ''));
-    return pre ? pre + ', ' + kode : kode;
+    // Den tekniske parentesen bak koden (glasstype, gassfylling, U-verdi) ble
+    // tidligere kuttet. Kunden satt da igjen med bare glasskoden.
+    const tek = (r.slice(r.indexOf(kode) + kode.length).match(/\(([^)]*)\)/) || [])[1];
+    const kodeTek = kode + (tek ? ' (' + tek.replace(/\s+/g, ' ').trim() + ')' : '');
+    return pre ? pre + ', ' + kodeTek : kodeTek;
   }
   function _xlFrames(raw) {
     const res = { beslag: '', hengsler: '', brems: '', handtak: '', ventilasjon: '', las: '' };
@@ -5253,6 +5287,20 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       if (markKort)   markKort.style.display   = 'none';
       if (markTabell) markTabell.style.display = 'none';
     }
+    // Faktoren er avledet av enhetsprisen: faktor = pris NOK / listepris EUR.
+    // Endrer selgeren prisen direkte, ma faktoren folge etter. Ellers star det et
+    // pastatt paslag ved siden av prisen som ikke stemmer med den. Faktoren
+    // gjelder kun denne posisjonen, de ovrige rores ikke.
+    const eurPos = parseFloat(el.getAttribute('data-eur')) || 0;
+    if (eurPos > 0) {
+      const nyFaktor = Math.round((nyPris / eurPos) * 10000) / 10000;
+      const faktorKort   = document.getElementById('faktor_' + idx);
+      const faktorTabell = document.getElementById('t_faktor_' + idx);
+      [faktorKort, faktorTabell].forEach(fEl => {
+        if (fEl) fEl.innerText = String(nyFaktor).replace('.', ',');
+      });
+    }
+
     el.innerText = formatNOK(nyPris);
     oppdaterTotaler();
   }
