@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta name="app-version" content="2026-08-13-v52"/>
+<meta name="app-version" content="2026-09-09-v53"/>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
 <meta http-equiv="Pragma" content="no-cache"/>
 <meta http-equiv="Expires" content="0"/>
@@ -1279,7 +1279,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-08-13-v52';
+  const APP_VERSION = '2026-09-09-v53';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -1574,7 +1574,7 @@ ${klon.outerHTML}
         /^\d+\s*\(\d+\s*stk\.?\)$/i.test(it.str) && it.x < 0.40
       );
       const alleVAnkereTmp = items.filter(it =>
-        /^V[D]?\d+[a-z]?$/i.test(it.str) && it.x < 0.15
+        /^V[D]?\d+(?:\s*\+\s*\d+)*[a-z]?$/i.test(it.str) && it.x < 0.15
       );
       // Tredje ankertype: prisraden ("1200x1400mm ..."), som avslutter hver
       // posisjonsblokk i praktisk talt alle fabrikkmaler. Brukes KUN på sider
@@ -1636,7 +1636,7 @@ ${klon.outerHTML}
         let sluttV = null;
         if (!slutt) {
           sluttV = items
-            .filter(it => /^V[D]?\d+$/i.test(it.str) && it.x < 0.15 && it.yTop > start.yTop + 0.05 && it.yTop < yMax)
+            .filter(it => /^V[D]?\d+(?:\s*\+\s*\d+)*$/i.test(it.str) && it.x < 0.15 && it.yTop > start.yTop + 0.05 && it.yTop < yMax)
             .sort((a, b) => a.yTop - b.yTop)[0];
           slutt = sluttV;
         }
@@ -1741,7 +1741,10 @@ ${klon.outerHTML}
       }));
       // Finn alle V-koder på x < 0.18
       items.forEach(it => {
-        if (/^[VY][D]?\d+[a-z]?$/i.test(it.str) && it.x < 0.18) {
+        // Fabrikken slår sammen posisjoner som dekker flere vindusnummer: "V1+2",
+        // "V3+4". Uten plusstegnet i mønsteret ble V-nummeret borte for nettopp
+        // de posisjonene.
+        if (/^[VY][D]?\d+(?:\s*\+\s*\d+)*[a-z]?$/i.test(it.str) && it.x < 0.18) {
           // Knytt til nærmeste produktnummer over denne y-posisjonen
           const anker = ankereUnike
             .filter(a => a.pageIdx === i && a.yStart < it.yTop)
@@ -2046,11 +2049,14 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       if (!offerNum && (r = ln.match(/^Offer\s+([\d\-]+)/i)))           offerNum = r[1];
       if (!offerNum && (r = ln.match(/^TILBUD\s+Nr\.?\s*:?\s*([\d\-]+)/i))) offerNum = r[1]; // norsk HCTC-variant (324764p)
       if (!dato     && (r = ln.match(/^(\d{4}-\d{2}-\d{2})$/)))         dato = r[1];
-      if (!kunde    && (r = ln.match(/^Customer:\s*(.+)/i)))             kunde = r[1].trim();
-      if (!kontakt  && (r = ln.match(/^Contact:\s*(.+)/i)))              kontakt = r[1].trim();
-      if (!prosjekt && (r = ln.match(/^Project\.?:?\s*(.+)/i)))          prosjekt = r[1].trim();
-      if (!kadr     && (r = ln.match(/^Address:\s*(.+)/i)))              kadr = r[1].trim();
-      if (!mob      && (r = ln.match(/^Mobile:\s*(.+)/i)))               mob = r[1].trim().replace(/^\+47\s*/, '');
+      // Fabrikken sender tilbud i to språkvarianter: engelsk (Customer/Contact/...)
+      // og norsk (Kunde/Kontaktperson/...). Begge må treffe, ellers står
+      // kundefeltene tomme i tilbudet.
+      if (!kunde    && (r = ln.match(/^(?:Customer|Kunde):\s*(.+)/i)))    kunde = r[1].trim();
+      if (!kontakt  && (r = ln.match(/^(?:Contact|Kontaktperson):\s*(.+)/i))) kontakt = r[1].trim();
+      if (!prosjekt && (r = ln.match(/^(?:Project|Prosjekt)\.?:?\s*(.+)/i))) prosjekt = r[1].trim();
+      if (!kadr     && (r = ln.match(/^(?:Address|Adresse):\s*(.+)/i)))   kadr = r[1].trim();
+      if (!mob      && (r = ln.match(/^(?:Mobile|Mob)\.?:\s*(.+)/i)))     mob = r[1].trim().replace(/^\+47\s*/, '');
       if (!epost    && (r = ln.match(/^E-?mail:\s*(.+)/i)))              epost = r[1].trim();
       if ((r = ln.match(/Rabatt[,\s%]+(\d+(?:[.,]\d+)?)\s*%/i)))        rabatt = Math.round(parseFloat(r[1].replace(',','.')));
       if ((r = ln.match(/Gjennomsnittlig U-verdi[^:]*:\s*([\d.]+)/i)))  uvVal = parseFloat(r[1]);
@@ -2344,9 +2350,28 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 
     // PDF.js kan skille ut kolon som eget tekstelement → "Wood :" i stedet for "Wood:"
     // \s* foran : håndterer begge varianter.  Frames\s*\/\s*hardware håndterer mellomrom rundt /.
-    const FIELD_RE      = /^(Type|Wood|Color|Glass\s+sealing|Glass|Frames\s*\/\s*hardware|Glazing\s+bars|Continuous\s+bar\s+widths|Bottomframe|Gaskets|Lining\s+groove|Bottom\s+groove)\s*:/i;
+    // Etikettene finnes i to språkvarianter fra fabrikken. De norske må stå FØR de
+    // kortere norske i alternasjonen (Glassforsegling før Glass, Gjennomgående
+    // sprosse bredder før Sprosser), ellers spiser det korte navnet det lange.
+    const LBL = '(Glass\\s+sealing|Glassforsegling|Glazing\\s+bars|Continuous\\s+bar\\s+widths|Gjennomg\u00e5ende\\s+sprosse\\s+bredder|Sprosser|Type|Wood|Tresort|Color|Malingfarge|Glass|Frames\\s*\\/\\s*hardware|Rammer\\s*\\/\\s*beslag|Bottomframe|Bunnglasslist|Gaskets|Pakninger|Lining\\s+groove|Not\\s+for\\s+foringer|Bottom\\s+groove|Spor\\s+i\\s+underkant|ventilasjon|D\u00f8rterskel)';
+    const FIELD_RE      = new RegExp('^' + LBL + '\\s*:', 'i');
     // Same labels, unforankret — for å plukke ut felt-etiketter midt i en linje
-    const FIELD_EMBED   = /(?:^|\s)(Type|Wood|Color|Glass\s+sealing|Glass|Frames\s*\/\s*hardware|Glazing\s+bars|Continuous\s+bar\s+widths|Bottomframe|Gaskets|Lining\s+groove|Bottom\s+groove)\s*:/i;
+    const FIELD_EMBED   = new RegExp('(?:^|\\s)' + LBL + '\\s*:', 'i');
+    // Norsk etikett → samme kanoniske nøkkel som den engelske, slik at
+    // _buildSpecs() og alle _xl*-oversetterne fungerer uendret.
+    const LABEL_ALIAS = {
+      'tresort': 'wood',
+      'malingfarge': 'color',
+      'rammer/beslag': 'frames/hardware',
+      'sprosser': 'glazing bars',
+      'gjennomg\u00e5ende sprosse bredder': 'continuous bar widths',
+      'bunnglasslist': 'bottomframe',
+      'pakninger': 'gaskets',
+      'glassforsegling': 'glass sealing',
+      'not for foringer': 'lining groove',
+      'spor i underkant': 'bottom groove',
+    };
+    const kanonisk = (l) => LABEL_ALIAS[l] || l;
 
     const applyLine = (ln) => {
       // 1) Felt-etikett ved starten av linjen
@@ -2354,7 +2379,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       if (fm) {
         save();
         // Normaliser label: komprimer mellomrom, fjern mellomrom rundt /
-        curLabel = fm[1].toLowerCase().replace(/\s+/g,' ').replace(/\s*\/\s*/g,'/');
+        curLabel = kanonisk(fm[1].toLowerCase().replace(/\s+/g,' ').replace(/\s*\/\s*/g,'/'));
         curVal   = ln.slice(fm[0].length).trim();
         return;
       }
@@ -2362,14 +2387,49 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       const em = FIELD_EMBED.exec(ln);
       if (em && em.index > 0) {
         save();
-        curLabel = em[1].toLowerCase().replace(/\s+/g,' ').replace(/\s*\/\s*/g,'/');
+        curLabel = kanonisk(em[1].toLowerCase().replace(/\s+/g,' ').replace(/\s*\/\s*/g,'/'));
         curVal   = ln.slice(em.index + em[0].length).trim();
         return;
       }
       // 3) Fortsettelse av nåværende felt
       if (curLabel) curVal = (curVal ? curVal + ' ' : '') + ln;
     };
-    const NOISE_RE = /^(Price, EUR|Qty|Sum, EUR|Weight|Uw <=|\d{6,}|\d+ \/ \d+|Alle priser|Vilkår|Manager|Qty\.:|m2:|Total ekskl|Totalt inkl|Totalsum|Rabatt)/i;
+    // Venstre kolonne i fabrikkmalen (posisjonsnummer, "N (Xstk.)", V-nummer og
+    // "Sett fra ...") ligger på samme y som høyre kolonne, og pdf.js slår dem
+    // derfor sammen til én linje. Skrelles prefikset ikke av, lekker det inn i
+    // spesifikasjonene: "Pakninger: Grå V12", "Åpningsretning: ... sølv kroker".
+    // Observert i norske fabrikktilbud.
+    const SETT_FRA_RE  = /^Sett fra\s+[^,]+,\s*sl(?:år\s+\S+|\S*)/i;
+    const SETT_FRA_ALT = /^Sett fra\s+\S+/i;
+    const skrellVenstre = (ln) => {
+      let s = ln, endret = true;
+      while (endret && s) {
+        endret = false;
+        let m;
+        if ((m = s.match(/^\d+\s*\(\d+\s*stk\.?\)\s*/i))) {
+          s = s.slice(m[0].length); endret = true;
+        } else if ((m = s.match(SETT_FRA_RE) || s.match(SETT_FRA_ALT))) {
+          if (!rf['seen_from']) rf['seen_from'] = m[0].trim();
+          s = s.slice(m[0].length); endret = true;
+        } else if ((m = s.match(/^V[D]?\d+(?:\s*\+\s*\d+)*[a-z]?\s+(?![\/\d])/i))) {
+          s = s.slice(m[0].length); endret = true;
+        } else if ((m = s.match(/^(?:\d{1,2}\s+){1,4}(?=#\s*\d\s*:)/))) {
+          // Tegningsetiketter ("1 2 1") foran glass-nummereringen "#1:"
+          s = s.slice(m[0].length); endret = true;
+        }
+      }
+      return s.trim();
+    };
+    const NOISE_RE = /^(Price, EUR|Pris, EUR|Qty|Antall|Sum, EUR|Weight|Vekt\b|Uw <=|\d{6,}|\d+ \/ \d+|Alle priser|Vilkår|Villkår|Manager|Qty\.:|m2:|stk\.:|Total ekskl|Totalt inkl|Totalsum|Rabatt|Gjennomsnittlig|Total vekt|Leveringsadresse|Kunde:|Kontaktperson:|Prosjekt|Adresse:|Mob\.|E-?mail:|TILBUD Nr)/i;
+    // Fabrikkens interne produksjonsmerknader. De står på engelsk i et ellers
+    // norsk tilbud, gjelder fabrikkens egne forbehold, og skal IKKE ut til
+    // sluttkunde. Uten dette filteret ble de hengt bakpå forrige spesifikasjon
+    // (f.eks. "Pakninger: Grå Sashes are too high").
+    // MERK: "Painted hinges" skal IKKE stå her. I det norske tilbudet er det en
+    // overskrift øverst på side 1, men den ligger før første posisjon og treffer
+    // aldri denne funksjonen. I det engelske formatet er "Painted hinges RAL9010"
+    // derimot en ekte hengselspesifikasjon, som filteret ville slettet.
+    const FABRIKKNOTAT_RE = /^(Sash(es)? (is|are) too high|Changed opening type|Window is too small|Frame in the top|Sashes? too high|-{5,})/i;
     const STK_RE   = /^\d+\s*\(\d+\s*stk\.?\)/i;
 
     // Fix 1: Fjern posisjons-nr fra første linje: "1 Type: VALUE" → "Type: VALUE"
@@ -2377,7 +2437,9 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       i === 0 ? ln.replace(/^\d{1,2}\s+/, '') : ln
     );
 
-    for (const ln of processedLines) {
+    for (const raaLinje of processedLines) {
+      const ln = skrellVenstre(raaLinje);
+      if (!ln) continue;
       if (/Alternative position/i.test(ln)) { isAlt = true; }
 
       // Prislinje: 1100x2000mm 2.20m² 1369.08 19 26012.52
@@ -2391,6 +2453,11 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
         continue;
       }
 
+      if (FABRIKKNOTAT_RE.test(ln)) {
+        save();
+        rf['_notat'] = (rf['_notat'] ? rf['_notat'] + ' | ' : '') + ln.trim();
+        continue;
+      }
       if (NOISE_RE.test(ln)) { save(); continue; }
 
       // Fix 3: Hopp over løse tallkoder fra tegningsetiketter ("1", "60", "30 x 40", "6161", "115 x 135")
@@ -2398,16 +2465,6 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 
       // "Seen from ..." → Åpningsretning
       if (/^Seen from/i.test(ln)) { save(); rf['seen_from'] = ln; continue; }
-
-      // Fix 2: "Sett fra..." / "N (Xstk.)" — kan ha FELT: VERDI på høyre side
-      if (/^Sett fra/i.test(ln) || STK_RE.test(ln)) {
-        const rightPart = ln
-          .replace(/^Sett fra[^,]+,\s*slår\s+\S+\s*/i, '')
-          .replace(/^\d+\s*\(\d+\s*stk\.?\)\s*/i, '')
-          .trim();
-        if (rightPart) applyLine(rightPart);
-        continue;
-      }
 
       applyLine(ln);
     }
@@ -2429,8 +2486,8 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     // Maling inne / ute
     const colorRaw = rf['color'] || '';
     // PDF.js kan gi "Inside :" med mellomrom → bruk \s* rundt kolon
-    const inneM = colorRaw.match(/Inside\s*:\s*(.+?)(?=\s*Outside\s*:|$)/i);
-    const uteM  = colorRaw.match(/Outside\s*:\s*(.+?)$/i);
+    const inneM = colorRaw.match(/(?:Inside|Inne)\s*:\s*(.+?)(?=\s*(?:Outside|Ute)\s*:|$)/i);
+    const uteM  = colorRaw.match(/(?:Outside|Ute)\s*:\s*(.+?)$/i);
     add('Maling inne', inneM ? _xlColor(inneM[1].trim()) : '');
     add('Maling ute',  uteM  ? _xlColor(uteM[1].trim())  : '');
 
@@ -2457,6 +2514,27 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     add('Bunnglasslist', _xlBottomframe(rf['bottomframe'] || ''));
     add('Pakninger',     _xlGaskets(rf['gaskets'] || ''));
     add('Glassforsegling', _xlGlassSealing(rf['glass sealing'] || ''));
+
+    // Det norske fabrikkformatet har ventilasjon som EGET felt, ikke som del av
+    // Rammer/beslag. Feltet fra _xlFrames() brukes fortsatt når det finnes.
+    if (!fh.ventilasjon && rf['ventilasjon']) add('Ventilasjon', rf['ventilasjon'].trim());
+    if (rf['d\u00f8rterskel']) add('D\u00f8rterskel', rf['d\u00f8rterskel'].trim());
+
+    // Feltet finnes i begge språkvariantene. I engelske tilbud er verdien
+    // engelsk, så den oversettes her — ellers ville dette nye feltet innført ny
+    // engelsk tekst i kundetilbudet.
+    const lgRaw = (rf['lining groove'] || '').trim();
+    if (lgRaw) {
+      add('Not for foringer', lgRaw
+        .replace(/\bleft\b/gi, 'venstre')
+        .replace(/\bright\b/gi, 'høyre')
+        .replace(/\btop\b/gi, 'topp')
+        .replace(/\bbottom\b/gi, 'bunn')
+        .replace(/\bStandard\b/i, 'Standard')
+        .replace(/\ball around\b/gi, 'hele veien rundt')
+        .replace(/\bnone\b/gi, 'ingen')
+        .trim());
+    }
 
     const bgRaw = (rf['bottom groove'] || '').trim();
     if (bgRaw) add('Spor i underkant', bgRaw.replace('V1 / L', 'V1/L').trim());
@@ -2543,6 +2621,19 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
   function _xlGlass(raw) {
     if (!raw) return '';
     const r = raw.replace(/\s{2,}/g, ' ').trim();
+    // Noen posisjoner har ulikt glass i hvert felt, nummerert "#1:" og "#2:"
+    // (f.eks. et fast midtfelt med bedre U-verdi). Tidligere ble kun den første
+    // koden med, og resten kastet — kunden fikk da feil glasspesifikasjon.
+    if (/#\s*\d\s*:/.test(r)) {
+      const deler = r.split(/(?=#\s*\d\s*:)/).map(d => d.trim()).filter(Boolean);
+      const ut = [];
+      for (const del of deler) {
+        const nr = (del.match(/^#\s*(\d)\s*:/) || [])[1];
+        const k  = (del.match(/\b\d[\dA-Za-z.]*(?:\/[\dA-Za-z.]+){2,}\b/) || [])[0] || '';
+        if (nr && k) ut.push('#' + nr + ': ' + k);
+      }
+      if (ut.length) return ut.join(', ');
+    }
     // Glasskoden er tokenet med minst to skråstreker, f.eks. 44.1TH/14Ar/4/14Ar/4TH.
     // I de fleste fabrikkmalene står den først, og da er oppførselen som før:
     // koden beholdes og forklaringsparentesen bak kuttes.
@@ -2559,11 +2650,38 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     // Dørtilbud samler beslag, hengsler, håndtak og lås i én lang linje. Uten egne
     // brytepunkter for hengsler/lås havnet alt sammen i Håndtak-feltet på engelsk.
     const parts = raw
-      .split(/(?=\d+\s*x\s+|Painted hinges|Door hinges|ZINI|Friction brake|Brake via handle|Handle\s+[A-Z\d]|Handle set|ASSA handle|Lift-and-slide handle|Kick plate|White hooks?|Telescopic ventilation|Routing|M\d{4}\b|\d\s*[-\s]?point lock|Pattern only)/i)
+      .split(/(?=\d+\s*x\s+|Painted hinges|Door hinges|ZINI|Friction brake|Brake via handle|Handle\s+[A-Z\d]|Handle set|ASSA handle|Lift-and-slide handle|Kick plate|White hooks?|Telescopic ventilation|Routing|M\d{4}\b|\d\s*[-\s]?point lock|Pattern only|Lakkerte\s+(?:dør\s+)?hengsler|ZINI\s+hengsler|sølv\s+kroker|hvite\s+kroker|Brems via håndtak|Friksjonsstay|Lås:|Håndtak\s|ASSA\s+Espagnolette|Clickvent|Teleskopventil)/i)
       .map(p => p.trim()).filter(p => p);
     const beslagItems = [];
     for (const part of parts) {
-      if (/Telescopic ventilation/i.test(part)) {
+      // ── Norske brytepunkter (fabrikkens norske tilbudsformat) ──────────
+      if (/^Lakkerte\s+(?:dør\s+)?hengsler/i.test(part) || /^ZINI\s+hengsler/i.test(part)) {
+        const p = part.trim();
+        res.hengsler = res.hengsler ? res.hengsler + ', ' + p : p;
+      } else if (/^(sølv|hvite)\s+kroker/i.test(part)) {
+        const p = part.trim().replace(/^./, c => c.toUpperCase());
+        res.hengsler = res.hengsler ? res.hengsler + ', ' + p : p;
+      } else if (/^Brems via håndtak/i.test(part)) {
+        res.brems = res.brems ? res.brems + ', Via håndtak' : 'Via håndtak';
+      } else if (/^Friksjonsstay/i.test(part)) {
+        res.brems = res.brems ? res.brems + ', ' + part.trim() : part.trim();
+      } else if (/^(Clickvent|Teleskopventil)/i.test(part)) {
+        res.ventilasjon = part.trim();
+      } else if (/^Lås:/i.test(part)) {
+        const l = part.replace(/^Lås:\s*/i, '').trim();
+        if (l) res.las = res.las ? res.las + ', ' + l : l;
+      } else if (/^ASSA\s+Espagnolette/i.test(part)) {
+        // Fabrikkens delenavn står på engelsk midt i en ellers norsk tekst.
+        const l = part.trim()
+          .replace(/\bupper part\b/i, 'øvre del')
+          .replace(/\blower part\b/i, 'nedre del')
+          .replace(/\bEspagnolette\b/i, 'espagnolett');
+        res.las = res.las ? res.las + ', ' + l : l;
+      } else if (/^Håndtak\s/i.test(part)) {
+        const h = part.replace(/^Håndtak\s*/i, '').trim()
+          .replace(/\bpå begge sider\b/i, 'på begge sider');
+        if (h) res.handtak = res.handtak ? res.handtak + ', ' + h : h.charAt(0).toUpperCase() + h.slice(1);
+      } else if (/Telescopic ventilation/i.test(part)) {
         res.ventilasjon = 'Teleskopventil med barnesikring';
       } else if (/Friction brake/i.test(part)) {
         const n = part.match(/\((\d+)\s*pcs?\.?\)/i);
@@ -4983,7 +5101,13 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     rader = rader.map(s => {
       if (s.l !== 'Åpningsretning') return s;
       let v = s.v;
-      if (/innadsl/i.test(v) && /innside/i.test(v)) v = 'Innsiden';
+      // Norsk kilde ("Sett fra utsiden, slår ut") har allerede riktig ordlyd —
+      // fjern kun prefikset, ellers blir raden "Sett fra: Sett fra utsiden...".
+      if (/^Sett fra\s+/i.test(v)) {
+        v = v.replace(/^Sett fra\s+/i, '').trim();
+        v = v.charAt(0).toUpperCase() + v.slice(1);
+      }
+      else if (/innadsl/i.test(v) && /innside/i.test(v)) v = 'Innsiden';
       else if (/innadsl/i.test(v)) v = 'Utsiden';
       else if (/utadsl/i.test(v)) v = 'Utsiden';
       else if (/innside/i.test(v)) v = 'Innsiden';
