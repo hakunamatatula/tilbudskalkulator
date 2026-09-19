@@ -241,6 +241,14 @@
     vertical-align:middle;
     flex-shrink:0;
   }
+  .std-mark {
+    display:inline-block;
+    background:#e8f0f8; color:#1a3a5c; border:1px solid #b9cde0;
+    border-radius:3px; font-size:9px; font-weight:700;
+    letter-spacing:0.08em; text-transform:uppercase;
+    padding:1px 5px; margin-left:6px;
+    vertical-align:middle; cursor:help; flex-shrink:0;
+  }
   /* Alternativ posisjon - grå/inaktiv */
   .product-header-alt { background:#2a3040; color:#9BA3B0; padding:8px 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .alt-badge { display:inline-block; background:#3a4255; color:#9BA3B0; font-size:9px; font-weight:700; letter-spacing:0.15em; padding:2px 7px; margin-left:8px; vertical-align:middle; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
@@ -1276,10 +1284,87 @@ ${klon.outerHTML}
     fabrikker: ['hctc', 'vitron', 'aradas', 'aldens', 'aliuminatas'], // Fabrikker denne kunden bruker
   };
 
+  // ── STANDARDREGLER ──────────────────────────────────────────────────────────
+  // Godkjente erstatninger av fabrikktekst, per felt. Når en selger retter samme
+  // fabrikktekst gang på gang, ser admin mønsteret i admin.html under
+  // «Standardregler» og godkjenner det. Regelen lagres i Supabase-tabellen
+  // standardregler og gjelder alle selgere hos kunden fra neste tilbud.
+  //
+  // Her leses reglene bare, aldri skrives. De hentes før hvert tilbud rendres og
+  // caches lokalt, slik at rendringen er synkron og appen virker selv om
+  // nettverket er tregt eller nede.
+  const LS_REGLER_CACHE = 'norwin_standardregler_cache';
+  let STANDARDREGLER = [];
+
+  function regelNokkel(r) {
+    return [(r.felt || ''), (r.modus || 'eksakt'), String(r.fra || '').trim().toLowerCase()].join('||');
+  }
+
+  function lesRegelCache() {
+    try {
+      const o = JSON.parse(localStorage.getItem(LS_REGLER_CACHE) || 'null');
+      if (o && Array.isArray(o.regler)) return o;
+    } catch(e) {}
+    return null;
+  }
+
+  async function lastStandardregler() {
+    const cache = lesRegelCache();
+    if (cache && Array.isArray(cache.regler)) STANDARDREGLER = cache.regler;
+    try {
+      const token = await noraGyldigToken();
+      if (!token) return;
+      const filter = KUNDE_ID
+        ? '&or=(kunde_id.is.null,kunde_id.eq.' + encodeURIComponent(KUNDE_ID) + ')'
+        : '';
+      const r = await fetch(SB_URL + '/rest/v1/standardregler?select=felt,fra,til,modus,kunde_id&aktiv=eq.true' + filter,
+        { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + token } });
+      if (!r.ok) return;
+      const rader = await r.json();
+      if (!Array.isArray(rader)) return;
+      // Kundens egen regel skal vinne over en global regel på samme felt og tekst.
+      const kart = new Map();
+      rader.slice()
+        .sort((a, b) => (a.kunde_id ? 1 : 0) - (b.kunde_id ? 1 : 0))
+        .forEach(x => kart.set(regelNokkel(x), x));
+      STANDARDREGLER = Array.from(kart.values());
+      try {
+        localStorage.setItem(LS_REGLER_CACHE, JSON.stringify({
+          hentet: new Date().toISOString(), kunde: KUNDE_ID, regler: STANDARDREGLER
+        }));
+      } catch(e) {}
+    } catch(e) {
+      console.warn('standardregler kunne ikke hentes, bruker lokal kopi:', e);
+    }
+  }
+
+  // Returnerer { til, regel } hvis en aktiv regel treffer feltet, ellers null.
+  function brukStandardregel(felt, verdi) {
+    if (!felt || !verdi || !STANDARDREGLER.length) return null;
+    const v = String(verdi).trim();
+    if (!v) return null;
+    const regler = STANDARDREGLER.filter(r => r.felt === felt && r.til);
+
+    const eksakt = regler.find(r => (r.modus || 'eksakt') === 'eksakt'
+      && String(r.fra || '').trim().toLowerCase() === v.toLowerCase());
+    if (eksakt && String(eksakt.til).trim() !== v) {
+      return { til: String(eksakt.til).trim(), regel: eksakt };
+    }
+
+    const del = regler.find(r => r.modus === 'inneholder' && r.fra
+      && v.toLowerCase().indexOf(String(r.fra).trim().toLowerCase()) !== -1);
+    if (del) {
+      const esc = String(del.fra).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const ny = v.replace(new RegExp(esc, 'gi'), del.til);
+      if (ny !== v) return { til: ny, regel: del };
+    }
+    return null;
+  }
+
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-09-09-v54';
+  const APP_VERSION = '2026-09-19-v55';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -4404,6 +4489,10 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       window._valutakurs   = valutakurs;
       window._tilbudsNr    = resFinal.t || '';
 
+      // Hent godkjente standardregler før rendring, slik at fabrikktekst som
+      // admin allerede har rettet opp aldri dukker opp for selgeren igjen.
+      try { await lastStandardregler(); } catch(e) {}
+
       renderOffer(resFinal, { kundeNavn, kundeKontakt, kundeAdresse, kundeMob, kundeEpost, prosjekt, selger, today, skisser, vnrMap });
 
       document.getElementById('loading').style.display = 'none';
@@ -4412,10 +4501,15 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       (resFinal.p || resFinal.produkter || []).forEach((p, i) => initSkisseDragDrop(i));
       oppdaterMarginPanel();
 
+      visTilbudsfilStripe();
+
       const lagret = hentLagredeEndringer(window._tilbudsNr);
       if (lagret && lagret.tilbudsNr !== window._tilbudsNr) {
         window._lagretSelgerData = lagret;
         visOverforingsBanner(lagret, window._tilbudsNr);
+      } else if (!lagret && /-\d+\s*$/.test(window._tilbudsNr || '')) {
+        // Ny versjon av et tilbud, men ingen historikk på denne maskinen
+        visHentFilBanner(window._tilbudsNr);
       }
 
     } catch(err) {
@@ -4557,6 +4651,132 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     return dim ? (dim + (type ? '|' + type : '')) : null;
   }
 
+  // Automatisk lagring med kort forsinkelse, slik at endringer overlever
+  // selv om selgeren aldri rekker å skrive ut eller lagre tilbudet.
+  let _lagreTimer = null;
+  function lagreSelgerEndringerSnart() {
+    clearTimeout(_lagreTimer);
+    _lagreTimer = setTimeout(() => {
+      try { lagreSelgerEndringerLokalt(); oppdaterTilbudsfilStatus(); } catch(e) {}
+    }, 900);
+  }
+
+  // ── Tilbudsfil: flytter endringene mellom maskiner og mellom selgere ────────
+  function eksporterTilbudsfil() {
+    try { lagreSelgerEndringerLokalt(); } catch(e) {}
+    const tilbudsNr = window._tilbudsNr || '';
+    const ordreNr = hentOrdreNr(tilbudsNr);
+    const raw = ordreNr ? localStorage.getItem('norwin_ordre_' + ordreNr) : null;
+    if (!raw) { alert('Ingen endringer å lagre ennå. Gjør en endring i tilbudet først.'); return; }
+    const blob = new Blob([raw], { type:'application/json;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'tilbud_' + (tilbudsNr || ordreNr) + '.json';
+    a.click();
+  }
+
+  function importerTilbudsfil(input) {
+    const f = input.files && input.files[0];
+    if (!f) return;
+    const leser = new FileReader();
+    leser.onload = (e) => {
+      try {
+        const data = JSON.parse(String(e.target.result));
+        if (!data || !data.tilbudsNr) throw new Error('Filen mangler tilbudsnummer');
+        const ordreNr = hentOrdreNr(data.tilbudsNr);
+        const naaOrdre = hentOrdreNr(window._tilbudsNr || '');
+        if (naaOrdre && ordreNr && naaOrdre !== ordreNr) {
+          if (!confirm('Tilbudsfilen gjelder ordre ' + ordreNr + ', mens du står i ' + naaOrdre + '.\n\nVil du overføre likevel?')) return;
+        }
+        localStorage.setItem('norwin_ordre_' + ordreNr, JSON.stringify(data));
+        window._lagretSelgerData = data;
+        const gml = document.getElementById('versjon-banner');
+        if (gml) gml.remove();
+        visOverforingsBanner(data, window._tilbudsNr || '');
+      } catch(err) {
+        alert('Kunne ikke lese tilbudsfilen: ' + err.message);
+      }
+    };
+    leser.readAsText(f, 'utf-8');
+    input.value = '';
+  }
+
+  // Liten stripe over tilbudet med lagre/hent-knapper for tilbudsfilen.
+  function visTilbudsfilStripe() {
+    const gml = document.getElementById('tilbudsfil-stripe');
+    if (gml) gml.remove();
+    const marginPanel = document.getElementById('margin-panel');
+    const resultDiv = document.getElementById('result');
+    if (!marginPanel || !resultDiv) return;
+
+    const d = document.createElement('div');
+    d.id = 'tilbudsfil-stripe';
+    d.className = 'no-print';
+    d.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;' +
+      'background:#f5f7fa;border:1px solid #dde2ea;border-radius:6px;' +
+      "padding:8px 14px;margin-bottom:12px;font-family:'Source Sans 3',sans-serif;font-size:12px;color:#5a6780;";
+    d.innerHTML = `
+      <span id="tilbudsfil-status" style="flex:1;min-width:220px;"></span>
+      <button onclick="eksporterTilbudsfil()" title="Lagre endringene som fil, så en kollega kan hente dem inn på neste versjon av tilbudet"
+        style="background:#fff;color:#1a3a5c;border:1px solid #b9cde0;border-radius:4px;padding:5px 12px;font-family:'Source Sans 3',sans-serif;font-size:12px;font-weight:600;cursor:pointer;">&#8681; Lagre tilbudsfil</button>
+      <button onclick="document.getElementById('tilbudsfil-input').click()" title="Hent endringer fra en tidligere versjon av samme tilbud"
+        style="background:#fff;color:#1a3a5c;border:1px solid #b9cde0;border-radius:4px;padding:5px 12px;font-family:'Source Sans 3',sans-serif;font-size:12px;font-weight:600;cursor:pointer;">&#8679; Hent tilbudsfil</button>
+      <input type="file" id="tilbudsfil-input" accept=".json,application/json" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="importerTilbudsfil(this)">`;
+    resultDiv.insertBefore(d, marginPanel);
+    oppdaterTilbudsfilStatus();
+  }
+
+  function oppdaterTilbudsfilStatus() {
+    const el = document.getElementById('tilbudsfil-status');
+    if (!el) return;
+    const tilbudsNr = window._tilbudsNr || '';
+    const ordreNr = hentOrdreNr(tilbudsNr);
+    const lagret = ordreNr ? hentLagredeEndringer(tilbudsNr) : null;
+    if (!lagret) {
+      el.innerHTML = 'Ordre <strong>' + (ordreNr || '–') + '</strong> · ingen lagrede endringer ennå. Endringer lagres automatisk mens du jobber.';
+      return;
+    }
+    const ant = Object.keys(lagret.faktorer || {}).length +
+      Object.values(lagret.spekser || {}).reduce((a,b) => a + Object.keys(b).length, 0);
+    const dato = lagret.dato ? new Date(lagret.dato).toLocaleString('nb-NO', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+    el.innerHTML = 'Ordre <strong>' + (ordreNr || '–') + '</strong> · ' + ant +
+      ' endringer lagret fra versjon <strong>' + (lagret.tilbudsNr || '–') + '</strong>' + (dato ? ' (' + dato + ')' : '');
+  }
+
+  // Banner når en ny versjon åpnes uten at maskinen har historikk fra forrige.
+  function visHentFilBanner(nyTilbudsNr) {
+    const gml = document.getElementById('versjon-banner');
+    if (gml) gml.remove();
+    const marginPanel = document.getElementById('margin-panel');
+    const resultDiv = document.getElementById('result');
+    if (!marginPanel || !resultDiv) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'versjon-banner';
+    banner.className = 'no-print';
+    banner.style.cssText = 'background:#f5f7fa; border:2px solid #b9cde0; border-radius:6px;' +
+      "padding:14px 18px; margin-bottom:16px; font-family:'Source Sans 3',sans-serif;" +
+      'font-size:14px; color:#1a2233; display:flex; align-items:center; gap:16px; flex-wrap:wrap;';
+    banner.innerHTML = `
+      <div style="flex:1;min-width:260px;">
+        <strong style="color:#1a3a5c;">${nyTilbudsNr} er en ny versjon av ordre ${hentOrdreNr(nyTilbudsNr)}</strong> —
+        denne maskinen har ingen lagrede endringer fra forrige versjon. Har en kollega jobbet med den,
+        be om tilbudsfilen og hent den inn her.
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;">
+        <button onclick="document.getElementById('versjon-fil-input').click()" style="
+          background:#1a3a5c;color:#fff;border:none;padding:8px 18px;
+          font-family:'Source Sans 3',sans-serif;font-size:13px;font-weight:700;
+          border-radius:4px;cursor:pointer;">&#8679; Hent tilbudsfil</button>
+        <button onclick="document.getElementById('versjon-banner').remove()" style="
+          background:#fff;color:#888;border:2px solid #dde2ea;padding:8px 14px;
+          font-family:'Source Sans 3',sans-serif;font-size:13px;
+          border-radius:4px;cursor:pointer;">Hopp over</button>
+        <input type="file" id="versjon-fil-input" accept=".json,application/json" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="importerTilbudsfil(this)">
+      </div>`;
+    resultDiv.insertBefore(banner, marginPanel.nextSibling);
+  }
+
   function hentLagredeEndringer(tilbudsNr) {
     const ordreNr = hentOrdreNr(tilbudsNr);
     if (!ordreNr) return null;
@@ -4671,6 +4891,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     }
 
     oppdaterTotaler();
+    try { lagreSelgerEndringerLokalt(); oppdaterTilbudsfilStatus(); } catch(e) {}
 
     if (banner) {
       banner.style.background = '#f0faf4';
@@ -5182,6 +5403,25 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       ...eksEgne
     ];
 
+    // Standardregler: bytt ut fabrikktekst med godkjent standard før rendering.
+    // Fabrikkens opprinnelige tekst tas vare på i _fabrikk for sporbarhet.
+    alleRader.forEach(s => {
+      if (s._std) return;
+      if (s._inne && s._ute) {
+        const ri = brukStandardregel('Maling inne', s._inne.v);
+        if (ri) { s._inne._fabrikk = s._inne.v; s._inne.v = ri.til; s._inne._std = ri.regel; }
+        const ru = brukStandardregel('Maling ute', s._ute.v);
+        if (ru) { s._ute._fabrikk = s._ute.v; s._ute.v = ru.til; s._ute._std = ru.regel; }
+        return;
+      }
+      const r = brukStandardregel(s.l, s.v);
+      if (r) { s._fabrikk = s.v; s.v = r.til; s._std = r.regel; }
+    });
+
+    const stdMerke = (fabrikkTekst) => fabrikkTekst
+      ? `<span class="std-mark no-print" title="Satt automatisk av standardregel. Fabrikktekst: ${String(fabrikkTekst).replace(/"/g,'&quot;')}">Standard</span>`
+      : '';
+
     // Render som tabell-lignende rader (italic label, normal verdi)
     return alleRader.map(s => {
       const id = `spec_${produktNr}_${s.l.replace(/[\s/]+/g,'_')}`;
@@ -5196,11 +5436,11 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
             Inne:&nbsp;<span class="spec-val editable-val" contenteditable="true"
               data-original="${s._inne.v.replace(/"/g,'&quot;')}" data-felt="Maling inne"
               data-produkt="${produktNr}" id="${idI}" onblur="sjekkEndring(this)"
-              title="Klikk for å redigere">${s._inne.v}</span><span class="edited-mark" id="mark_${idI}" style="display:none;"></span>
+              title="Klikk for å redigere">${s._inne.v}</span><span class="edited-mark" id="mark_${idI}" style="display:none;"></span>${stdMerke(s._inne._fabrikk)}
             &nbsp; Ute:&nbsp;<span class="spec-val editable-val" contenteditable="true"
               data-original="${s._ute.v.replace(/"/g,'&quot;')}" data-felt="Maling ute"
               data-produkt="${produktNr}" id="${idU}" onblur="sjekkEndring(this)"
-              title="Klikk for å redigere">${s._ute.v}</span><span class="edited-mark" id="mark_${idU}" style="display:none;"></span>
+              title="Klikk for å redigere">${s._ute.v}</span><span class="edited-mark" id="mark_${idU}" style="display:none;"></span>${stdMerke(s._ute._fabrikk)}
           </span>
         </div>`;
       }
@@ -5210,12 +5450,13 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
         <span class="spec-val editable-val"
           contenteditable="true"
           data-original="${s.v.replace(/"/g,'&quot;')}"
+          ${s._fabrikk ? `data-fabrikk="${String(s._fabrikk).replace(/"/g,'&quot;')}"` : ''}
           data-felt="${s.l}"
           data-produkt="${produktNr}"
           id="${id}"
           onblur="sjekkEndring(this)"
           title="Klikk for å redigere">${s.v}</span>
-        <span class="edited-mark" id="mark_${id}" style="display:none;"></span>
+        <span class="edited-mark" id="mark_${id}" style="display:none;"></span>${stdMerke(s._fabrikk)}
       </div>`;
     }).join('') + (selgerTillegg.length > 0
       ? selgerTillegg.map(s => `<div class="no-print" style="background:#fffbe6;border:1px solid #e8c97a;border-radius:4px;padding:6px 10px;margin-top:8px;font-size:11px;color:#7a5a00;">
@@ -5238,6 +5479,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       logEndring(el.getAttribute('data-produkt'), el.getAttribute('data-felt'), fra, ny);
       el.setAttribute('data-logged-from', ny);
       if (markEl) markEl.style.display = 'inline-block';
+      lagreSelgerEndringerSnart();
     } else if (ny === original) {
       el.removeAttribute('data-logged-from');
       if (markEl) markEl.style.display = 'none';
@@ -5309,6 +5551,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     const raw = el.innerText.trim().replace(',','.');
     const nyFaktor = parseFloat(raw);
     if (isNaN(nyFaktor) || nyFaktor <= 0) { el.innerText = '?'; return; }
+    lagreSelgerEndringerSnart();
     const eur = parseFloat(el.getAttribute('data-eur')) || 0;
     const ant = parseInt(el.getAttribute('data-ant')) || 1;
     const erAlt = el.getAttribute('data-alt') === 'true';
