@@ -198,6 +198,29 @@
         </div>
       </div>
     </section>
+    <section id="fane-regler" hidden>
+      <div class="kort">
+        <h3 style="margin-bottom:6px">Gjentatte endringer fra selgerne</h3>
+        <p class="hjelpetekst" style="margin-bottom:14px">Hver gang en selger retter en tekst som kom fra fabrikken, havner rettelsen i endringsloggen. Her er de samlet og talt opp. Gjentar den samme rettelsen seg, trykk «Gjør til standard». Da settes teksten automatisk i alle nye tilbud, for alle selgere, og ingen trenger å gjøre den om igjen.</p>
+        <div class="verktoylinje">
+          <div><label>Vis mønstre med minst</label>
+            <select id="regel-min" onchange="visRegelMonster()">
+              <option value="1">1 forekomst</option>
+              <option value="2" selected>2 forekomster</option>
+              <option value="3">3 forekomster</option>
+              <option value="5">5 forekomster</option>
+            </select>
+          </div>
+          <div><label>Filtrer på felt eller tekst</label><input id="regel-filter" oninput="visRegelMonster()"></div>
+        </div>
+        <div id="regel-monster"></div>
+      </div>
+      <div class="kort">
+        <h3 style="margin-bottom:6px">Aktive standardregler</h3>
+        <p class="hjelpetekst" style="margin-bottom:14px">Disse kjøres på hvert nye tilbud, før selgeren ser det. Feltet merkes «Standard» i selgervisningen, og fabrikkens opprinnelige tekst ligger bak merket. Kundetilbudet som skrives ut viser kun den godkjente teksten. Selgeren kan fortsatt overstyre manuelt i et enkelttilbud.</p>
+        <div id="regel-liste"></div>
+      </div>
+    </section>
     <section id="fane-logg" hidden>
       <div class="kort">
         <div class="verktoylinje">
@@ -343,7 +366,7 @@ async function startApp(){
   vis('view-app');
 
   const erNora = minProfil.rolle==='nora_admin';
-  const faner = [...(erNora?[['kunder','Kunder']]:[]), ['brukere','Brukere'], ['innstillinger','Innstillinger'], ['ordliste','Ordliste'], ['logo','Logo i tilbud'], ['logg','Endringslogg']];
+  const faner = [...(erNora?[['kunder','Kunder']]:[]), ['brukere','Brukere'], ['innstillinger','Innstillinger'], ['ordliste','Ordliste'], ['regler','Standardregler'], ['logo','Logo i tilbud'], ['logg','Endringslogg']];
   $('faner').innerHTML = faner.map(([id,navn])=>'<button id="fane-btn-'+id+'" onclick="byttFane(\''+id+'\')">'+navn+'</button>').join('');
   $('term-scope-rad').hidden = !erNora;
   if(erNora){
@@ -374,11 +397,11 @@ let aktivFane = null;
 function byttFane(id){
   aktivFane = id;
   const erNora = minProfil && minProfil.rolle==='nora_admin';
-  const scopedeFaner = ['innstillinger','ordliste','logo','logg'];
+  const scopedeFaner = ['innstillinger','ordliste','regler','logo','logg'];
   // Nora-admin uten valgt kunde på en kunde-fane: vis «Velg kunde»-kortet i fanen.
   // Alle faner er ALLTID synlige — ingenting dukker opp eller forsvinner.
   const trengerValg = erNora && !valgtKunde && scopedeFaner.includes(id);
-  ['kunder','brukere','innstillinger','ordliste','logo','logg'].forEach(f=>{
+  ['kunder','brukere','innstillinger','ordliste','regler','logo','logg'].forEach(f=>{
     const s=$('fane-'+f), b=$('fane-btn-'+f);
     if(s) s.hidden = (f!==id) || trengerValg;
     if(b) b.classList.toggle('aktiv', f===id);
@@ -406,7 +429,7 @@ function byttFane(id){
 }
 function velgKunde(id){ valgtKunde = id; byttFane(aktivFane); }
 function oppdaterAktivFane(){
-  ({kunder:visKunder, brukere:visBrukere, innstillinger:visInnstillinger, ordliste:visOrdliste, logo:visLogo, logg:lastLogg})[aktivFane]?.();
+  ({kunder:visKunder, brukere:visBrukere, innstillinger:visInnstillinger, ordliste:visOrdliste, regler:lastRegler, logo:visLogo, logg:lastLogg})[aktivFane]?.();
 }
 
 // ── Kunder (kun nora_admin) ───────────────────────────────
@@ -682,6 +705,135 @@ async function nullstillLogo(){
 }
 
 // ── Endringslogg ──────────────────────────────────────────
+// ── Standardregler ────────────────────────────────────────
+// Mønstre mines ut av endringsloggen (alle selgere, alle tilbud). Admin
+// godkjenner et mønster, og det skrives til standardregler-tabellen, som
+// kalkulatoren leser før hvert nye tilbud.
+let regelLogg = [], regelData = [], monsterIdx = [];
+
+function regelNokkel(r){
+  return [(r.felt||''), (r.modus||'eksakt'), String(r.fra||'').trim().toLowerCase()].join('||');
+}
+
+async function lastRegler(){
+  try{
+    const [logg, regler] = await Promise.all([
+      api('/rest/v1/endringslogg?select=felt_endret,gammel_verdi,ny_verdi&kunde_id=eq.'+valgtKunde+'&order=tidspunkt.desc&limit=2000'),
+      api('/rest/v1/standardregler?select=*&or=(kunde_id.is.null,kunde_id.eq.'+valgtKunde+')&order=felt')
+    ]);
+    regelLogg = logg||[]; regelData = regler||[];
+  }catch(e){ meld('app-melding', e.message, 'feil'); regelLogg=[]; regelData=[]; }
+  visRegelMonster(); visRegelListe();
+}
+
+function visRegelMonster(){
+  const min = parseInt($('regel-min').value,10)||1;
+  const f = ($('regel-filter').value||'').trim().toLowerCase();
+
+  // Tell opp identiske fra/til-par per felt. Priser og rene talljusteringer
+  // hører ikke hjemme som standardtekst, og holdes utenfor.
+  const kart = new Map();
+  regelLogg.forEach(r=>{
+    const felt=(r.felt_endret||'').trim(), fra=(r.gammel_verdi||'').trim(), til=(r.ny_verdi||'').trim();
+    if(!felt || !fra || !til || fra===til) return;
+    if(/pris|sum|faktor|beløp/i.test(felt)) return;
+    const n = felt+'||'+fra.toLowerCase()+'||'+til;
+    const e = kart.get(n) || {felt, fra, til, antall:0};
+    e.antall++; kart.set(n, e);
+  });
+
+  let rader = Array.from(kart.values())
+    .filter(m=>m.antall>=min)
+    .filter(m=>!f || (m.felt+' '+m.fra+' '+m.til).toLowerCase().includes(f))
+    .sort((a,b)=> b.antall-a.antall || a.felt.localeCompare(b.felt));
+
+  monsterIdx = rader;
+  const aktive = new Set(regelData.filter(r=>r.aktiv).map(regelNokkel));
+
+  $('regel-monster').innerHTML = rader.length
+    ? '<table><tr><th>Felt</th><th>Fabrikktekst</th><th>Selger endret til</th><th style="text-align:center">Antall</th><th></th></tr>'+
+      rader.map((m,i)=>{
+        const erStd = aktive.has(regelNokkel({felt:m.felt, fra:m.fra, modus:'eksakt'}));
+        return '<tr><td><strong>'+esc(m.felt)+'</strong></td>'+
+          '<td style="color:var(--dim)">'+esc(m.fra)+'</td>'+
+          '<td>'+esc(m.til)+'</td>'+
+          '<td style="text-align:center"><span class="pill">'+m.antall+'</span></td>'+
+          '<td style="white-space:nowrap">'+(erStd
+            ? '<span class="pill">Er standard</span>'
+            : '<button class="btn btn-liten" onclick="gjorTilStandard('+i+')">Gjør til standard</button>')+'</td></tr>';
+      }).join('')+'</table>'
+    : '<p class="hjelpetekst">Ingen mønstre med minst '+min+' forekomst'+(min>1?'er':'')+(f?' som matcher filteret':'')+' ennå. Loggen fylles opp etter hvert som selgerne jobber i tilbudene.</p>';
+}
+
+function visRegelListe(){
+  const egne = regelData.filter(r=>r.kunde_id);
+  const globale = regelData.filter(r=>!r.kunde_id);
+  const erNora = minProfil && minProfil.rolle==='nora_admin';
+
+  const rad = (r, kanEndre) =>
+    '<tr'+(r.aktiv?'':' style="opacity:.5"')+'>'+
+      '<td><strong>'+esc(r.felt)+'</strong></td>'+
+      '<td style="color:var(--dim)">'+esc(r.fra)+'</td>'+
+      '<td>'+esc(r.til)+'</td>'+
+      '<td style="text-align:center"><span class="pill">'+(r.modus==='inneholder'?'delstreng':'eksakt')+'</span></td>'+
+      '<td style="white-space:nowrap">'+(kanEndre
+        ? '<button class="btn btn-ghost btn-liten" onclick="vekslRegel('+r.id+','+(!r.aktiv)+')">'+(r.aktiv?'Slå av':'Slå på')+'</button> '+
+          '<button class="btn btn-ghost btn-liten" onclick="slettRegel('+r.id+')">Slett</button>'
+        : '')+'</td></tr>';
+
+  const tabell = (liste, kanEndre, tom) => liste.length
+    ? '<table><tr><th>Felt</th><th>Fabrikktekst</th><th>Erstattes med</th><th style="text-align:center">Treff</th><th></th></tr>'+
+      liste.map(r=>rad(r, kanEndre)).join('')+'</table>'
+    : '<p class="hjelpetekst">'+tom+'</p>';
+
+  const kNavn = (kunder.find(k=>k.id===valgtKunde)||{}).navn || minKundeNavn || 'valgt kunde';
+  $('regel-liste').innerHTML =
+    '<h4 style="margin:0 0 8px">Regler for '+esc(kNavn)+'</h4>'+
+    tabell(egne, true, 'Ingen standardregler ennå. Godkjenn et mønster over, så dukker det opp her.')+
+    (globale.length || erNora
+      ? '<h4 style="margin:18px 0 8px">Globale regler (Nora AI)</h4>'+
+        '<p class="hjelpetekst" style="margin-bottom:8px">Gjelder alle kunder. Kun Nora AI-admin kan endre dem.</p>'+
+        tabell(globale, erNora, 'Ingen globale regler.')
+      : '');
+}
+
+async function gjorTilStandard(i){
+  const m = monsterIdx[i];
+  if(!m) return;
+  if(!valgtKunde) return meld('app-melding','Velg kunde først','feil');
+  try{
+    await api('/rest/v1/standardregler', {method:'POST', body: JSON.stringify({
+      kunde_id: valgtKunde, felt: m.felt, fra: m.fra, til: m.til,
+      modus: 'eksakt', aktiv: true, antall_observert: m.antall,
+      opprettet_av: minProfil.id
+    })});
+    meld('app-melding','Standardregel lagret. Den gjelder fra neste tilbud, for alle selgere.');
+    await lastRegler();
+  }catch(e){
+    const t = String(e.message||'');
+    meld('app-melding', /duplicate|unique|23505/i.test(t)
+      ? 'Det finnes allerede en regel for dette feltet og denne fabrikkteksten. Slett eller endre den først.'
+      : t, 'feil');
+  }
+}
+
+async function vekslRegel(id, aktiv){
+  try{
+    await api('/rest/v1/standardregler?id=eq.'+id, {method:'PATCH',
+      body: JSON.stringify({aktiv, oppdatert:new Date().toISOString()})});
+    await lastRegler();
+  }catch(e){ meld('app-melding', e.message, 'feil'); }
+}
+
+async function slettRegel(id){
+  const r = regelData.find(x=>x.id===id);
+  if(r && !confirm('Fjern standardregelen for «'+r.felt+'»?\n\n'+r.fra+'\n→ '+r.til)) return;
+  try{
+    await api('/rest/v1/standardregler?id=eq.'+id, {method:'DELETE'});
+    await lastRegler();
+  }catch(e){ meld('app-melding', e.message, 'feil'); }
+}
+
 async function lastLogg(){
   loggData = await api('/rest/v1/endringslogg?select=*&kunde_id=eq.'+valgtKunde+'&order=tidspunkt.desc&limit=300');
   visLogg();
