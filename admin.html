@@ -146,7 +146,7 @@
           <div id="ny-bruker-kunde-rad" hidden><label>Kunde *</label><select id="ny-bruker-kunde"></select></div>
           <div style="align-self:end"><button class="btn" onclick="inviterBruker()">✉ Send invitasjon</button></div>
         </div>
-        <p class="hjelpetekst">Brukeren får en e-post og setter passordet selv, og lander rett i Tilbudskalkulatoren.</p>
+        <p class="hjelpetekst">Brukeren får en e-post og setter passordet selv, og lander rett i Tilbudskalkulatoren. Går ikke e-posten ut, vises invitasjonslenken her, og du kan sende den til brukeren selv.</p>
       </div>
       <div class="kort"><h3 style="margin-bottom:12px">Brukere</h3><div id="bruker-liste"></div></div>
     </section>
@@ -524,6 +524,7 @@ async function visBrukere(){
       '<td>'+rolleNavn+'</td><td>'+esc(kunde)+'</td><td><span class="pill'+(b.aktiv?'':' inaktiv')+'">'+(b.aktiv?'aktiv':'deaktivert')+'</span></td>'+
       '<td style="white-space:nowrap">'+(kanRedigere
         ? '<button class="btn btn-ghost btn-liten" onclick="redigererBrukerId=\''+b.id+'\';visBrukere()">Endre</button> '+
+          '<button class="btn btn-ghost btn-liten" title="Lag ny lenke slik at brukeren kan sette passord" onclick="nyInviteLenke(\''+esc(b.epost)+'\')">Ny lenke</button> '+
           '<button class="btn btn-ghost btn-liten" onclick="toggleBruker(\''+b.id+'\','+(!b.aktiv)+')">'+(b.aktiv?'Deaktiver':'Aktiver')+'</button> '+
           '<button class="btn btn-ghost btn-liten" style="color:#B3261E;border-color:#B3261E" onclick="slettBruker(\''+b.id+'\',\''+esc(b.epost)+'\')">Slett</button>'
         : '')+'</td></tr>';
@@ -569,8 +570,53 @@ async function inviterBruker(){
     })});
     if(r.error) throw new Error(r.error);
     ['ny-fornavn','ny-etternavn','ny-epost','ny-mobil'].forEach(i=>$(i).value='');
-    meld('app-melding','Invitasjon sendt til '+epost+'.');
     await visBrukere();
+    visInviteLenke(epost, r.invite_lenke||'', !!r.epost_sendt, r.epost_feil||'');
+    if(r.epost_sendt) meld('app-melding','Invitasjon sendt til '+epost+'.');
+    else meld('app-melding','Brukeren er opprettet, men e-posten gikk ikke ut. Send lenken under til '+epost+'.','feil');
+  }catch(e){ meld('app-melding',e.message,'feil'); }
+}
+
+// ── Invitasjonslenke ──────────────────────────────────────────────────────
+// Brukeren opprettes alltid, og lenken vises alltid. Da er ikke onboarding
+// avhengig av at e-postutsendingen virker.
+function visInviteLenke(epost, lenke, sendt, feil){
+  const liste = $('bruker-liste');
+  if(!liste || !lenke) return;
+  let kort = $('invite-lenke-kort');
+  if(!kort){
+    kort = document.createElement('div');
+    kort.id = 'invite-lenke-kort';
+    liste.parentNode.insertBefore(kort, liste);
+  }
+  kort.style.cssText = 'border:2px solid #1a3a5c;border-radius:8px;padding:16px;margin-bottom:16px;background:var(--bg3,#f5f7fa)';
+  kort.innerHTML =
+    '<h3 style="margin:0 0 6px;font-size:15px">Invitasjonslenke for '+esc(epost)+'</h3>'+
+    '<p class="hjelpetekst" style="margin:0 0 10px">'+(sendt
+      ? 'E-posten er sendt. Lenken ligger her også, i tilfelle den ikke kommer fram.'
+      : 'E-posten gikk ikke ut'+(feil?' ('+esc(feil)+')':'')+'. Send lenken til brukeren selv, for eksempel i en vanlig e-post, så kommer de i gang med en gang.')+
+    ' Lenken lar brukeren sette sitt eget passord, og kan brukes én gang.</p>'+
+    '<input id="invite-lenke-felt" readonly value="'+esc(lenke)+'" onclick="this.select()" style="width:100%;font-size:12px;margin-bottom:10px">'+
+    '<button class="btn" onclick="kopierInviteLenke()">Kopier lenke</button> '+
+    '<button class="btn btn-ghost" onclick="document.getElementById(\'invite-lenke-kort\').remove()">Lukk</button>';
+}
+
+function kopierInviteLenke(){
+  const f = $('invite-lenke-felt');
+  if(!f) return;
+  f.select(); f.setSelectionRange(0, 99999);
+  const ferdig = ()=>meld('app-melding','Lenken er kopiert.');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(f.value).then(ferdig, ()=>{ try{document.execCommand('copy');}catch(e){} ferdig(); });
+  } else { try{document.execCommand('copy');}catch(e){} ferdig(); }
+}
+
+async function nyInviteLenke(epost){
+  try{
+    const r = await api('/functions/v1/admin-api', {method:'POST', body:JSON.stringify({action:'ny_invitasjonslenke', epost})});
+    if(r.error) throw new Error(r.error);
+    visInviteLenke(epost, r.invite_lenke||'', !!r.epost_sendt, r.epost_feil||'');
+    if(r.epost_sendt) meld('app-melding','Ny lenke sendt til '+epost+'.');
   }catch(e){ meld('app-melding',e.message,'feil'); }
 }
 async function toggleBruker(id, aktiv){
