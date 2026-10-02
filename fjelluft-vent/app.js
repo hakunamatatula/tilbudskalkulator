@@ -743,7 +743,7 @@
     innlogging: 'Logget inn', passord_byttet: 'Byttet passord', passord_nullstilt: 'Nullstilte passordet til', bruker_opprettet: 'La til bruker', bruker_endret: 'Endret bruker',
     bruker_slettet: 'Slettet bruker', bedrift_opprettet: 'Opprettet bedrift', bedrift_endret: 'Endret bedrift', prosjekt_opprettet: 'Opprettet prosjekt', prosjekt_slettet: 'Slettet prosjekt',
     prosjekt_arkivert: 'Arkiverte prosjekt', prosjekt_gjenopprettet: 'Hentet fram prosjekt', prosjekt_omdopt: 'Endret navn på prosjekt', ifc_importert: 'Leste inn IFC i', eksport_ifc: 'Eksporterte IFC fra',
-    eksport_rapport: 'Lastet ned rapport for', eksport_romskjema: 'Lastet ned romskjema for', eksport_alle: 'Lastet ned alle prosjekter', superadmin_opprettet: 'Opprettet Fjelluft-administrator'
+    eksport_rapport: 'Lastet ned rapport for', eksport_romskjema: 'Lastet ned romskjema for', eksport_alle: 'Lastet ned alle prosjekter', bedrift_slettet: 'Slettet bedrift', superadmin_opprettet: 'Opprettet Fjelluft-administrator'
   };
   var STATUS_NAVN = { aktiv: 'Aktiv', sperret: 'Sperret', avsluttet: 'Avsluttet' };
   function adminTabs() {
@@ -813,7 +813,7 @@
     S.bedrifter.forEach(function (b) {
       var s = bedriftStats(b);
       h += '<tr><td><b>' + esc(b.navn) + '</b>' + (b.kontakt_epost ? '<br><span class="small muted">' + esc(b.kontakt_epost) + '</span>' : '') + '</td><td class="num">' + esc(b.orgnr || '') + '</td><td>' + esc(planNavn(b.plan)) + '</td><td>' + statusPillB(b) + '</td><td class="n">' + s.aktive + ' / ' + b.maks_brukere + '</td><td class="n">' + s.prosjekter + '</td><td class="small">' + (s.sist ? esc(datoTekst(s.sist)) : '<span class="muted">Aldri</span>') + '</td><td class="small">' + (b.prove_til ? esc(datoKort(b.prove_til)) : '') + '</td><td class="n">' + (s.mrr ? fmt(s.mrr) : '–') + '</td>' +
-        '<td><div class="row" style="flex-wrap:nowrap;gap:4px"><button class="btn sm" type="button" data-act="rediger-bedrift" data-id="' + esc(b.id) + '">Endre</button><button class="btn sm ghost" type="button" data-act="vis-brukere" data-id="' + esc(b.id) + '">Brukere</button><button class="btn sm ghost" type="button" data-act="vis-prosjekter" data-id="' + esc(b.id) + '">Prosjekter</button></div></td></tr>';
+        '<td><div class="row" style="flex-wrap:nowrap;gap:4px"><button class="btn sm" type="button" data-act="rediger-bedrift" data-id="' + esc(b.id) + '">Endre</button><button class="btn sm ghost" type="button" data-act="vis-brukere" data-id="' + esc(b.id) + '">Brukere</button><button class="btn sm ghost" type="button" data-act="vis-prosjekter" data-id="' + esc(b.id) + '">Prosjekter</button>' + (b.id !== S.me.bedrift_id ? '<button class="btn sm ghost danger" type="button" data-act="slett-bedrift" data-id="' + esc(b.id) + '">Slett</button>' : '') + '</div></td></tr>';
     });
     h += '</tbody></table></div></section>';
     return h;
@@ -938,6 +938,25 @@
     if (act === 'vis-brukere') { S.adm.filterBedrift = a.dataset.id; S.atab = 'a-brukere'; renderTabs(); renderMain(); return true; }
     if (act === 'vis-prosjekter') { S.ctx = a.dataset.id; lsSet('fv-ctx', S.ctx); S.side = 'prosjekt'; closeProject(); beregnTilgang(); await lastProsjekter(); return true; }
     if (act === 'ny-bruker') { brukerDialog(); return true; }
+    if (act === 'slett-bedrift') {
+      var sb0 = S.bedrifter.find(function (x) { return x.id === a.dataset.id; }); if (!sb0) return true;
+      var st0 = bedriftStats(sb0), npr = S.adm.prosjekter.filter(function (p) { return p.bedrift_id === sb0.id; }).length;
+      modal('<h2>Slette ' + esc(sb0.navn) + '?</h2><p>Dette sletter for godt bedriften, alle ' + st0.brukere + ' brukere og alle ' + npr + ' prosjekter. Det kan ikke angres. Vil du bare stenge tilgangen, velg Endre og sett status til Sperret eller Avsluttet i stedet.</p>' +
+        '<form id="sbForm" class="stack" novalidate><label class="f"><span>Skriv <b>' + esc(sb0.navn) + '</b> for å bekrefte</span><input type="text" id="sb-navn" autocomplete="off"></label><p class="small" id="sb-err" role="alert" hidden style="color:var(--crit);margin:0"></p>' +
+        '<div class="modal-actions"><button class="btn" type="button" data-act="modal-close">Avbryt</button><button class="btn primary" style="background:var(--crit);border-color:var(--crit)" type="submit" disabled>Slett bedriften for godt</button></div></form>', function (root) {
+        var inp = root.querySelector('#sb-navn'), btn = root.querySelector('button[type=submit]'), err = root.querySelector('#sb-err');
+        inp.addEventListener('input', function () { btn.disabled = inp.value.trim() !== sb0.navn; });
+        root.querySelector('#sbForm').addEventListener('submit', async function (ev) {
+          ev.preventDefault(); if (inp.value.trim() !== sb0.navn) return; btn.disabled = true; btn.textContent = 'Sletter…';
+          try {
+            var r = await adminKall({ handling: 'slett_bedrift', id: sb0.id, bekreft: inp.value.trim() });
+            if (S.ctx === sb0.id) { S.ctx = S.me.bedrift_id; lsSet('fv-ctx', S.ctx); }
+            closeModal(); await lastAdmin(); toast(sb0.navn + ' er slettet med ' + r.brukere + ' brukere og ' + r.prosjekter + ' prosjekter');
+          } catch (e3) { err.textContent = e3.message; err.hidden = false; btn.disabled = false; btn.textContent = 'Slett bedriften for godt'; }
+        });
+      });
+      return true;
+    }
     if (act === 'kopier-melding') { var t = $('#pwMelding'); try { await navigator.clipboard.writeText(t.value); toast('Meldingen er kopiert'); } catch (e) { t.select(); toast('Merk teksten og kopier den'); } return true; }
     if (act === 'nullstill') {
       var u = S.adm.brukere.find(function (x) { return x.id === a.dataset.id; });
