@@ -207,6 +207,18 @@ label.check { display: flex; gap: 8px; align-items: flex-start; } label.check in
 .plankort.valgt { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok) inset; }
 .plankort h4 { margin: 0; font-size: 15px; } .plankort p { margin: 0; } .plankort .pris { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; } .plankort .pris small { font-size: 12px; font-weight: 400; color: var(--muted); }
 .plankort .btn, .plankort .pill { justify-self: start; margin-top: 4px; }
+.priser { display: grid; gap: 14px; }
+.pris-topp { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; justify-content: space-between; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--panel, transparent); }
+.seg button { border: 0; background: transparent; color: var(--ink); padding: 7px 14px; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.seg button[aria-pressed=true] { background: var(--ink); color: var(--bg, #fff); }
+.seg .spar { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; background: var(--ok-soft); color: var(--ok); }
+.pris-brukere { display: flex; align-items: center; gap: 10px; font-size: 13px; } .pris-brukere input[type=range] { width: min(260px, 50vw); } .pris-brukere b { min-width: 2ch; font-size: 16px; font-variant-numeric: tabular-nums; }
+.pk-topp { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; }
+.plankort.billigst { border-color: var(--supply); box-shadow: 0 0 0 1px var(--supply) inset; }
+.pk-liste { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 3px; color: var(--muted); }
+.faq { display: grid; gap: 6px; } .faq details { border-bottom: 1px solid var(--line); padding: 8px 0; } .faq summary { cursor: pointer; font-weight: 500; } .faq p { margin: 8px 0 0; color: var(--muted); max-width: 75ch; }
+.kortsteg h2 { margin-bottom: 6px; }
 .onboard { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
 .onboard li { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; }
 .ob-ikon { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 13px; font-weight: 700; }
