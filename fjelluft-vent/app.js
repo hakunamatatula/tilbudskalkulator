@@ -11,7 +11,7 @@
   var lsSet = function (k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignorert */ } };
 
   var STANDARD_INNST = { vmaxHoved: 5, vmaxGren: 3, rmax: 1.0, ruhet: 0.15, standardSystem: '360.01' };
-  var TABS = [['oversikt', 'Oversikt'], ['rom', 'Rom og luftmengder'], ['systemer', 'Systemer'], ['kanaler', 'Kanaler og trykkfall'], ['rapport', 'Rapport og eksport'], ['grunnlag', 'Beregningsgrunnlag']];
+  var TABS = [['oversikt', 'Oversikt'], ['rom', 'Rom og luftmengder'], ['tegning', 'Tegning'], ['systemer', 'Systemer'], ['kanaler', 'Kanaler og trykkfall'], ['rapport', 'Rapport og eksport'], ['grunnlag', 'Beregningsgrunnlag']];
 
   var S = {
     mode: 'kobler', side: 'prosjekt', atab: null, session: null, me: null, bedrift: null, bedrifter: [], planer: [], ctx: null, adm: null, versjon: null, konflikt: false,
@@ -237,6 +237,7 @@
   // ---------- Rendering ----------
   function renderAll() { renderHeader(); renderTabs(); renderMain(); }
   function renderHeader() {
+    var vs = document.querySelector('.brand span'); if (vs) vs.textContent = 'v0.2';
     var app = S.mode === 'app';
     $('#projBox').hidden = !app || S.side !== 'prosjekt';
     $('#userBox').hidden = !(app || S.mode === 'bytt-passord');
@@ -304,11 +305,12 @@
       else if (!S.pid) html += renderEmpty();
       else if (!S.data) html += '<div class="panel muted">Henter prosjektet…</div>';
       else {
-        var fn = { oversikt: renderOversikt, rom: renderRom, systemer: renderSystemer, kanaler: renderKanaler, rapport: renderRapport, grunnlag: renderGrunnlag }[S.tab] || renderOversikt;
+        var fn = { oversikt: renderOversikt, rom: renderRom, tegning: renderTegning, systemer: renderSystemer, kanaler: renderKanaler, rapport: renderRapport, grunnlag: renderGrunnlag }[S.tab] || renderOversikt;
         html += fn();
       }
     }
     main.innerHTML = html;
+    if (S.mode === 'app' && S.side === 'prosjekt' && S.data && S.tab === 'tegning') bindTegning();
     if (active) { var el = document.getElementById(active); if (el) { el.focus(); if (el.select && el.type !== 'select-one') try { el.select(); } catch (e) { /* ikke støttet */ } } }
     window.scrollTo(0, scroll);
   }
@@ -546,7 +548,7 @@
     // Strekninger
     var res = S.data.strekninger.map(function (s) { return { s: s, r: FV.beregnStrekning(s, inn) }; });
     var maxBy = {}; res.forEach(function (x) { var key = (x.s.system || '') + '|' + x.s.side; if (!maxBy[key] || x.r.sum > maxBy[key].r.sum) maxBy[key] = x; });
-    html += '<section class="panel"><div class="panel-h"><div><h3>Trykkfallsberegning</h3><p class="small muted" style="margin:4px 0 0">Legg inn strekningen fra aggregatet til ventilen lengst unna, delt opp der luftmengden endres. Den strekningen med høyest trykkfall per system og side er kritisk og bestemmer viftens eksterne trykk.</p></div><button class="btn primary" type="button" data-act="add-strekning"' + dis() + '>+ Ny strekning</button></div>';
+    html += '<section class="panel"><div class="panel-h"><div><h3>Trykkfallsberegning</h3><p class="small muted" style="margin:4px 0 0">Legg inn strekningen fra aggregatet til ventilen lengst unna, delt opp der luftmengden endres. Den strekningen med høyest trykkfall per system og side er kritisk og bestemmer viftens eksterne trykk.</p></div><div class="row"><button class="btn" type="button" data-act="tg-til-kanaler"' + dis() + '>Hent fra tegningen</button><button class="btn primary" type="button" data-act="add-strekning"' + dis() + '>+ Ny strekning</button></div></div>';
     if (Object.keys(maxBy).length) {
       html += '<div class="kpis" style="margin-bottom:12px">' + Object.keys(maxBy).sort().map(function (k) { var x = maxBy[k]; return kpi((x.s.system || 'Uten system') + ' ' + (x.s.side === 'avtrekk' ? 'avtrekk' : 'tilluft'), fmt(x.r.sum, 0), 'Pa', x.s.side === 'avtrekk' ? 'a' : 't'); }).join('') + '</div>';
     }
@@ -993,6 +995,777 @@
     return false;
   }
 
+  // ---------- Tegning ----------
+  var TG_SIDER = {
+    tilluft: { navn: 'Tilluft', farge: 'var(--supply)', fast: '#1d64a6' },
+    avtrekk: { navn: 'Avtrekk', farge: 'var(--exhaust)', fast: '#b0532a' },
+    uteluft: { navn: 'Uteluft', farge: 'var(--uteluft)', fast: '#2f8a57' },
+    avkast: { navn: 'Avkast', farge: 'var(--avkast)', fast: '#7a5aa6' }
+  };
+  var TG_VERKTOY = [
+    ['velg', 'Velg', 'Velg, flytt og endre. Dra i tomt område for å flytte tegningen.'],
+    ['kanal', 'Kanal', 'Klikk for hvert knekkpunkt. Dobbeltklikk, Enter eller klikk på en ventil for å avslutte. Kanalen retter seg etter 90° og 45° (hold Alt for fri vinkel).'],
+    ['ventil', 'Ventil', 'Klikk i et rom for å plassere en ventil. Luftmengden hentes fra rommet. Med Uteluft eller Avkast valgt blir det en rist.'],
+    ['aggregat', 'Aggregat', 'Klikk for å plassere aggregatet. Kanalene regnes ut fra aggregatet og ut til ventilene.'],
+    ['rom', 'Rom', 'Klikk hjørnene i rommet. Klikk på første punkt eller trykk Enter for å lukke. Arealet regnes ut av målestokken.'],
+    ['maal', 'Mål', 'Klikk to punkter for å måle avstanden.'],
+    ['kalib', 'Målestokk', 'Klikk to punkter med kjent avstand, for eksempel endene av en vegg med målsetting. Skriv deretter inn lengden.']
+  ];
+  var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+
+  function tgData() {
+    if (!S.data.tegning) S.data.tegning = { etasjer: {}, elementer: [], innst: { ventilPa: 30, ristPa: 15 } };
+    var t = S.data.tegning; if (!t.etasjer) t.etasjer = {}; if (!t.elementer) t.elementer = []; if (!t.innst) t.innst = { ventilPa: 30, ristPa: 15 };
+    return t;
+  }
+  function tgS() {
+    if (!S.tg || S.tg.pid !== S.pid) S.tg = { pid: S.pid, verktoy: 'velg', side: 'tilluft', etasje: null, view: null, utkast: [], valgt: null, bilder: {}, hist: [], fremtid: [], visRom: true, mus: null, drag: null, res: null };
+    return S.tg;
+  }
+  function tgEtasjer() {
+    var t = tgData(), seen = {}, out = [];
+    sortRom(rom()).forEach(function (r) { if (r.etasje && !seen[r.etasje]) { seen[r.etasje] = 1; out.push(r.etasje); } });
+    Object.keys(t.etasjer).concat(t.elementer.map(function (e) { return e.etasje; })).forEach(function (e) { if (e && !seen[e]) { seen[e] = 1; out.push(e); } });
+    if (!out.length) out.push('1. etasje');
+    return out;
+  }
+  function tgEt() { var g = tgS(), l = tgEtasjer(); if (!g.etasje || l.indexOf(g.etasje) < 0) g.etasje = l[0]; return g.etasje; }
+  function tgEtData(et) { var t = tgData(); if (!t.etasjer[et]) t.etasjer[et] = { underlag: null }; return t.etasjer[et]; }
+  function tgElementer(et) { return tgData().elementer.filter(function (e) { return e.etasje === et; }); }
+  function tgRomPolys(et) {
+    // Rom med geometri: IFC-koordinater (y opp) speiles til tegneretning (y ned)
+    var harUnderlag = !!(S.data.tegning && S.data.tegning.etasjer && S.data.tegning.etasjer[et] && S.data.tegning.etasjer[et].underlag);
+    return rom().filter(function (r) { return r.etasje === et && r.poly && r.poly.length && !r.fjernet && (!harUnderlag || r.tegnet); }).map(function (r) {
+      return { rom: r, polys: r.poly.map(function (pl) { return pl.map(function (p) { return [p[0], -p[1]]; }); }) };
+    });
+  }
+  function tgSnapshot() { return JSON.stringify({ t: S.data.tegning || null, r: S.data.rom }); }
+  function tgFor() { var g = tgS(); g.hist.push(tgSnapshot()); if (g.hist.length > 60) g.hist.shift(); g.fremtid = []; }
+  function tgEtter() { changed(); tgTegn(); tgPanel(); }
+  function tgAngre(frem) {
+    var g = tgS(), fra = frem ? g.fremtid : g.hist, til = frem ? g.hist : g.fremtid;
+    if (!fra.length) { toast(frem ? 'Ingenting å gjøre om' : 'Ingenting å angre'); return; }
+    til.push(tgSnapshot()); var s = JSON.parse(fra.pop()); S.data.tegning = s.t; S.data.rom = s.r; g.valgt = null; g.utkast = [];
+    changed(); tgTegn(); tgPanel();
+  }
+
+  // Geometri
+  function d2(a, b) { var dx = a[0] - b[0], dy = a[1] - b[1]; return Math.sqrt(dx * dx + dy * dy); }
+  function projSeg(p, a, b) {
+    var dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy; if (!l2) return { p: a.slice(), t: 0, d: d2(p, a) };
+    var t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2; t = Math.max(0, Math.min(1, t));
+    var q = [a[0] + t * dx, a[1] + t * dy]; return { p: q, t: t, d: d2(p, q) };
+  }
+  function inPoly(p, pl) { var c = false; for (var i = 0, j = pl.length - 1; i < pl.length; j = i++) { var a = pl[i], b = pl[j]; if (((a[1] > p[1]) !== (b[1] > p[1])) && (p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0])) c = !c; } return c; }
+  function rnd(v) { return Math.round(v * 1000) / 1000; }
+  function nkey(et, p) { return et + '|' + Math.round(p[0] * 100) + '|' + Math.round(p[1] * 100); }
+  function vinkel(a, b, c) { // vinkelendring i grader ved b
+    var x1 = b[0] - a[0], y1 = b[1] - a[1], x2 = c[0] - b[0], y2 = c[1] - b[1];
+    var l = Math.hypot(x1, y1) * Math.hypot(x2, y2); if (!l) return 0;
+    return Math.acos(Math.max(-1, Math.min(1, (x1 * x2 + y1 * y2) / l))) * 180 / Math.PI;
+  }
+  function romVed(et, p) {
+    var hit = null; tgRomPolys(et).forEach(function (rp) { if (!hit && rp.polys.some(function (pl) { return inPoly(p, pl); })) hit = rp.rom; });
+    return hit;
+  }
+
+  // ---------- Nettverksberegning ----------
+  function tgBeregn() {
+    var t = tgData(), inn = innst(), res = { kanter: [], anlegg: [], varsler: [], mengde: {}, kritiske: {}, vq: {}, vdp: {} };
+    var els = t.elementer;
+    var ventiler = els.filter(function (e) { return e.type === 'ventil'; });
+    var aggregater = els.filter(function (e) { return e.type === 'aggregat'; });
+    // Antall ventiler per rom og side
+    var perRom = {}; ventiler.forEach(function (v) { if (v.romId) { var k = v.romId + '|' + v.side; perRom[k] = (perRom[k] || 0) + 1; } });
+    function autoQ(v) {
+      if (v.q !== null && v.q !== undefined && v.q !== '') return Number(v.q) || 0;
+      var r = v.romId && findRoom(v.romId); if (!r) return 0;
+      var st = FV.romStatus(r), n = perRom[v.romId + '|' + v.side] || 1;
+      return (v.side === 'avtrekk' ? st.avtrekk : v.side === 'tilluft' ? st.tilluft : 0) / n;
+    }
+    var totaler = {}; // aggregat-id -> {tilluft, avtrekk}
+    ['tilluft', 'avtrekk', 'uteluft', 'avkast'].forEach(function (side) {
+      // Bygg graf
+      var noder = {}, kanter = [];
+      function node(et, p) { var k = nkey(et, p); if (!noder[k]) noder[k] = { k: k, p: p, et: et, kanter: [] }; return noder[k]; }
+      var kanaler = els.filter(function (e) { return e.type === 'kanal' && e.side === side && e.pts && e.pts.length > 1; });
+      var ankre = {}; // per etasje: punkter som kan dele kanaler
+      els.forEach(function (e) {
+        var lst = ankre[e.etasje] || (ankre[e.etasje] = []);
+        if (e.type === 'kanal' && e.side === side) e.pts.forEach(function (p) { lst.push(p); });
+        else if ((e.type === 'ventil' && e.side === side) || e.type === 'aggregat') lst.push([e.x, e.y]);
+      });
+      kanaler.forEach(function (k) {
+        for (var i = 0; i < k.pts.length - 1; i++) {
+          var a = k.pts[i], b = k.pts[i + 1], mellom = [];
+          (ankre[k.etasje] || []).forEach(function (p) { var pr = projSeg(p, a, b); if (pr.d < 0.02 && pr.t > 0.001 && pr.t < 0.999) mellom.push({ p: p, t: pr.t }); });
+          mellom.sort(function (x, y) { return x.t - y.t; });
+          var rekke = [a].concat(mellom.map(function (m) { return m.p; })).concat([b]);
+          for (var j = 0; j < rekke.length - 1; j++) {
+            var na = node(k.etasje, rekke[j]), nb = node(k.etasje, rekke[j + 1]);
+            if (na === nb) continue;
+            var ed = { id: kanter.length, a: na, b: nb, len: d2(rekke[j], rekke[j + 1]), el: k, side: side, et: k.etasje };
+            kanter.push(ed); na.kanter.push(ed); nb.kanter.push(ed);
+          }
+        }
+      });
+      var terminaler = {}; ventiler.filter(function (v) { return v.side === side; }).forEach(function (v) { var k = nkey(v.etasje, [v.x, v.y]); (terminaler[k] = terminaler[k] || []).push(v); });
+      var brukt = {};
+      aggregater.forEach(function (ag) {
+        var rot = noder[nkey(ag.etasje, [ag.x, ag.y])]; if (!rot) return;
+        // DFS-tre
+        var foreldre = {}, rekkef = [], besokt = {}; besokt[rot.k] = true;
+        var stakk = [rot];
+        while (stakk.length) {
+          var n = stakk.pop(); rekkef.push(n);
+          n.kanter.forEach(function (ed) {
+            var m = ed.a === n ? ed.b : ed.a;
+            if (besokt[m.k]) { if (!foreldre[n.k] || foreldre[n.k].ed !== ed) ed.lokke = true; return; }
+            besokt[m.k] = true; foreldre[m.k] = { ed: ed, fra: n }; ed.ned = m; ed.opp = n; brukt[ed.id] = true; stakk.push(m);
+          });
+        }
+        // Luftmengder
+        var qNode = {}, nTerm = {};
+        for (var i = rekkef.length - 1; i >= 0; i--) {
+          var n2 = rekkef[i], q = 0, nt = 0;
+          (terminaler[n2.k] || []).forEach(function (v) { if (side === 'uteluft' || side === 'avkast') return; res.vq[v.id] = autoQ(v); q += res.vq[v.id]; nt++; });
+          n2.kanter.forEach(function (ed) { if (ed.opp === n2 && foreldre[ed.ned.k] && foreldre[ed.ned.k].ed === ed) { q += qNode[ed.ned.k] || 0; nt += nTerm[ed.ned.k] || 0; } });
+          qNode[n2.k] = q; nTerm[n2.k] = nt;
+        }
+        if (side === 'tilluft' || side === 'avtrekk') { totaler[ag.id] = totaler[ag.id] || { tilluft: 0, avtrekk: 0 }; totaler[ag.id][side] = qNode[rot.k] || 0; }
+        if (side === 'uteluft' || side === 'avkast') {
+          var tot = (totaler[ag.id] || {})[side === 'uteluft' ? 'tilluft' : 'avtrekk'] || 0;
+          rekkef.forEach(function (n3) { qNode[n3.k] = tot; nTerm[n3.k] = 2; (terminaler[n3.k] || []).forEach(function (v) { res.vq[v.id] = tot; }); });
+        }
+        // Dimensjon per kant
+        Object.keys(foreldre).forEach(function (k) {
+          var ed = foreldre[k].ed, qq = qNode[k] || 0, gren = (nTerm[k] || 0) <= 1;
+          var dimEl = ed.el.dim && ed.el.dim !== 'auto' ? ed.el.dim : null;
+          var kk = !qq ? null : dimEl ? (/x/i.test(dimEl) ? FV.rektKanal(qq, +dimEl.split(/x/i)[0], +dimEl.split(/x/i)[1], inn.ruhet) : FV.rundKanal(qq, +dimEl, inn.ruhet)) : FV.velgDimensjon(qq, gren ? inn.vmaxGren : inn.vmaxHoved, inn.rmax, inn.ruhet);
+          ed.q = qq; ed.k = kk; ed.dimTekst = kk ? (kk.a ? kk.a + '×' + kk.b : 'Ø' + kk.d) : '–'; ed.d = kk ? kk.d : 0; ed.ag = ag;
+        });
+        // Trykkfall til hver terminal
+        var verst = null;
+        Object.keys(terminaler).forEach(function (tk) {
+          if (!besokt[tk]) return;
+          terminaler[tk].forEach(function (v) {
+            var dp = 0, sti = [], node2 = noder[tk], forrige = null, zetaSum = 0;
+            while (foreldre[node2.k]) {
+              var f = foreldre[node2.k], ed2 = f.ed, kk2 = ed2.k;
+              var dpe = kk2 ? kk2.R * ed2.len : 0, z = 0;
+              if (forrige && kk2) {
+                var deg = f.fra === node2 ? 0 : node2.kanter.length;
+                var a3 = forrige.ned === node2 ? forrige.opp.p : forrige.ned.p;
+                var ang = vinkel(f.fra.p, node2.p, forrige.ned.p);
+                if (node2.kanter.length >= 3) z += ang < 20 ? 0.3 : 1.0; else if (ang > 20) z += 0.3 * Math.min(ang, 90) / 90;
+                if (forrige.d && kk2.d && Math.abs(forrige.d - kk2.d) > 1) z += 0.1;
+                var pdBarn = forrige.k ? forrige.k.pd : 0; dp += z * pdBarn; zetaSum += z;
+                forrige.zeta = (forrige.zeta || 0);
+              }
+              dp += dpe; sti.push(ed2); forrige = ed2; node2 = f.fra;
+            }
+            var term = side === 'uteluft' || side === 'avkast' ? Number(v.pa !== undefined && v.pa !== null && v.pa !== '' ? v.pa : t.innst.ristPa) : Number(v.pa !== undefined && v.pa !== null && v.pa !== '' ? v.pa : t.innst.ventilPa);
+            dp += term || 0; res.vdp[v.id] = dp;
+            if (!verst || dp > verst.dp) verst = { dp: dp, ventil: v, sti: sti };
+          });
+        });
+        var navnA = ag.anlegg || innst().standardSystem;
+        res.anlegg.push({ ag: ag, side: side, anlegg: navnA, q: qNode[rot.k] || 0, dp: verst ? verst.dp : 0, kritisk: verst, antall: Object.keys(terminaler).filter(function (tk) { return besokt[tk]; }).reduce(function (a, tk) { return a + terminaler[tk].length; }, 0) });
+        if (verst) verst.sti.forEach(function (ed) { res.kritiske[ed.el.id + '|' + ed.id + '|' + side] = true; ed.kritisk = true; });
+      });
+      kanter.forEach(function (ed) { if (!brukt[ed.id]) { ed.lost = true; } res.kanter.push(ed); });
+      // Varsler
+      ventiler.filter(function (v) { return v.side === side; }).forEach(function (v) {
+        var k = nkey(v.etasje, [v.x, v.y]);
+        var tilkoblet = noder[k] && noder[k].kanter.some(function (ed) { return brukt[ed.id]; });
+        if (!tilkoblet) res.varsler.push({ el: v, tekst: (side === 'uteluft' || side === 'avkast' ? 'Rist' : 'Ventil') + ' ' + (v.navn || '') + ' er ikke koblet til et aggregat' });
+        else if ((side === 'tilluft' || side === 'avtrekk') && !res.vq[v.id]) res.varsler.push({ el: v, tekst: 'Ventil uten luftmengde. Koble den til et rom eller skriv inn luftmengde.' });
+      });
+      if (kanter.some(function (ed) { return ed.lost; })) res.varsler.push({ tekst: TG_SIDER[side].navn + ': ' + kanter.filter(function (ed) { return ed.lost; }).length + ' kanalbiter er ikke koblet til et aggregat' });
+      if (kanter.some(function (ed) { return ed.lokke; })) res.varsler.push({ tekst: TG_SIDER[side].navn + ': kanalnettet har en ring. Luftmengden kan bli feil fordelt.' });
+    });
+    // Rom uten ventil
+    var ventRom = {}; ventiler.forEach(function (v) { if (v.romId) ventRom[v.romId + '|' + v.side] = true; });
+    if (ventiler.length) rom().forEach(function (r) {
+      if (r.fjernet) return; var st = FV.romStatus(r);
+      if (st.tilluft > 0 && !ventRom[r.id + '|tilluft']) res.varsler.push({ rom: r, tekst: 'Mangler tilluftsventil: ' + (r.nummer ? r.nummer + ' ' : '') + r.navn + ' (' + fmt(st.tilluft) + ' m³/h)' });
+      if (st.avtrekk > 0 && !ventRom[r.id + '|avtrekk']) res.varsler.push({ rom: r, tekst: 'Mangler avtrekksventil: ' + (r.nummer ? r.nummer + ' ' : '') + r.navn + ' (' + fmt(st.avtrekk) + ' m³/h)' });
+    });
+    // Mengdeliste
+    var ml = { kanal: {}, bend90: {}, bend45: {}, tstk: {}, overgang: 0, ventiler: {}, aggregat: aggregater.length };
+    res.kanter.forEach(function (ed) { var k = ed.side + '|' + (ed.dimTekst && ed.dimTekst !== '–' ? ed.dimTekst : (ed.el.dim && ed.el.dim !== 'auto' ? (/x/i.test(ed.el.dim) ? ed.el.dim.replace(/x/i, '×') : 'Ø' + ed.el.dim) : 'Udimensjonert')); ml.kanal[k] = (ml.kanal[k] || 0) + ed.len; });
+    var allNoder = {};
+    res.kanter.forEach(function (ed) { [ed.a, ed.b].forEach(function (n) { allNoder[n.k + '|' + ed.side] = { n: n, side: ed.side }; }); });
+    Object.keys(allNoder).forEach(function (key) {
+      var o = allNoder[key], ks = o.n.kanter.filter(function (ed) { return ed.side === o.side; });
+      var dimMax = ks.reduce(function (m, ed) { return Math.max(m, ed.d || 0); }, 0), dt = dimMax ? 'Ø' + dimMax : 'Udim.';
+      if (ks.length === 2) {
+        var p1 = ks[0].a === o.n ? ks[0].b.p : ks[0].a.p, p2 = ks[1].a === o.n ? ks[1].b.p : ks[1].a.p;
+        var ang = vinkel(p1, o.n.p, p2);
+        if (ang > 60) ml.bend90[o.side + '|' + dt] = (ml.bend90[o.side + '|' + dt] || 0) + 1;
+        else if (ang > 20) ml.bend45[o.side + '|' + dt] = (ml.bend45[o.side + '|' + dt] || 0) + 1;
+        if (ks[0].d && ks[1].d && ks[0].d !== ks[1].d) ml.overgang++;
+      } else if (ks.length >= 3) ml.tstk[o.side + '|' + dt] = (ml.tstk[o.side + '|' + dt] || 0) + 1;
+    });
+    ventiler.forEach(function (v) { var k = (v.side === 'uteluft' ? 'Inntaksrist' : v.side === 'avkast' ? 'Avkastrist / takhatt' : v.side === 'tilluft' ? 'Tilluftsventil' : 'Avtrekksventil'); ml.ventiler[k] = (ml.ventiler[k] || 0) + 1; });
+    res.mengde = ml;
+    tgS().res = res;
+    return res;
+  }
+
+  // ---------- Visning ----------
+  function renderTegning() {
+    var g = tgS(), et = tgEt(), ed = tgEtData(et), skriv = S.canWrite;
+    var h = '<div class="tg">';
+    h += '<div class="tg-bar">' +
+      '<select id="tgEt" aria-label="Etasje">' + tgEtasjer().map(function (e) { return '<option' + (e === et ? ' selected' : '') + '>' + esc(e) + '</option>'; }).join('') + '</select>' +
+      '<div class="seg tg-tools" role="group" aria-label="Verktøy">' + TG_VERKTOY.map(function (v) { var av = !skriv && v[0] !== 'velg' && v[0] !== 'maal'; return '<button type="button" data-act="tg-verktoy" data-v="' + v[0] + '" aria-pressed="' + (g.verktoy === v[0]) + '" title="' + esc(v[2]) + '"' + (av ? ' disabled' : '') + '>' + v[1] + '</button>'; }).join('') + '</div>' +
+      '<select id="tgSide" aria-label="Kanalsystem" class="tg-side-sel">' + Object.keys(TG_SIDER).map(function (k) { return '<option value="' + k + '"' + (g.side === k ? ' selected' : '') + '>' + TG_SIDER[k].navn + '</option>'; }).join('') + '</select>' +
+      '<span style="flex:1"></span>' +
+      '<button class="btn sm" type="button" data-act="tg-underlag"' + dis() + '>' + (ed.underlag ? 'Bytt plantegning' : 'Last inn plantegning') + '</button>' +
+      '<div class="row" style="gap:2px"><button class="btn sm ghost" type="button" data-act="tg-zoom" data-z="0.8" aria-label="Zoom ut">−</button><button class="btn sm ghost" type="button" data-act="tg-zoom" data-z="1.25" aria-label="Zoom inn">+</button><button class="btn sm ghost" type="button" data-act="tg-tilpass">Tilpass</button></div>' +
+      '<button class="btn sm ghost" type="button" data-act="tg-angre"' + dis() + ' title="Angre (Ctrl+Z)">Angre</button>' +
+      '<button class="btn sm" type="button" data-act="tg-png">Last ned tegning</button></div>';
+    var hint = '';
+    if (ed.underlag && !ed.underlag.kalibrert) hint = '<div class="banner" style="margin:0">Plantegningen har ikke målestokk ennå. Velg <b>Målestokk</b> og klikk på to punkter med kjent avstand, ellers blir lengder og arealer feil.</div>';
+    else if (!ed.underlag && !tgRomPolys(et).length && !tgElementer(et).length) hint = '<div class="banner info" style="margin:0">Last inn plantegningen for etasjen som PDF, PNG eller JPG. Har prosjektet rom fra IFC-filen, vises de her automatisk.</div>';
+    h += hint;
+    h += '<div class="tg-main"><div class="tg-canvas" id="tgCanvas"><svg id="tgSvg" role="application" aria-label="Tegneflate for ' + esc(et) + '"><g id="tgWorld"></g><g id="tgOverlay"></g></svg><div class="tg-hint" id="tgHint"></div><div class="tg-scale" id="tgScale"></div></div>' +
+      '<aside class="tg-panel" id="tgPanel"></aside></div></div>';
+    return h;
+  }
+  function bindTegning() {
+    var svg = $('#tgSvg'); if (!svg) return;
+    var g = tgS(), et = tgEt();
+    var ed = tgEtData(et);
+    if (ed.underlag && !g.bilder[ed.underlag.path]) lastBilde(ed.underlag.path);
+    if (!g.view || g.view.et !== et) tgTilpass();
+    if (location.protocol === 'file:') window.__FV = { S: S, beregn: tgBeregn };
+    svg.addEventListener('pointerdown', tgDown);
+    svg.addEventListener('pointermove', tgMove);
+    svg.addEventListener('pointerup', tgUp);
+    svg.addEventListener('pointerleave', function () { g.mus = null; tgOverlay(); });
+    svg.addEventListener('dblclick', function (e) { e.preventDefault(); tgFullfor(); });
+    svg.addEventListener('wheel', function (e) { e.preventDefault(); var r = svg.getBoundingClientRect(); tgZoom(Math.pow(1.0015, -e.deltaY), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+    svg.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    tgTegn(); tgPanel();
+  }
+  async function lastBilde(path) {
+    var g = tgS(); g.bilder[path] = 'laster';
+    var r = await sb.storage.from('underlag').download(path);
+    if (r.error || !r.data) { g.bilder[path] = 'feil'; toast('Kunne ikke hente plantegningen.'); return; }
+    g.bilder[path] = URL.createObjectURL(r.data); tgTegn();
+  }
+  function tgBounds(et) {
+    var minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    function inc(p) { if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0]; if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1]; }
+    var u = tgEtData(et).underlag; if (u) { inc([0, 0]); inc([u.bredde * u.mPerPx, u.hoyde * u.mPerPx]); }
+    tgRomPolys(et).forEach(function (rp) { rp.polys.forEach(function (pl) { pl.forEach(inc); }); });
+    tgElementer(et).forEach(function (e) { if (e.pts) e.pts.forEach(inc); else inc([e.x, e.y]); });
+    if (minx === Infinity) return { minx: 0, miny: 0, maxx: 20, maxy: 14 };
+    return { minx: minx, miny: miny, maxx: maxx, maxy: maxy };
+  }
+  function tgTilpass() {
+    var svg = $('#tgSvg'), g = tgS(), et = tgEt(); if (!svg) return;
+    var W = svg.clientWidth || 800, H = svg.clientHeight || 600, b = tgBounds(et);
+    var w = Math.max(b.maxx - b.minx, 1), h = Math.max(b.maxy - b.miny, 1), s = Math.min(W / w, H / h) * 0.92;
+    g.view = { et: et, s: s, x: b.minx - (W / s - w) / 2, y: b.miny - (H / s - h) / 2 };
+    tgTegn();
+  }
+  function tgZoom(f, sx, sy) {
+    var g = tgS(), svg = $('#tgSvg'); if (!g.view || !svg) return;
+    if (sx === undefined) { sx = svg.clientWidth / 2; sy = svg.clientHeight / 2; }
+    var wx = g.view.x + sx / g.view.s, wy = g.view.y + sy / g.view.s;
+    g.view.s = Math.max(2, Math.min(4000, g.view.s * f)); g.view.x = wx - sx / g.view.s; g.view.y = wy - sy / g.view.s;
+    clearTimeout(tgZoom.t); tgTransform(); tgZoom.t = setTimeout(tgTegn, 60);
+  }
+  function tgTransform() { var g = tgS(), w = $('#tgWorld'), o = $('#tgOverlay'); if (!w || !g.view) return; var tr = 'matrix(' + g.view.s + ',0,0,' + g.view.s + ',' + (-g.view.x * g.view.s) + ',' + (-g.view.y * g.view.s) + ')'; w.setAttribute('transform', tr); o.setAttribute('transform', tr); tgSkala(); }
+  function tgSkala() {
+    var g = tgS(), el = $('#tgScale'); if (!el || !g.view) return;
+    var mal = 120 / g.view.s, p = Math.pow(10, Math.floor(Math.log10(mal))), n = [1, 2, 5, 10].map(function (k) { return k * p; }).filter(function (x) { return x <= mal; }).pop() || p;
+    el.innerHTML = '<span style="width:' + Math.round(n * g.view.s) + 'px"></span>' + fmt(n, n < 1 ? 1 : 0) + ' m';
+  }
+  function px(n) { return n / tgS().view.s; }
+
+  function tgTegn() {
+    var w = $('#tgWorld'); if (!w) return;
+    var g = tgS(), et = tgEt(), ed = tgEtData(et), res = tgBeregn(), h = '';
+    tgTransform();
+    var fs = px(11.5);
+    if (ed.underlag) {
+      var src = g.bilder[ed.underlag.path];
+      if (src && src !== 'laster' && src !== 'feil') h += '<image href="' + src + '" x="0" y="0" width="' + ed.underlag.bredde * ed.underlag.mPerPx + '" height="' + ed.underlag.hoyde * ed.underlag.mPerPx + '" preserveAspectRatio="none" class="tg-img"/>';
+    }
+    if (g.visRom) tgRomPolys(et).forEach(function (rp) {
+      var st = FV.romStatus(rp.rom);
+      var d = rp.polys.map(function (pl) { return 'M' + pl.map(function (p) { return rnd(p[0]) + ' ' + rnd(p[1]); }).join('L') + 'Z'; }).join(' ');
+      h += '<path d="' + d + '" class="tg-rom' + (ed.underlag ? ' over' : '') + '" fill-rule="evenodd"/>';
+      var c = centroid(rp.polys[0]);
+      h += '<text x="' + rnd(c[0]) + '" y="' + rnd(c[1]) + '" font-size="' + fs + '" class="tg-romtxt" text-anchor="middle">' + esc((rp.rom.nummer ? rp.rom.nummer + ' ' : '') + rp.rom.navn) + '</text>';
+      var tt = []; if (st.tilluft) tt.push('<tspan class="t">T ' + fmt(st.tilluft) + '</tspan>'); if (st.avtrekk) tt.push('<tspan class="a">A ' + fmt(st.avtrekk) + '</tspan>');
+      if (tt.length) h += '<text x="' + rnd(c[0]) + '" y="' + rnd(c[1] + fs * 1.25) + '" font-size="' + fs * 0.92 + '" class="tg-romtxt" text-anchor="middle">' + tt.join('<tspan> </tspan>') + '</text>';
+    });
+    // Kanaler (fra beregnede kanter)
+    var etKanter = res.kanter.filter(function (k) { return k.et === et; });
+    etKanter.forEach(function (k) {
+      var bw = Math.max((k.d || 100) / 1000, px(2.5));
+      var sel = g.valgt === k.el.id;
+      h += '<line x1="' + rnd(k.a.p[0]) + '" y1="' + rnd(k.a.p[1]) + '" x2="' + rnd(k.b.p[0]) + '" y2="' + rnd(k.b.p[1]) + '" stroke="' + TG_SIDER[k.side].farge + '" stroke-width="' + rnd(bw) + '" class="tg-kanal' + (k.lost ? ' lost' : '') + (sel ? ' sel' : '') + '"/>';
+      if (k.kritisk) h += '<line x1="' + rnd(k.a.p[0]) + '" y1="' + rnd(k.a.p[1]) + '" x2="' + rnd(k.b.p[0]) + '" y2="' + rnd(k.b.p[1]) + '" stroke-width="' + rnd(px(1.2)) + '" stroke-dasharray="' + rnd(px(5)) + ' ' + rnd(px(4)) + '" class="tg-krit"/>';
+    });
+    // Kanaler uten kanter (1 punkt) og valgte knekkpunkter
+    tgElementer(et).filter(function (e) { return e.type === 'kanal'; }).forEach(function (e) {
+      if (g.valgt === e.id && S.canWrite) e.pts.forEach(function (p, i) { h += '<rect x="' + rnd(p[0] - px(4)) + '" y="' + rnd(p[1] - px(4)) + '" width="' + rnd(px(8)) + '" height="' + rnd(px(8)) + '" class="tg-handle"/>'; });
+    });
+    // Etiketter på kanaler
+    etKanter.forEach(function (k) {
+      if (k.len * g.view.s < 70 || !k.q) return;
+      var mx = (k.a.p[0] + k.b.p[0]) / 2, my = (k.a.p[1] + k.b.p[1]) / 2, ang = Math.atan2(k.b.p[1] - k.a.p[1], k.b.p[0] - k.a.p[0]) * 180 / Math.PI;
+      if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
+      var txt = k.dimTekst + ' · ' + fmt(k.q);
+      h += '<g transform="translate(' + rnd(mx) + ' ' + rnd(my) + ') rotate(' + rnd(ang) + ')"><text y="' + rnd(-px(6)) + '" font-size="' + fs * 0.9 + '" text-anchor="middle" class="tg-lbl" style="fill:' + TG_SIDER[k.side].farge + '">' + esc(txt) + '</text></g>';
+    });
+    // Ventiler og aggregat
+    tgElementer(et).forEach(function (e) {
+      var sel = g.valgt === e.id;
+      if (e.type === 'ventil') {
+        var r = px(9), rist = e.side === 'uteluft' || e.side === 'avkast';
+        h += '<g class="tg-el' + (sel ? ' sel' : '') + '" transform="translate(' + rnd(e.x) + ' ' + rnd(e.y) + ')">' + (rist ? '<rect x="' + rnd(-r) + '" y="' + rnd(-r * 0.6) + '" width="' + rnd(2 * r) + '" height="' + rnd(1.2 * r) + '" stroke="' + TG_SIDER[e.side].farge + '" stroke-width="' + rnd(px(2)) + '" class="tg-sym"/><line x1="' + rnd(-r * 0.6) + '" y1="0" x2="' + rnd(r * 0.6) + '" y2="0" stroke="' + TG_SIDER[e.side].farge + '" stroke-width="' + rnd(px(1.5)) + '"/>' :
+          '<circle r="' + rnd(r) + '" stroke="' + TG_SIDER[e.side].farge + '" stroke-width="' + rnd(px(2)) + '" class="tg-sym"/><path d="M' + rnd(-r * 0.55) + ' ' + rnd(-r * 0.55) + 'L' + rnd(r * 0.55) + ' ' + rnd(r * 0.55) + 'M' + rnd(-r * 0.55) + ' ' + rnd(r * 0.55) + 'L' + rnd(r * 0.55) + ' ' + rnd(-r * 0.55) + '" stroke="' + TG_SIDER[e.side].farge + '" stroke-width="' + rnd(px(1.5)) + '"/>') +
+          (res.vq[e.id] ? '<text x="' + rnd(r + px(3)) + '" y="' + rnd(px(4)) + '" font-size="' + fs * 0.9 + '" class="tg-lbl" style="fill:' + TG_SIDER[e.side].farge + '">' + fmt(res.vq[e.id]) + '</text>' : '') + '</g>';
+      } else if (e.type === 'aggregat') {
+        var aw = px(46), ah = px(24);
+        h += '<g class="tg-el' + (sel ? ' sel' : '') + '" transform="translate(' + rnd(e.x) + ' ' + rnd(e.y) + ')"><rect x="' + rnd(-aw / 2) + '" y="' + rnd(-ah / 2) + '" width="' + rnd(aw) + '" height="' + rnd(ah) + '" class="tg-agg" stroke-width="' + rnd(px(2)) + '"/><text y="' + rnd(fs * 0.35) + '" font-size="' + fs + '" text-anchor="middle" class="tg-aggtxt">' + esc(e.anlegg || 'AGG') + '</text></g>';
+      }
+    });
+    w.innerHTML = h;
+    tgOverlay();
+  }
+
+  function tgOverlay() {
+    var o = $('#tgOverlay'); if (!o) return;
+    var g = tgS(), h = '', m = g.mus, hint = '';
+    var v = TG_VERKTOY.find(function (x) { return x[0] === g.verktoy; }); hint = v ? v[2] : '';
+    var u = g.utkast;
+    if (u.length) {
+      var pts = u.concat(m ? [m.p] : []);
+      var farge = g.verktoy === 'kanal' ? TG_SIDER[g.side].farge : g.verktoy === 'rom' ? 'var(--ink)' : 'var(--warn)';
+      h += '<polyline points="' + pts.map(function (p) { return rnd(p[0]) + ',' + rnd(p[1]); }).join(' ') + '" fill="' + (g.verktoy === 'rom' ? 'rgba(29,100,166,.08)' : 'none') + '" stroke="' + farge + '" stroke-width="' + rnd(px(2)) + '" stroke-dasharray="' + rnd(px(6)) + ' ' + rnd(px(4)) + '"/>';
+      if (m && u.length) {
+        var L = d2(u[u.length - 1], m.p) * (g.verktoy === 'kalib' ? 1 : 1);
+        hint = (g.verktoy === 'kalib' ? 'Avstand på tegningen ' : 'Lengde ') + fmt(L, 2) + ' m';
+        if (g.verktoy === 'rom' && u.length >= 2) hint += '. Areal ' + fmt(Math.abs(FV.polyArea(u.concat([m.p]))), 1) + ' m²';
+      }
+    }
+    if (g.maal) { h += '<line x1="' + rnd(g.maal[0][0]) + '" y1="' + rnd(g.maal[0][1]) + '" x2="' + rnd(g.maal[1][0]) + '" y2="' + rnd(g.maal[1][1]) + '" stroke="var(--warn)" stroke-width="' + rnd(px(2)) + '"/>'; if (!u.length) hint = 'Målt avstand ' + fmt(d2(g.maal[0], g.maal[1]), 2) + ' m'; }
+    if (m && m.snap) h += '<circle cx="' + rnd(m.p[0]) + '" cy="' + rnd(m.p[1]) + '" r="' + rnd(px(6)) + '" class="tg-snap ' + m.snap + '"/>';
+    o.innerHTML = h;
+    var hi = $('#tgHint'); if (hi) hi.textContent = hint;
+  }
+
+  function tgPanel() {
+    var el = $('#tgPanel'); if (!el) return;
+    var g = tgS(), res = g.res || tgBeregn(), t = tgData(), e = g.valgt && t.elementer.find(function (x) { return x.id === g.valgt; });
+    var h = '';
+    if (e) {
+      h += '<section class="panel"><div class="panel-h"><h3>' + ({ kanal: 'Kanal', ventil: e.side === 'uteluft' ? 'Inntaksrist' : e.side === 'avkast' ? 'Avkastrist' : 'Ventil', aggregat: 'Aggregat' }[e.type]) + '</h3><button class="btn sm ghost x" type="button" data-act="tg-fjernvalg" aria-label="Lukk">×</button></div><div class="stack">';
+      if (e.type !== 'aggregat') h += '<label class="f"><span>System</span><select id="tgp-side" data-tgp="side"' + dis() + '>' + Object.keys(TG_SIDER).map(function (k) { return '<option value="' + k + '"' + (e.side === k ? ' selected' : '') + '>' + TG_SIDER[k].navn + '</option>'; }).join('') + '</select></label>';
+      if (e.type === 'kanal') {
+        var ks = res.kanter.filter(function (k) { return k.el === e; }), L = ks.reduce(function (a, k) { return a + k.len; }, 0);
+        h += '<label class="f"><span>Dimensjon (tomt = automatisk)</span><input type="text" id="tgp-dim" data-tgp="dim" list="dimlist2" value="' + esc(e.dim && e.dim !== 'auto' ? e.dim : '') + '" placeholder="auto"' + dis() + '></label>';
+        h += '<dl class="kv"><dt>Lengde</dt><dd>' + fmt(L, 2) + ' m</dd><dt>Biter</dt><dd>' + ks.map(function (k) { return k.dimTekst + ' ' + fmt(k.q) + ' m³/h' + (k.k ? ', ' + fmt(k.k.v, 1) + ' m/s' : ''); }).filter(function (x, i, a) { return a.indexOf(x) === i; }).map(esc).join('<br>') + '</dd></dl>';
+      }
+      if (e.type === 'ventil') {
+        var romLst = rom().filter(function (r) { return r.etasje === e.etasje && !r.fjernet; });
+        if (e.side === 'tilluft' || e.side === 'avtrekk') h += '<label class="f"><span>Rom</span><select id="tgp-rom" data-tgp="romId"' + dis() + '><option value="">Ikke koblet til rom</option>' + sortRom(romLst).map(function (r) { return '<option value="' + esc(r.id) + '"' + (r.id === e.romId ? ' selected' : '') + '>' + esc((r.nummer ? r.nummer + ' ' : '') + r.navn) + '</option>'; }).join('') + '</select></label>';
+        h += '<label class="f"><span>Luftmengde m³/h (tomt = fra rommet)</span><input type="text" inputmode="decimal" id="tgp-q" data-tgp="q" value="' + esc(e.q === null || e.q === undefined ? '' : e.q) + '" placeholder="' + fmt(res.vq[e.id] || 0) + '"' + dis() + '></label>';
+        h += '<label class="f"><span>Trykkfall i ' + (e.side === 'uteluft' || e.side === 'avkast' ? 'rist' : 'ventil') + ' Pa</span><input type="text" inputmode="decimal" id="tgp-pa" data-tgp="pa" value="' + esc(e.pa === null || e.pa === undefined ? '' : e.pa) + '" placeholder="' + (e.side === 'uteluft' || e.side === 'avkast' ? t.innst.ristPa : t.innst.ventilPa) + '"' + dis() + '></label>';
+        h += '<label class="f"><span>Merking / produkt</span><input type="text" id="tgp-navn" data-tgp="navn" value="' + esc(e.navn || '') + '" placeholder="For eksempel TV-01"' + dis() + '></label>';
+        if (res.vdp[e.id]) h += '<dl class="kv"><dt>Trykkfall fra aggregat</dt><dd>' + fmt(res.vdp[e.id], 0) + ' Pa</dd></dl>';
+      }
+      if (e.type === 'aggregat') {
+        h += '<label class="f"><span>System / anlegg</span><input type="text" id="tgp-anlegg" data-tgp="anlegg" value="' + esc(e.anlegg || '') + '"' + dis() + '></label>';
+        h += '<dl class="kv">' + res.anlegg.filter(function (a) { return a.ag === e; }).map(function (a) { return '<dt>' + TG_SIDER[a.side].navn + '</dt><dd>' + fmt(a.q) + ' m³/h, ' + fmt(a.dp, 0) + ' Pa</dd>'; }).join('') + '</dl><p class="small muted" style="margin:0">Trykket er eksternt trykkfall i kanalnettet til den kritiske ventilen, inkludert ventilen.</p>';
+      }
+      if (S.canWrite) h += '<div><button class="btn sm ghost danger" type="button" data-act="tg-slett">Slett</button></div>';
+      h += '</div></section>';
+    }
+    // Resultater
+    h += '<section class="panel"><h3>Anlegg</h3>';
+    if (!res.anlegg.length) h += '<p class="small muted" style="margin:8px 0 0">Plasser et aggregat og tegn kanaler ut til ventilene. Luftmengder, dimensjoner og trykkfall regnes ut fortløpende.</p>';
+    else h += '<div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Anlegg</th><th class="n">m³/h</th><th class="n">Pa</th></tr></thead><tbody>' + res.anlegg.map(function (a) { return '<tr><td><span class="dotc" style="background:' + TG_SIDER[a.side].farge + '"></span>' + esc(a.anlegg) + ' ' + TG_SIDER[a.side].navn.toLowerCase() + '</td><td class="n">' + fmt(a.q) + '</td><td class="n">' + fmt(a.dp, 0) + '</td></tr>'; }).join('') + '</tbody></table></div><p class="small muted" style="margin:6px 0 0">Stiplet linje viser kritisk strekning.</p><div class="row" style="margin-top:8px"><button class="btn sm" type="button" data-act="tg-til-kanaler"' + dis() + '>Bruk i trykkfallsberegningen</button></div>';
+    h += '</section>';
+    if (res.varsler.length) h += '<section class="panel"><h3>Må følges opp <span class="tag">' + res.varsler.length + '</span></h3><ul class="issues" style="margin-top:8px">' + res.varsler.slice(0, 12).map(function (v) { return '<li><span class="pill mangler">!</span><span class="small">' + esc(v.tekst) + '</span>' + (v.el ? '<button type="button" data-act="tg-vis" data-id="' + esc(v.el.id) + '">Vis</button>' : '') + '</li>'; }).join('') + '</ul></section>';
+    // Mengdeliste
+    var ml = res.mengde, rader = [];
+    Object.keys(ml.kanal).sort().forEach(function (k) { var p = k.split('|'); rader.push([TG_SIDER[p[0]].navn, 'Kanal ' + p[1], fmt(ml.kanal[k], 1) + ' m']); });
+    [['bend90', 'Bend 90°'], ['bend45', 'Bend 45°'], ['tstk', 'T-stykke']].forEach(function (b) { Object.keys(ml[b[0]]).sort().forEach(function (k) { var p = k.split('|'); rader.push([TG_SIDER[p[0]].navn, b[1] + ' ' + p[1], ml[b[0]][k] + ' stk']); }); });
+    if (ml.overgang) rader.push(['', 'Overganger', ml.overgang + ' stk']);
+    Object.keys(ml.ventiler).forEach(function (k) { rader.push(['', k, ml.ventiler[k] + ' stk']); });
+    if (ml.aggregat) rader.push(['', 'Aggregat', ml.aggregat + ' stk']);
+    if (rader.length) h += '<section class="panel"><div class="panel-h" style="margin-bottom:6px"><h3>Mengdeliste</h3><button class="btn sm ghost" type="button" data-act="tg-mengde-csv">Last ned</button></div><div class="tablewrap"><table><tbody>' + rader.map(function (r) { return '<tr><td class="small muted">' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td><td class="n">' + esc(r[2]) + '</td></tr>'; }).join('') + '</tbody></table></div><p class="small muted" style="margin:6px 0 0">Gjelder alle etasjer. Bend og T-stykker telles fra tegningen.</p></section>';
+    h += '<section class="panel small"><h3>Visning</h3><label class="row" style="margin-top:8px"><input type="checkbox" id="tgVisRom"' + (g.visRom ? ' checked' : '') + '> Vis rom og luftmengder</label>' + (tgEtData(tgEt()).underlag ? '<div class="row" style="margin-top:8px"><button class="btn sm ghost danger" type="button" data-act="tg-fjern-underlag"' + dis() + '>Fjern plantegningen</button></div>' : '') + '</section>';
+    h += '<datalist id="dimlist2">' + FV.RUND.map(function (d) { return '<option value="' + d + '">'; }).join('') + '<option value="400x200"><option value="500x250"></datalist>';
+    el.innerHTML = h;
+  }
+
+  // ---------- Interaksjon ----------
+  function tgPunkt(e) { var svg = $('#tgSvg'), r = svg.getBoundingClientRect(), g = tgS(); return [g.view.x + (e.clientX - r.left) / g.view.s, g.view.y + (e.clientY - r.top) / g.view.s]; }
+  function tgSnap(p, e, opts) {
+    var g = tgS(), et = tgEt(), tol = px(12), best = null, bd = tol;
+    opts = opts || {};
+    function kand(q, type) { var d = d2(p, q); if (d < bd) { bd = d; best = { p: [q[0], q[1]], snap: type }; } }
+    tgElementer(et).forEach(function (el) {
+      if (opts.ignorer && opts.ignorer(el)) return;
+      if (el.type === 'kanal') el.pts.forEach(function (q) { kand(q, 'node'); });
+      else kand([el.x, el.y], 'node');
+    });
+    if (g.verktoy === 'rom' && g.utkast.length >= 3) kand(g.utkast[0], 'node');
+    if (!best && (g.verktoy === 'rom' || g.verktoy === 'kalib' || g.verktoy === 'maal')) tgRomPolys(et).forEach(function (rp) { rp.polys.forEach(function (pl) { pl.forEach(function (q) { kand(q, 'node'); }); }); });
+    if (!best && !opts.ingenLinje) {
+      bd = tol;
+      tgElementer(et).forEach(function (el) {
+        if (el.type !== 'kanal' || (opts.ignorer && opts.ignorer(el))) return;
+        for (var i = 0; i < el.pts.length - 1; i++) { var pr = projSeg(p, el.pts[i], el.pts[i + 1]); if (pr.d < bd) { bd = pr.d; best = { p: pr.p, snap: 'linje' }; } }
+      });
+    }
+    if (best) return best;
+    var prev = g.utkast.length ? g.utkast[g.utkast.length - 1] : null;
+    if (prev && !(e && e.altKey) && (g.verktoy === 'kanal' || g.verktoy === 'rom')) {
+      var dx = p[0] - prev[0], dy = p[1] - prev[1], L = Math.hypot(dx, dy), a = Math.atan2(dy, dx), step = Math.PI / 4;
+      var ar = Math.round(a / step) * step;
+      if (Math.abs(a - ar) < 8 * Math.PI / 180) return { p: [prev[0] + Math.cos(ar) * L, prev[1] + Math.sin(ar) * L], snap: null };
+    }
+    return { p: p, snap: null };
+  }
+  function tgTreff(p) {
+    var et = tgEt(), tol = px(10), best = null, bd = Infinity;
+    tgElementer(et).forEach(function (el) {
+      var d;
+      if (el.type === 'kanal') { d = Infinity; for (var i = 0; i < el.pts.length - 1; i++) d = Math.min(d, projSeg(p, el.pts[i], el.pts[i + 1]).d); d += px(3); }
+      else d = d2(p, [el.x, el.y]);
+      if (d < tol && d < bd) { bd = d; best = el; }
+    });
+    return best;
+  }
+  function tgDown(e) {
+    var g = tgS(), svg = $('#tgSvg'); if (!g.view) return;
+    var p = tgPunkt(e);
+    if (e.button === 1 || e.button === 2 || (g.verktoy === 'velg' && e.button === 0 && !tgTreff(p) && !tgHandle(p))) {
+      g.drag = { type: 'pan', sx: e.clientX, sy: e.clientY, vx: g.view.x, vy: g.view.y, klikk: g.verktoy === 'velg' && e.button === 0 }; svg.setPointerCapture(e.pointerId); svg.classList.add('panning'); return;
+    }
+    if (e.button !== 0) return;
+    if (g.verktoy === 'velg') {
+      var hd = tgHandle(p);
+      if (hd && S.canWrite) { tgFor(); g.drag = { type: 'node', el: hd.el, idx: hd.idx, start: hd.el.pts[hd.idx].slice() }; svg.setPointerCapture(e.pointerId); return; }
+      var hit = tgTreff(p); g.valgt = hit ? hit.id : null;
+      if (hit && hit.type !== 'kanal' && S.canWrite) { tgFor(); g.drag = { type: 'flytt', el: hit, start: [hit.x, hit.y], moved: false }; svg.setPointerCapture(e.pointerId); }
+      tgTegn(); tgPanel(); return;
+    }
+    if (!S.canWrite && g.verktoy !== 'maal') return;
+    var sp = tgSnap(p, e);
+    if (g.verktoy === 'kanal') {
+      if (g.utkast.length && d2(g.utkast[g.utkast.length - 1], sp.p) < px(3)) return;
+      g.utkast.push(sp.p);
+      var paVentil = tgElementer(tgEt()).some(function (el) { return el.type !== 'kanal' && d2([el.x, el.y], sp.p) < 1e-6; });
+      if (g.utkast.length >= 2 && paVentil && sp.snap === 'node') tgFullfor();
+      tgOverlay(); return;
+    }
+    if (g.verktoy === 'rom') {
+      if (g.utkast.length >= 3 && d2(g.utkast[0], sp.p) < 1e-6) { tgFullfor(); return; }
+      g.utkast.push(sp.p); tgOverlay(); return;
+    }
+    if (g.verktoy === 'maal' || g.verktoy === 'kalib') {
+      if (!g.utkast.length) { g.utkast = [sp.p]; g.maal = null; tgOverlay(); return; }
+      var a = g.utkast[0], b = sp.p; g.utkast = [];
+      if (g.verktoy === 'maal') { g.maal = [a, b]; tgOverlay(); return; }
+      tgKalibrer(a, b); return;
+    }
+    if (g.verktoy === 'ventil') {
+      tgFor();
+      var rm = (g.side === 'tilluft' || g.side === 'avtrekk') ? romVed(tgEt(), sp.p) : null;
+      var nv = { id: uid('v'), type: 'ventil', etasje: tgEt(), side: g.side, x: rnd(sp.p[0]), y: rnd(sp.p[1]), romId: rm ? rm.id : null, q: null, pa: null, navn: '' };
+      tgData().elementer.push(nv); g.valgt = nv.id; tgEtter();
+      if (!rm && (g.side === 'tilluft' || g.side === 'avtrekk')) toast('Ventilen er ikke koblet til et rom. Velg rom i panelet til høyre.');
+      return;
+    }
+    if (g.verktoy === 'aggregat') {
+      tgFor();
+      var na = { id: uid('a'), type: 'aggregat', etasje: tgEt(), x: rnd(sp.p[0]), y: rnd(sp.p[1]), anlegg: innst().standardSystem };
+      tgData().elementer.push(na); g.valgt = na.id; g.verktoy = 'kanal'; tgEtter(); renderToolbarState(); toast('Aggregatet er plassert. Tegn kanalene fra aggregatet.');
+    }
+  }
+  function tgHandle(p) {
+    var g = tgS(), e = g.valgt && tgData().elementer.find(function (x) { return x.id === g.valgt; });
+    if (!e || e.type !== 'kanal') return null;
+    for (var i = 0; i < e.pts.length; i++) if (d2(p, e.pts[i]) < px(8)) return { el: e, idx: i };
+    return null;
+  }
+  function flyttTilkoblede(fra, til, unntatt) {
+    tgElementer(tgEt()).forEach(function (el) {
+      if (el === unntatt) return;
+      if (el.type === 'kanal') el.pts.forEach(function (q, i) { if (d2(q, fra) < 1e-6) el.pts[i] = til.slice(); });
+    });
+  }
+  function tgMove(e) {
+    var g = tgS(); if (!g.view) return;
+    if (g.drag && g.drag.type === 'pan') { g.view.x = g.drag.vx - (e.clientX - g.drag.sx) / g.view.s; g.view.y = g.drag.vy - (e.clientY - g.drag.sy) / g.view.s; tgTransform(); return; }
+    var p = tgPunkt(e);
+    if (g.drag && g.drag.type === 'flytt') {
+      var el = g.drag.el, sp = tgSnap(p, e, { ignorer: function (x) { return x === el; }, ingenLinje: false });
+      var fra = [el.x, el.y]; el.x = rnd(sp.p[0]); el.y = rnd(sp.p[1]); flyttTilkoblede(fra, [el.x, el.y], el); g.drag.moved = true; tgTegn(); return;
+    }
+    if (g.drag && g.drag.type === 'node') {
+      var k = g.drag.el, sp2 = tgSnap(p, e, { ignorer: function (x) { return x === k; } });
+      var gammel = k.pts[g.drag.idx].slice(); var ny = [rnd(sp2.p[0]), rnd(sp2.p[1])];
+      k.pts[g.drag.idx] = ny; flyttTilkoblede(gammel, ny, k); tgTegn(); return;
+    }
+    g.mus = g.verktoy === 'velg' ? null : tgSnap(p, e);
+    tgOverlay();
+  }
+  function tgUp(e) {
+    var g = tgS(), svg = $('#tgSvg'); if (!g.drag) return;
+    try { svg.releasePointerCapture(e.pointerId); } catch (x) { /* ok */ }
+    svg.classList.remove('panning');
+    var d = g.drag; g.drag = null;
+    if (d.type === 'pan' && d.klikk && Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) < 4 && g.valgt) { g.valgt = null; tgTegn(); tgPanel(); return; }
+    if (d.type === 'flytt' || d.type === 'node') {
+      if (d.type === 'flytt' && !d.moved) { g.hist.pop(); tgPanel(); return; }
+      if (d.type === 'flytt' && (d.el.side === 'tilluft' || d.el.side === 'avtrekk')) { var rm = romVed(tgEt(), [d.el.x, d.el.y]); if (rm) d.el.romId = rm.id; }
+      tgEtter();
+    }
+  }
+  function tgFullfor() {
+    var g = tgS();
+    if (g.verktoy === 'kanal' && g.utkast.length >= 2) {
+      tgFor();
+      var pts = g.utkast.filter(function (p, i, a) { return i === 0 || d2(p, a[i - 1]) > 1e-6; }).map(function (p) { return [rnd(p[0]), rnd(p[1])]; });
+      if (pts.length >= 2) { var k = { id: uid('k'), type: 'kanal', etasje: tgEt(), side: g.side, pts: pts, dim: 'auto' }; tgData().elementer.push(k); }
+      g.utkast = []; tgEtter(); return;
+    }
+    if (g.verktoy === 'rom' && g.utkast.length >= 3) { var poly = g.utkast.slice(); g.utkast = []; tgOverlay(); tgNyttRom(poly); return; }
+    g.utkast = []; tgOverlay();
+  }
+  function tgNyttRom(poly) {
+    var A = Math.abs(FV.polyArea(poly)), m = meta() || {};
+    modal('<h2>Nytt rom</h2><p class="small muted">Areal fra tegningen: <b>' + fmt(A, 2) + ' m²</b></p><form id="nrForm" class="grid2" novalidate>' +
+      '<label class="f"><span>Romnummer</span><input type="text" id="nr-nummer"></label><label class="f"><span>Romnavn</span><input type="text" id="nr-navn" required></label>' +
+      '<label class="f" style="grid-column:1/-1"><span>Romtype</span><select id="nr-type">' + typeOptions(m.byggtype === 'yrkesbygg' ? 'y_opphold' : 'b_stue') + '</select></label>' +
+      '<div class="modal-actions" style="grid-column:1/-1"><button class="btn" type="button" data-act="modal-close">Avbryt</button><button class="btn primary" type="submit">Legg til rom</button></div></form>', function (root) {
+      var navn = root.querySelector('#nr-navn'), typ = root.querySelector('#nr-type');
+      navn.addEventListener('input', function () { typ.value = FV.gjettRomtype(navn.value, m.byggtype); });
+      root.querySelector('#nrForm').addEventListener('submit', function (ev) {
+        ev.preventDefault(); if (!navn.value.trim()) { navn.focus(); return; }
+        tgFor();
+        var et = tgEt(), kote = (rom().find(function (r) { return r.etasje === et; }) || {}).etasjeKote || 0;
+        var r = { id: uid('m'), guid: null, nummer: root.querySelector('#nr-nummer').value.trim(), navn: navn.value.trim(), etasje: et, etasjeKote: kote, areal: Math.round(A * 100) / 100, arealKilde: 'Tegnet på plantegning', arealManuell: false, tegnet: true, poly: [poly.map(function (p) { return [rnd(p[0]), rnd(-p[1])]; })], type: typ.value, personer: null, senger: null, system: innst().standardSystem, boenhet: 'Boenhet 1', tilluftProsj: null, avtrekkProsj: null, merknad: '' };
+        S.data.rom.push(r); closeModal(); tgEtter(); renderTabs(); toast('Rommet er lagt til med ' + fmt(A, 1) + ' m²');
+      });
+    });
+  }
+  function tgKalibrer(a, b) {
+    var et = tgEt(), u = tgEtData(et).underlag;
+    if (!u) { toast('Last inn en plantegning først. Rom fra IFC har allerede riktig målestokk.'); return; }
+    var naa = d2(a, b); if (naa < 1e-6) return;
+    modal('<h2>Sett målestokk</h2><p>Hvor lang er avstanden du klikket i virkeligheten?</p><form id="kbForm" class="stack" novalidate><label class="f"><span>Lengde i meter</span><input type="text" inputmode="decimal" id="kb-l" placeholder="For eksempel 4,2"></label><p class="small" id="kb-err" hidden style="color:var(--crit);margin:0"></p><div class="modal-actions"><button class="btn" type="button" data-act="modal-close">Avbryt</button><button class="btn primary" type="submit">Bruk målestokken</button></div></form>', function (root) {
+      root.querySelector('#kbForm').addEventListener('submit', function (ev) {
+        ev.preventDefault(); var L = parseNum(root.querySelector('#kb-l').value);
+        if (!L || L <= 0) { var er = root.querySelector('#kb-err'); er.textContent = 'Skriv inn en lengde større enn null.'; er.hidden = false; return; }
+        tgFor(); tgSkaler(et, L / naa); u.kalibrert = true; closeModal(); tgS().verktoy = 'velg'; tgS().view = null; changed(); renderMain(); toast('Målestokken er satt');
+      });
+    });
+  }
+  function tgSkaler(et, f) {
+    var u = tgEtData(et).underlag; if (u) u.mPerPx = u.mPerPx * f;
+    tgElementer(et).forEach(function (el) { if (el.pts) el.pts = el.pts.map(function (p) { return [rnd(p[0] * f), rnd(p[1] * f)]; }); else { el.x = rnd(el.x * f); el.y = rnd(el.y * f); } });
+    rom().forEach(function (r) { if (r.etasje === et && r.tegnet && r.poly) { r.poly = r.poly.map(function (pl) { return pl.map(function (p) { return [rnd(p[0] * f), rnd(p[1] * f)]; }); }); r.areal = Math.round(Math.abs(FV.polyArea(r.poly[0])) * 100) / 100; } });
+  }
+  function renderToolbarState() { document.querySelectorAll('[data-act=tg-verktoy]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.v === tgS().verktoy)); }); var svg = $('#tgSvg'); if (svg) svg.dataset.tool = tgS().verktoy; tgOverlay(); }
+
+  // ---------- Plantegning (underlag) ----------
+  function lastSkript(url) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = url; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+  async function pdfjs() {
+    if (window.pdfjsLib) return window.pdfjsLib;
+    await lastSkript(PDFJS + 'pdf.min.js');
+    try { var w = await (await fetch(PDFJS + 'pdf.worker.min.js')).text(); window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([w], { type: 'text/javascript' })); } catch (e) { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; }
+    return window.pdfjsLib;
+  }
+  function underlagDialog() {
+    modal('<h2>Plantegning for ' + esc(tgEt()) + '</h2><p class="small muted">PDF, PNG eller JPG. Tegninger fra arkitekt i PDF gir skarpest resultat.</p><form id="ulForm" class="stack" novalidate>' +
+      '<label class="f"><span>Fil</span><input type="file" id="ul-fil" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"></label>' +
+      '<div id="ul-pdf" hidden class="grid2"><label class="f"><span>Side i PDF-en</span><select id="ul-side"></select></label><label class="f"><span>Målestokk på tegningen</span><select id="ul-mal"><option value="">Vet ikke, settes etterpå</option><option value="20">1:20</option><option value="50">1:50</option><option value="100">1:100</option><option value="200">1:200</option><option value="500">1:500</option></select></label></div>' +
+      '<p class="small muted" id="ul-info" style="margin:0"></p><p class="small" id="ul-err" hidden style="color:var(--crit);margin:0"></p>' +
+      '<div class="modal-actions"><button class="btn" type="button" data-act="modal-close">Avbryt</button><button class="btn primary" type="submit" disabled>Last inn</button></div></form>', function (root) {
+      var fil = root.querySelector('#ul-fil'), btn = root.querySelector('button[type=submit]'), err = root.querySelector('#ul-err'), info = root.querySelector('#ul-info'), pdfDok = null;
+      fil.addEventListener('change', async function () {
+        err.hidden = true; pdfDok = null; root.querySelector('#ul-pdf').hidden = true; btn.disabled = true;
+        var f = fil.files[0]; if (!f) return;
+        if (f.size > 60 * 1024 * 1024) { err.textContent = 'Filen er større enn 60 MB.'; err.hidden = false; return; }
+        if (/pdf$/i.test(f.type) || /\.pdf$/i.test(f.name)) {
+          info.textContent = 'Leser PDF…';
+          try { var lib = await pdfjs(); pdfDok = await lib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise; }
+          catch (e) { err.textContent = 'Kunne ikke lese PDF-en.'; err.hidden = false; info.textContent = ''; return; }
+          var sel = root.querySelector('#ul-side'); sel.innerHTML = ''; for (var i = 1; i <= pdfDok.numPages; i++) sel.innerHTML += '<option value="' + i + '">Side ' + i + '</option>';
+          root.querySelector('#ul-pdf').hidden = false; info.textContent = pdfDok.numPages + ' side' + (pdfDok.numPages > 1 ? 'r' : '') + '. Står målestokken på tegningen (for eksempel 1:100 på A3), kan du velge den.';
+        } else info.textContent = 'Målestokken setter du etterpå ved å klikke på et kjent mål.';
+        btn.disabled = false;
+      });
+      root.querySelector('#ulForm').addEventListener('submit', async function (ev) {
+        ev.preventDefault(); var f = fil.files[0]; if (!f) return; btn.disabled = true; btn.textContent = 'Laster inn…'; err.hidden = true;
+        try {
+          var canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), mPerPx = 0.01, kalibrert = false;
+          if (pdfDok) {
+            var side = await pdfDok.getPage(+root.querySelector('#ul-side').value), vp0 = side.getViewport({ scale: 1 });
+            var sc = Math.min(4, 4200 / Math.max(vp0.width, vp0.height)), vp = side.getViewport({ scale: sc });
+            canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+            ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            await side.render({ canvasContext: ctx, viewport: vp }).promise;
+            var mal = +root.querySelector('#ul-mal').value;
+            if (mal) { mPerPx = (25.4 / 72 / 1000) / sc * mal; kalibrert = true; }
+          } else {
+            var img = await new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = rej; im.src = URL.createObjectURL(f); });
+            var k = Math.min(1, 4200 / Math.max(img.naturalWidth, img.naturalHeight));
+            canvas.width = Math.round(img.naturalWidth * k); canvas.height = Math.round(img.naturalHeight * k);
+            ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          }
+          var blob = await new Promise(function (res) { canvas.toBlob(res, 'image/jpeg', 0.86); });
+          var m = meta() || {}, path = (m.bedrift_id || S.ctx) + '/' + S.pid + '/' + uid('u') + '.jpg';
+          var up = await sb.storage.from('underlag').upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+          if (up.error) throw new Error(/row-level|policy/i.test(up.error.message) ? 'Du mangler tilgang til å laste opp.' : up.error.message);
+          var et = tgEt(), ed = tgEtData(et), gammel = ed.underlag;
+          tgFor();
+          if (gammel && gammel.kalibrert && !kalibrert) { /* behold elementenes posisjon */ }
+          ed.underlag = { path: path, bredde: canvas.width, hoyde: canvas.height, mPerPx: mPerPx, kalibrert: kalibrert, fil: f.name };
+          tgS().bilder[path] = URL.createObjectURL(blob);
+          if (gammel) sb.storage.from('underlag').remove([gammel.path]).then(function () { /* ryddet */ });
+          closeModal(); tgS().view = null; changed(); logg('plantegning_lastet', (meta() || {}).navn, { fil: f.name, etasje: et });
+          if (!kalibrert) { tgS().verktoy = 'kalib'; }
+          renderMain(); toast(kalibrert ? 'Plantegningen er lastet inn med målestokk 1:' + root.querySelector('#ul-mal').value : 'Plantegningen er lastet inn. Klikk to punkter med kjent avstand for å sette målestokk.');
+        } catch (e) { err.textContent = 'Kunne ikke laste inn: ' + (e.message || e); err.hidden = false; btn.disabled = false; btn.textContent = 'Last inn'; }
+      });
+    });
+  }
+
+  // ---------- Eksport ----------
+  async function tgEksportPng() {
+    var g = tgS(), et = tgEt(), ed = tgEtData(et), b = tgBounds(et), m = meta() || {};
+    var pad = Math.max(b.maxx - b.minx, b.maxy - b.miny) * 0.04, W = 3200;
+    var ww = b.maxx - b.minx + 2 * pad, wh = b.maxy - b.miny + 2 * pad, s = W / ww, H = Math.round(wh * s), topp = 150, bunn = 120;
+    var gammel = g.view; g.view = { et: et, s: s / 2.4, x: b.minx - pad, y: b.miny - pad };
+    tgTegn();
+    var verden = $('#tgWorld').innerHTML;
+    g.view = gammel; tgTegn();
+    if (ed.underlag && g.bilder[ed.underlag.path] && g.bilder[ed.underlag.path].length > 10) {
+      var blob = await (await fetch(g.bilder[ed.underlag.path])).blob();
+      var dataUrl = await new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.readAsDataURL(blob); });
+      verden = verden.replace(/href="blob:[^"]+"/, 'href="' + dataUrl + '"');
+    }
+    var cs = getComputedStyle(document.documentElement), varer = ['--supply', '--exhaust', '--uteluft', '--avkast', '--ink', '--muted', '--sheet', '--line', '--crit', '--ok-soft'];
+    var css = ':root{' + varer.map(function (v) { return v + ':' + (v === '--sheet' ? '#ffffff' : v === '--ink' ? '#15212b' : v === '--muted' ? '#5b6872' : v === '--line' ? '#d5dcdf' : v === '--ok-soft' ? '#e2f1e7' : TG_FAST[v] || cs.getPropertyValue(v)); }).join(';') + '}' + TG_CSS_EKSPORT;
+    var legend = Object.keys(TG_SIDER).map(function (k, i) { return '<g transform="translate(' + (40 + i * 260) + ' ' + (H + topp + 50) + ')"><line x1="0" y1="0" x2="60" y2="0" stroke="' + TG_SIDER[k].fast + '" stroke-width="10"/><text x="76" y="9" font-size="26" fill="#15212b">' + TG_SIDER[k].navn + '</text></g>'; }).join('');
+    var malBar = (function () { var n = [1, 2, 5, 10, 20, 50].filter(function (x) { return x * s < 600; }).pop() || 1; return '<g transform="translate(' + (W - 40 - n * s) + ' ' + (H + topp + 50) + ')"><rect x="0" y="-8" width="' + n * s + '" height="16" fill="#15212b"/><text x="' + n * s / 2 + '" y="44" font-size="24" text-anchor="middle" fill="#15212b">' + n + ' m</text></g>'; })();
+    var tittel = '<text x="40" y="62" font-size="44" font-weight="600" fill="#15212b">' + esc((m.nummer ? m.nummer + ' ' : '') + (m.navn || '')) + '</text><text x="40" y="112" font-size="28" fill="#5b6872">Ventilasjon, ' + esc(et) + '. ' + esc(datoKort(new Date().toISOString())) + '. Fjelluft Vent</text>';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + (H + topp + bunn) + '"><style>' + css + '</style><rect width="100%" height="100%" fill="#fff"/>' + tittel +
+      '<g transform="translate(0 ' + topp + ') matrix(' + s + ',0,0,' + s + ',' + (-(b.minx - pad) * s) + ',' + (-(b.miny - pad) * s) + ')">' + verden + '</g>' + legend + malBar + '</svg>';
+    var url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    var img = await new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = rej; im.src = url; });
+    var c = document.createElement('canvas'); c.width = W; c.height = H + topp + bunn; c.getContext('2d').drawImage(img, 0, 0);
+    var png = await new Promise(function (res) { c.toBlob(res, 'image/png'); });
+    saveFile(safeName('Ventilasjon ' + (m.nummer ? m.nummer + ' ' : '') + (m.navn || '') + ' ' + et) + '.png', png); logg('eksport_tegning', m.navn, { etasje: et });
+  }
+  var TG_FAST = { '--supply': '#1d64a6', '--exhaust': '#b0532a', '--uteluft': '#2f8a57', '--avkast': '#7a5aa6', '--crit': '#b3261e' };
+  var TG_CSS_EKSPORT = 'text{font-family:Arial,Helvetica,sans-serif}.tg-rom{fill:rgba(29,100,166,.05);stroke:#15212b;stroke-width:0.02}.tg-rom.over{fill:none;stroke:none}.tg-romtxt{fill:#15212b}.tg-romtxt .t{fill:#1d64a6}.tg-romtxt .a{fill:#b0532a}.tg-kanal{stroke-linecap:round;opacity:.9}.tg-krit{stroke:#15212b;fill:none}.tg-sym{fill:#fff}.tg-agg{fill:#fff;stroke:#15212b}.tg-aggtxt{fill:#15212b;font-weight:600}.tg-lbl{font-weight:600}.tg-handle{display:none}';
+
+  function tgMengdeCsv() {
+    var res = tgS().res || tgBeregn(), ml = res.mengde, rows = [['System', 'Komponent', 'Dimensjon', 'Mengde', 'Enhet']];
+    Object.keys(ml.kanal).sort().forEach(function (k) { var p = k.split('|'); rows.push([TG_SIDER[p[0]].navn, 'Kanal', p[1], ml.kanal[k].toFixed(1).replace('.', ','), 'm']); });
+    [['bend90', 'Bend 90°'], ['bend45', 'Bend 45°'], ['tstk', 'T-stykke']].forEach(function (b) { Object.keys(ml[b[0]]).sort().forEach(function (k) { var p = k.split('|'); rows.push([TG_SIDER[p[0]].navn, b[1], p[1], ml[b[0]][k], 'stk']); }); });
+    if (ml.overgang) rows.push(['', 'Overgang', '', ml.overgang, 'stk']);
+    Object.keys(ml.ventiler).forEach(function (k) { rows.push(['', k, '', ml.ventiler[k], 'stk']); });
+    if (ml.aggregat) rows.push(['', 'Aggregat', '', ml.aggregat, 'stk']);
+    var m = meta() || {};
+    saveFile(safeName('Mengdeliste ' + (m.nummer ? m.nummer + ' ' : '') + (m.navn || '')) + '.csv', '﻿' + rows.map(function (r) { return r.join(';'); }).join('\r\n'));
+  }
+  function tgTilKanaler() {
+    var res = tgS().res || tgBeregn(), t = tgData(), n = 0;
+    S.data.strekninger = S.data.strekninger.filter(function (s) { return !s.fraTegning; });
+    res.anlegg.forEach(function (a) {
+      if (!a.kritisk || !a.kritisk.sti.length) return;
+      var sti = a.kritisk.sti.slice().reverse(), deler = [], cur = null, venter = 0;
+      sti.forEach(function (ed, i) {
+        var dimV = ed.k ? (ed.k.a ? ed.k.a + 'x' + ed.k.b : String(ed.k.d)) : 'auto';
+        if (!cur || cur.q !== Math.round(ed.q) || cur.dim !== dimV) { cur = { id: uid('d'), navn: 'Del ' + (deler.length + 1), q: Math.round(ed.q), type: 'hoved', lengde: 0, dim: dimV, zeta: Math.round(venter * 100) / 100, komponentPa: null }; deler.push(cur); venter = 0; }
+        cur.lengde = Math.round((cur.lengde + ed.len) * 100) / 100;
+        var nesteE = sti[i + 1];
+        if (nesteE) { var node = ed.ned, ang = vinkel(ed.opp.p, node.p, nesteE.ned.p); var z = node.kanter.length >= 3 ? (ang < 20 ? 0.3 : 1.0) : (ang > 20 ? 0.3 * Math.min(ang, 90) / 90 : 0); if (nesteE.d && ed.d && nesteE.d !== ed.d) z += 0.1; var nyDel = Math.round(nesteE.q) !== Math.round(ed.q) || (nesteE.k ? (nesteE.k.a ? nesteE.k.a + 'x' + nesteE.k.b : String(nesteE.k.d)) : 'auto') !== cur.dim; if (nyDel) venter += z; else cur.zeta = Math.round((cur.zeta + z) * 100) / 100; }
+      });
+      var v = a.kritisk.ventil, term = v.pa !== null && v.pa !== undefined && v.pa !== '' ? Number(v.pa) : (a.side === 'uteluft' || a.side === 'avkast' ? t.innst.ristPa : t.innst.ventilPa);
+      deler[deler.length - 1].komponentPa = term; deler[deler.length - 1].navn += ' til ' + (v.navn || (findRoom(v.romId) || {}).navn || 'ventil');
+      S.data.strekninger.push({ id: uid('s'), fraTegning: true, navn: 'Fra tegning: ' + a.anlegg + ' ' + TG_SIDER[a.side].navn.toLowerCase(), system: a.anlegg, side: a.side === 'avtrekk' || a.side === 'avkast' ? 'avtrekk' : 'tilluft', deler: deler });
+      n++;
+    });
+    if (!n) { toast('Tegningen har ingen komplette kanalnett ennå.'); return; }
+    changed(); toast(n + ' kritiske strekninger er lagt inn under Kanaler og trykkfall');
+  }
+
+  // ---------- Hendelser for tegning ----------
+  async function tgClick(act, a) {
+    if (act.indexOf('tg-') !== 0) return false;
+    var g = tgS();
+    if (act === 'tg-verktoy') { g.verktoy = a.dataset.v; g.utkast = []; g.maal = null; if (g.verktoy !== 'velg') g.valgt = null; renderToolbarState(); tgTegn(); tgPanel(); return true; }
+    if (act === 'tg-zoom') { tgZoom(+a.dataset.z); return true; }
+    if (act === 'tg-tilpass') { tgTilpass(); return true; }
+    if (act === 'tg-angre') { tgAngre(false); return true; }
+    if (act === 'tg-png') { try { await tgEksportPng(); } catch (e) { toast('Kunne ikke lage bildet.'); } return true; }
+    if (act === 'tg-mengde-csv') { tgMengdeCsv(); return true; }
+    if (act === 'tg-fjernvalg') { g.valgt = null; tgTegn(); tgPanel(); return true; }
+    if (act === 'tg-vis') { var el = tgData().elementer.find(function (x) { return x.id === a.dataset.id; }); if (el) { g.etasje = el.etasje; g.valgt = el.id; renderMain(); } return true; }
+    if (!S.canWrite) return true;
+    if (act === 'tg-underlag') { underlagDialog(); return true; }
+    if (act === 'tg-slett') { tgSlettValgt(); return true; }
+    if (act === 'tg-til-kanaler') { tgTilKanaler(); return true; }
+    if (act === 'tg-fjern-underlag') {
+      var ed = tgEtData(tgEt()); if (!ed.underlag) return true; tgFor(); var p = ed.underlag.path; ed.underlag = null;
+      sb.storage.from('underlag').remove([p]).then(function () { /* ryddet */ }); changed(); renderMain(); toast('Plantegningen er fjernet'); return true;
+    }
+    return true;
+  }
+  function tgSlettValgt() {
+    var g = tgS(); if (!g.valgt || !S.canWrite) return;
+    tgFor(); tgData().elementer = tgData().elementer.filter(function (x) { return x.id !== g.valgt; }); g.valgt = null; tgEtter();
+  }
+  function tgChange(t) {
+    var g = tgS();
+    if (t.id === 'tgEt') { g.etasje = t.value; g.view = null; g.valgt = null; g.utkast = []; renderMain(); return true; }
+    if (t.id === 'tgSide') { g.side = t.value; tgOverlay(); return true; }
+    if (t.id === 'tgVisRom') { g.visRom = t.checked; tgTegn(); return true; }
+    if (t.dataset.tgp) {
+      if (!S.canWrite) return true;
+      var e = tgData().elementer.find(function (x) { return x.id === g.valgt; }); if (!e) return true;
+      var f = t.dataset.tgp, v = t.value;
+      tgFor();
+      if (f === 'q' || f === 'pa') { var n = parseNum(v); if (v.trim() !== '' && (n === null || n < 0)) { toast('Skriv inn et tall'); g.hist.pop(); tgPanel(); return true; } e[f] = n; }
+      else if (f === 'dim') { var dv = v.trim().toLowerCase(); if (dv && !/^\d+$/.test(dv) && !/^\d+\s*[x×*]\s*\d+$/.test(dv)) { toast('Skriv 200 for rund eller 400x200 for rektangulær kanal'); g.hist.pop(); tgPanel(); return true; } e.dim = dv ? dv.replace(/[×*\s]/g, 'x').replace(/x+/g, 'x') : 'auto'; }
+      else if (f === 'romId') e.romId = v || null;
+      else e[f] = v;
+      tgEtter(); return true;
+    }
+    return false;
+  }
+  function tgKey(e) {
+    if (S.tab !== 'tegning' || S.side !== 'prosjekt' || $('#modalRoot').innerHTML) return false;
+    if (e.target.matches('input,select,textarea')) return false;
+    var g = tgS();
+    if (e.key === 'Escape') { if (g.utkast.length) { g.utkast = []; tgOverlay(); } else { g.valgt = null; g.verktoy = 'velg'; renderToolbarState(); tgTegn(); tgPanel(); } return true; }
+    if (e.key === 'Enter') { tgFullfor(); return true; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && g.valgt) { e.preventDefault(); tgSlettValgt(); return true; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); tgAngre(e.shiftKey); return true; }
+    var snarvei = { v: 'velg', k: 'kanal', e: 'ventil', a: 'aggregat', r: 'rom', m: 'maal' }[e.key.toLowerCase()];
+    if (snarvei && !e.ctrlKey && !e.metaKey && (S.canWrite || snarvei === 'velg' || snarvei === 'maal')) { g.verktoy = snarvei; g.utkast = []; renderToolbarState(); return true; }
+    if (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4') { g.side = ['tilluft', 'avtrekk', 'uteluft', 'avkast'][+e.key - 1]; var s = $('#tgSide'); if (s) s.value = g.side; tgOverlay(); return true; }
+    return false;
+  }
+
   // ---------- Hendelser ----------
   function findRoom(id) { return rom().find(function (r) { return r.id === id; }); }
   function findStr(sid) { return S.data.strekninger.find(function (s) { return s.id === sid; }); }
@@ -1010,6 +1783,7 @@
       if (act0 === 'konflikt-last') { closeModal(); S.konflikt = false; S.dirty = false; var p0 = S.pid; S.pid = null; await openProject(p0); toast('Siste versjon er lastet inn'); return; }
       if (act0 === 'konflikt-overskriv') { closeModal(); S.konflikt = false; await doSave(true); return; }
       if (act0 === 'archive' || act0 === 'unarchive') { await settArkivert(S.pid, act0 === 'archive'); return; }
+      if (S.side === 'prosjekt' && await tgClick(act0, a0)) return;
       if (S.side === 'admin' && await adminClick(act0, a0)) return;
     }
     var tabBtn = e.target.closest('[data-tab]');
@@ -1084,6 +1858,7 @@
     var t = e.target;
     if (t.id === 'ctxSel') { flushSave(); S.ctx = t.value; lsSet('fv-ctx', S.ctx); closeProject(); lsSet('fv-pid', ''); beregnTilgang(); await lastProsjekter(); return; }
     if (S.side === 'admin' && await adminChange(t)) return;
+    if (S.side === 'prosjekt' && tgChange(t)) return;
     if (t.id === 'projSel') { if (t.value) { flushSave(); openProject(t.value); } return; }
     if (t.id === 'ifcFile') { var f = t.files[0]; var purpose = t.dataset.purpose; t.value = ''; handleIfcFile(f, purpose); return; }
     if (t.id === 'jsonFile') { var jf = t.files[0]; t.value = ''; if (jf) importJson(jf); return; }
@@ -1132,6 +1907,7 @@
     if (t.id === 'hq') { var v = parseNum(t.value); S.hurtig.q = v === null ? '' : v; clearTimeout(S.ht); S.ht = setTimeout(renderMain, 350); return; }
   });
   document.addEventListener('keydown', function (e) {
+    if (tgKey(e)) return;
     if (e.key === 'Escape' && $('#modalRoot').innerHTML) { closeModal(); return; }
     if (e.key === 'Enter' && e.target.matches('td input[type=text]')) { e.target.blur(); }
   });
