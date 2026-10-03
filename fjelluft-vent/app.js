@@ -36,6 +36,7 @@
   var sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'fjelluft-vent-auth' } });
   var ROLLE_NAVN = { eier: 'Eier', admin: 'Administrator', prosjekterende: 'Prosjekterende', leser: 'Leser' };
   var ROLLE_HJELP = { eier: 'Full tilgang, administrerer brukere og abonnement', admin: 'Administrerer brukere og alle prosjekter', prosjekterende: 'Oppretter og endrer prosjekter', leser: 'Kan se prosjekter, ikke endre' };
+  var BEDRIFT_KOL = 'id,navn,orgnr,kontakt_navn,kontakt_epost,telefon,fakturaadresse,plan,status,maks_brukere,prove_til,opprettet,endret,stripe_customer_id,stripe_subscription_id,betaling_status,abonnement_til,registrert_selv';
   var META_FELT = ['id', 'bedrift_id', 'navn', 'nummer', 'byggtype', 'adresse', 'ansvarlig', 'kontrollert', 'merknad', 'antall_rom', 'arkivert', 'endret', 'opprettet', 'versjon'];
 
   function idag() { return new Date().toISOString().slice(0, 10); }
@@ -88,7 +89,7 @@
     var me = await sb.from('profiler').select('*').eq('id', uid0).maybeSingle();
     if (me.error || !me.data || !me.data.aktiv) { S.mode = 'inaktiv'; renderAll(); return; }
     S.me = me.data;
-    var res = await Promise.all([sb.from('bedrifter').select('*').order('navn'), sb.from('planer').select('*').order('sortering')]);
+    var res = await Promise.all([sb.from('bedrifter').select(BEDRIFT_KOL).order('navn'), sb.from('planer').select('*').order('sortering')]);
     S.bedrifter = res[0].data || []; S.planer = res[1].data || [];
     S.bedrift = S.bedrifter.find(function (b) { return b.id === S.me.bedrift_id; }) || null;
     var lagretCtx = lsGet('fv-ctx');
@@ -97,6 +98,38 @@
     if (S.me.ma_bytte_passord) { S.mode = 'bytt-passord'; renderAll(); return; }
     S.mode = 'app'; beregnTilgang();
     await lastProsjekter();
+    sjekkBetalingRetur();
+  }
+
+  // Retur fra Stripe Checkout (?betaling=ok / ?betaling=avbrutt)
+  function sjekkBetalingRetur() {
+    var q = new URLSearchParams(location.search), v = q.get('betaling'); if (!v) return;
+    q.delete('betaling'); try { history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); } catch (e) { /* ikke støttet */ }
+    if (v === 'avbrutt') { toast('Betalingen ble avbrutt. Ingenting er trukket.'); return; }
+    toast('Takk! Vi aktiverer abonnementet…');
+    var forsok = 0;
+    (async function sjekk() {
+      forsok++;
+      var r = await sb.from('bedrifter').select(BEDRIFT_KOL).eq('id', S.me.bedrift_id).maybeSingle();
+      if (r.data) {
+        var i = S.bedrifter.findIndex(function (b) { return b.id === r.data.id; });
+        if (i >= 0) S.bedrifter[i] = r.data; else S.bedrifter.push(r.data);
+        S.bedrift = r.data;
+        if (r.data.plan !== 'prove' && r.data.betaling_status === 'ok') { beregnTilgang(); S.adm = null; renderAll(); toast('Abonnementet ' + (S.planer.find(function (p) { return p.kode === r.data.plan; }) || { navn: r.data.plan }).navn + ' er aktivt. Takk!'); return; }
+      }
+      if (forsok < 12) setTimeout(sjekk, 2500); else toast('Betalingen er mottatt. Abonnementet vises om litt. Last siden på nytt om det ikke oppdateres.');
+    })();
+  }
+
+  // Selvregistrering
+  async function registrerKall(body) {
+    var r = await sb.functions.invoke('vent-registrer', { body: body });
+    if (r.error) {
+      var msg = 'Noe gikk galt. Prøv igjen, eller kontakt ' + KONTAKT + '.';
+      try { var j = await r.error.context.json(); if (j && j.feil) msg = j.feil; } catch (e) { /* ingen detaljer */ }
+      throw new Error(msg);
+    }
+    return r.data;
   }
 
   async function lastProsjekter() {
@@ -237,7 +270,7 @@
   // ---------- Rendering ----------
   function renderAll() { renderHeader(); renderTabs(); renderMain(); }
   function renderHeader() {
-    var vs = document.querySelector('.brand span'); if (vs) vs.textContent = 'v0.2';
+    var vs = document.querySelector('.brand span'); if (vs) vs.textContent = 'v0.3';
     var app = S.mode === 'app';
     $('#projBox').hidden = !app || S.side !== 'prosjekt';
     $('#userBox').hidden = !(app || S.mode === 'bytt-passord');
@@ -277,9 +310,13 @@
     else if (b.status === 'avsluttet') h += '<div class="banner">Abonnementet til ' + esc(b.navn) + ' er avsluttet. Prosjektene kan leses og lastes ned.</div>';
     else if (b.plan === 'prove' && b.prove_til) {
       var dager = Math.ceil((new Date(b.prove_til + 'T23:59:59') - new Date()) / 86400000);
-      if (dager < 0) h += '<div class="banner">Prøveperioden gikk ut ' + esc(datoKort(b.prove_til)) + '. Prosjektene kan leses, men ikke endres. Kontakt ' + KONTAKT + ' for å fortsette.</div>';
-      else h += '<div class="banner info">Prøveperiode: ' + dager + ' ' + (dager === 1 ? 'dag' : 'dager') + ' igjen (til ' + esc(datoKort(b.prove_til)) + '). Kontakt ' + KONTAKT + ' for å bestille abonnement.</div>';
+      var kjop = b.id === S.me.bedrift_id && (S.me.rolle === 'eier' || S.me.rolle === 'admin') && !(S.side === 'admin' && S.atab === 'a-bedrift');
+      var knapp = kjop ? ' <button class="btn sm primary" type="button" data-act="til-abonnement">Velg abonnement</button>' : '';
+      var hvem = kjop ? '' : ' Be eieren av bedriften velge abonnement' + (S.me.superadmin ? '' : ', eller kontakt ' + KONTAKT) + '.';
+      if (dager < 0) h += '<div class="banner">Prøveperioden gikk ut ' + esc(datoKort(b.prove_til)) + '. Prosjektene kan leses, men ikke endres før dere velger abonnement.' + hvem + knapp + '</div>';
+      else if (dager <= 7 || S.side !== 'admin') h += '<div class="banner' + (dager <= 7 ? '' : ' info') + '">Prøveperiode: ' + dager + ' ' + (dager === 1 ? 'dag' : 'dager') + ' igjen (til ' + esc(datoKort(b.prove_til)) + ').' + (dager <= 7 ? ' Velg abonnement for å fortsette uten avbrudd.' + hvem : '') + knapp + '</div>';
     }
+    if (b.betaling_status === 'feilet' && b.status === 'aktiv') h += '<div class="banner">Siste betaling for abonnementet feilet. Oppdater kortet for å unngå at tilgangen stenges.' + (b.id === S.me.bedrift_id && (S.me.rolle === 'eier' || S.me.rolle === 'admin') ? ' <button class="btn sm primary" type="button" data-act="betalingsportal">Oppdater kort</button>' : ' Gi beskjed til eieren av bedriften.') + '</div>';
     if (!S.me.superadmin && S.me.rolle === 'leser' && S.side === 'prosjekt') h += '<div class="banner info">Du har lesetilgang. Be administratoren i bedriften om rollen Prosjekterende for å kunne endre.</div>';
     var m = meta();
     if (S.side === 'prosjekt' && m && m.arkivert) h += '<div class="banner">Prosjektet er arkivert. <button class="btn sm" type="button" data-act="unarchive"' + dis() + '>Hent fram</button></div>';
@@ -319,14 +356,33 @@
 
   // ---------- Innlogging og profil ----------
   function renderLogin() {
+    var reg = S.loginVisning === 'registrer';
     return '<div class="login">' +
-      '<section class="login-pitch"><h1>Prosjekter ventilasjon fra arkitektens IFC</h1><p>Fjelluft Vent leser rommene i arkitektmodellen, beregner luftmengder etter TEK17, dimensjonerer kanaler og lager romskjema, beregningsrapport og IFC med luftmengder tilbake til BIM-koordineringen.</p><ul><li>Ingen installasjon, kjører i nettleseren</li><li>Åpent IFC-format inn og ut</li><li>Beregninger med kilde og forklaring for hvert rom</li></ul><p class="muted small">Vil bedriften din prøve? Kontakt ' + KONTAKT + '.</p></section>' +
+      '<section class="login-pitch"><h1>Prosjekter ventilasjon fra arkitektens IFC</h1><p>Fjelluft Vent leser rommene i arkitektmodellen, beregner luftmengder etter TEK17, dimensjonerer kanaler og lager romskjema, beregningsrapport og IFC med luftmengder tilbake til BIM-koordineringen.</p><ul><li>Ingen installasjon, kjører i nettleseren</li><li>Åpent IFC-format inn og ut, PDF- og PNG-plantegninger som underlag</li><li>Beregninger med kilde og forklaring for hvert rom</li><li>30 dager gratis, uten kort. Deretter fra 990 kr/mnd eks. mva., ingen bindingstid</li></ul>' +
+      (reg ? '' : '<div class="row" style="margin-top:6px"><button class="btn primary" type="button" data-act="vis-registrer">Prøv gratis i 30 dager</button></div>') + '</section>' +
+      (reg ? renderRegistrer() :
       '<section class="panel login-box"><h2>Logg inn</h2><form id="loginForm" novalidate class="stack">' +
       '<label class="f"><span>E-post</span><input type="email" id="li-epost" autocomplete="username" required></label>' +
       '<label class="f"><span>Passord</span><input type="password" id="li-pass" autocomplete="current-password" required></label>' +
       '<p class="small" id="li-err" role="alert" hidden style="color:var(--crit);margin:0"></p>' +
       '<button class="btn primary" type="submit" id="li-btn">Logg inn</button>' +
-      '<p class="small muted" style="margin:0">Glemt passordet? Be administratoren i bedriften din om å nullstille det, eller kontakt ' + KONTAKT + '.</p></form></section></div>';
+      '<p class="small muted" style="margin:0">Glemt passordet? Be administratoren i bedriften din om å nullstille det, eller kontakt ' + KONTAKT + '.</p>' +
+      '<p class="small" style="margin:0">Ny her? <a href="#" data-act="vis-registrer">Registrer bedriften og prøv gratis</a></p></form></section>') + '</div>';
+  }
+  function renderRegistrer() {
+    return '<section class="panel login-box"><h2>Prøv gratis i 30 dager</h2><p class="small muted" style="margin:-4px 0 0">Ingen kort, ingen binding. Du blir eier av bedriftskontoen og kan invitere kolleger.</p><form id="regForm" novalidate class="stack">' +
+      '<label class="f"><span>Organisasjonsnummer</span><input type="text" id="rg-orgnr" inputmode="numeric" autocomplete="off" maxlength="11" placeholder="9 siffer" required></label>' +
+      '<p class="small muted" id="rg-brreg" style="margin:-6px 0 0" aria-live="polite"></p>' +
+      '<label class="f"><span>Bedriftsnavn</span><input type="text" id="rg-bedrift" autocomplete="organization" required></label>' +
+      '<label class="f"><span>Ditt navn</span><input type="text" id="rg-navn" autocomplete="name" required></label>' +
+      '<label class="f"><span>E-post (jobb)</span><input type="email" id="rg-epost" autocomplete="email" required></label>' +
+      '<label class="f"><span>Telefon (valgfritt)</span><input type="text" inputmode="tel" id="rg-telefon" autocomplete="tel"></label>' +
+      '<label class="f"><span>Velg passord (minst 10 tegn)</span><input type="password" id="rg-passord" autocomplete="new-password" minlength="10" required></label>' +
+      '<label class="f hp" aria-hidden="true"><span>Nettside</span><input type="text" id="rg-nettside" tabindex="-1" autocomplete="off"></label>' +
+      '<label class="check small"><input type="checkbox" id="rg-vilkar"> <span>Jeg godtar <a href="https://fjelluft.no/vent-vilkar/" target="_blank" rel="noopener">vilkårene</a> og at Fjelluft behandler opplysningene i tråd med <a href="https://fjelluft.no/personvern/" target="_blank" rel="noopener">personvernerklæringen</a>.</span></label>' +
+      '<p class="small" id="rg-err" role="alert" hidden style="color:var(--crit);margin:0"></p>' +
+      '<button class="btn primary" type="submit" id="rg-btn">Start prøveperioden</button>' +
+      '<p class="small" style="margin:0">Har dere konto allerede? <a href="#" data-act="vis-logginn">Logg inn</a>. Er bedriften registrert, be eieren legge deg til som bruker.</p></form></section>';
   }
   function renderByttPassord(tvunget) {
     return '<section class="panel" style="max-width:480px;justify-self:center;width:100%"><h2>' + (tvunget ? 'Velg ditt eget passord' : 'Bytt passord') + '</h2>' + (tvunget ? '<p class="muted small">Du logget inn med et midlertidig passord. Velg et nytt før du fortsetter.</p>' : '') +
@@ -346,10 +402,18 @@
   // ---------- Tomtilstand ----------
   function renderEmpty() {
     var b = ctxBedrift();
-    return '<section class="panel empty">' +
+    var sjekk = '';
+    if (!S.projects.length && b && b.id === S.me.bedrift_id && !S.me.superadmin) {
+      var admin = S.me.rolle === 'eier' || S.me.rolle === 'admin';
+      var steg = [[true, 'Bedriften er registrert', b.plan === 'prove' && b.prove_til ? 'Prøveperioden varer til ' + datoKort(b.prove_til) + '.' : ''], [false, 'Opprett første prosjekt', 'Gi det navn og prosjektnummer, så last inn IFC eller en PDF-plantegning.']];
+      if (admin) steg.push([false, 'Inviter kollegene dine', 'Under Administrasjon → Brukere. Prøveperioden har plass til ' + b.maks_brukere + ' brukere.', 'side', 'admin']);
+      if (admin && b.plan === 'prove') steg.push([false, 'Velg abonnement før prøveperioden går ut', 'Betal med kort, faktura med mva. på e-post. Ingen binding.', 'til-abonnement']);
+      sjekk = '<section class="panel"><h3>Kom i gang</h3><ul class="onboard">' + steg.map(function (x) { return '<li class="' + (x[0] ? 'ferdig' : '') + '"><span class="ob-ikon" aria-hidden="true">' + (x[0] ? '✓' : '') + '</span><div><b>' + esc(x[1]) + '</b>' + (x[2] ? '<div class="small muted">' + esc(x[2]) + '</div>' : '') + '</div>' + (x[3] ? '<button class="btn sm" type="button" data-act="' + x[3] + '"' + (x[4] ? ' data-side="' + x[4] + '"' : '') + '>Gå dit</button>' : '') + '</li>'; }).join('') + '</ul></section>';
+    }
+    return sjekk + '<section class="panel empty">' +
       '<h2>' + (S.projects.length ? 'Velg et prosjekt' : 'Velkommen til Fjelluft Vent') + '</h2>' +
       '<p class="muted">Prosjektene til ' + esc(b ? b.navn : 'bedriften') + ' ligger her og deles med alle i bedriften.</p>' +
-      '<ol class="steps"><li>Opprett et prosjekt.</li><li>Last inn arkitektens IFC-fil. Rommene hentes automatisk med areal og etasje.</li><li>Kontroller romtyper, personer og senger. Luftmengdene regnes ut fortløpende.</li><li>Dimensjoner kanalene og eksporter rapport og IFC.</li></ol>' +
+      '<ol class="steps"><li>Opprett et prosjekt.</li><li>Last inn arkitektens IFC-fil. Rommene hentes automatisk med areal og etasje. Har du bare PDF eller PNG, bruk fanen Tegning.</li><li>Kontroller romtyper, personer og senger. Luftmengdene regnes ut fortløpende.</li><li>Dimensjoner kanalene og eksporter rapport og IFC.</li></ol>' +
       '<div class="row"><button class="btn primary" type="button" data-act="new-project"' + dis() + '>+ Nytt prosjekt</button><button class="btn" type="button" data-act="import-json"' + dis() + '>Åpne prosjektfil (.json)</button></div>' +
       '</section>';
   }
@@ -745,7 +809,9 @@
     innlogging: 'Logget inn', passord_byttet: 'Byttet passord', passord_nullstilt: 'Nullstilte passordet til', bruker_opprettet: 'La til bruker', bruker_endret: 'Endret bruker',
     bruker_slettet: 'Slettet bruker', bedrift_opprettet: 'Opprettet bedrift', bedrift_endret: 'Endret bedrift', prosjekt_opprettet: 'Opprettet prosjekt', prosjekt_slettet: 'Slettet prosjekt',
     prosjekt_arkivert: 'Arkiverte prosjekt', prosjekt_gjenopprettet: 'Hentet fram prosjekt', prosjekt_omdopt: 'Endret navn på prosjekt', ifc_importert: 'Leste inn IFC i', eksport_ifc: 'Eksporterte IFC fra',
-    eksport_rapport: 'Lastet ned rapport for', eksport_romskjema: 'Lastet ned romskjema for', eksport_alle: 'Lastet ned alle prosjekter', bedrift_slettet: 'Slettet bedrift', superadmin_opprettet: 'Opprettet Fjelluft-administrator'
+    eksport_rapport: 'Lastet ned rapport for', eksport_romskjema: 'Lastet ned romskjema for', eksport_alle: 'Lastet ned alle prosjekter', bedrift_slettet: 'Slettet bedrift', superadmin_opprettet: 'Opprettet Fjelluft-administrator',
+    bedrift_registrert: 'Registrerte bedriften', betaling_startet: 'Startet betaling for', abonnement_byttet: 'Byttet abonnement til', abonnement_oppdatert: 'Abonnement oppdatert:', faktura_betalt: 'Faktura betalt', betaling_feilet: 'Betaling feilet for faktura',
+    stripe_oppsett: 'Koblet til Stripe', stripe_nokkel_lagret: 'Lagret Stripe-nøkkel', plantegning_lastet: 'Lastet opp plantegning i', eksport_tegning: 'Eksporterte tegning fra'
   };
   var STATUS_NAVN = { aktiv: 'Aktiv', sperret: 'Sperret', avsluttet: 'Avsluttet' };
   function adminTabs() {
@@ -761,15 +827,17 @@
     if (S.adm && S.adm.laster) return;
     S.adm = Object.assign(S.adm || {}, { laster: true });
     var res = await Promise.all([
-      sb.from('bedrifter').select('*').order('navn'),
+      sb.from('bedrifter').select(BEDRIFT_KOL).order('navn'),
       sb.from('profiler').select('*').order('epost'),
       sb.from('prosjekter').select('id,bedrift_id,endret,arkivert'),
       sb.from('aktivitet').select('*').order('tid', { ascending: false }).limit(400),
-      sb.from('planer').select('*').order('sortering')
+      sb.from('planer').select('*').order('sortering'),
+      S.me.superadmin ? adminKall({ handling: 'hent_intern' }).catch(function () { return { intern: [] }; }) : Promise.resolve({ intern: [] })
     ]);
+    var intern = {}; (res[5].intern || []).forEach(function (x) { intern[x.bedrift_id] = x.merknad || ''; });
     S.bedrifter = res[0].data || S.bedrifter; S.bedrift = S.bedrifter.find(function (b) { return b.id === S.me.bedrift_id; }) || S.bedrift;
     S.planer = res[4].data || S.planer;
-    S.adm = { brukere: res[1].data || [], prosjekter: res[2].data || [], aktivitet: res[3].data || [], lastet: true, laster: false, filterBedrift: (S.adm && S.adm.filterBedrift) || (S.me.superadmin ? 'alle' : S.me.bedrift_id) };
+    S.adm = { brukere: res[1].data || [], prosjekter: res[2].data || [], aktivitet: res[3].data || [], intern: intern, stripe: S.adm && S.adm.stripe, lastet: true, laster: false, filterBedrift: (S.adm && S.adm.filterBedrift) || (S.me.superadmin ? 'alle' : S.me.bedrift_id) };
     beregnTilgang();
     if (S.side === 'admin') { renderHeader(); renderMain(); }
   }
@@ -857,15 +925,42 @@
   function admPlaner() {
     return '<section class="panel"><div class="panel-h"><div><h3>Planer og priser</h3><p class="small muted" style="margin:4px 0 0">Prisene brukes i inntektsoversikten og når du velger plan for en kunde. Endringer gjelder med en gang. Priser eks. mva.</p></div></div><div class="tablewrap"><table><thead><tr><th>Kode</th><th>Navn</th><th class="n">Pris per måned</th><th class="n">Brukere inkludert</th><th>Beskrivelse</th></tr></thead><tbody>' +
       S.planer.map(function (p) { return '<tr><td class="num">' + esc(p.kode) + '</td><td><input type="text" class="w-l" id="pl-' + p.kode + '-navn" data-plan="' + p.kode + '" data-pf="navn" value="' + esc(p.navn) + '"></td><td class="n"><input type="text" inputmode="numeric" class="n" id="pl-' + p.kode + '-pris" data-plan="' + p.kode + '" data-pf="pris_mnd" value="' + esc(p.pris_mnd) + '"></td><td class="n"><input type="text" inputmode="numeric" class="n" id="pl-' + p.kode + '-maks" data-plan="' + p.kode + '" data-pf="maks_brukere" value="' + esc(p.maks_brukere) + '"></td><td><input type="text" style="width:260px" id="pl-' + p.kode + '-besk" data-plan="' + p.kode + '" data-pf="beskrivelse" value="' + esc(p.beskrivelse || '') + '"></td></tr>'; }).join('') +
-      '</tbody></table></div></section>';
+      '</tbody></table></div><p class="small muted" style="margin:10px 0 0">Planene Start, Proff og Bedrift kan kjøpes på nett. Har du endret en pris, trykk «Synkroniser priser med Stripe» under. Eksisterende abonnenter beholder gammel pris til du flytter dem.</p></section>' + stripePanel();
+  }
+  function stripePanel() {
+    var st = S.adm.stripe;
+    if (!st) { adminKall({ handling: 'stripe_status' }).then(function (r) { S.adm.stripe = r; if (S.atab === 'a-planer') renderMain(); }).catch(function (e) { S.adm.stripe = { feil: e.message }; if (S.atab === 'a-planer') renderMain(); }); return '<section class="panel muted">Henter betalingsoppsett…</section>'; }
+    if (st.feil) return '<section class="panel"><h3>Betaling med Stripe</h3><p class="small" style="color:var(--crit)">' + esc(st.feil) + '</p></section>';
+    var klar = st.nokkel && st.webhook && (st.planer || []).every(function (p) { return p.stripe_price_id; });
+    var pill = !st.nokkel ? '<span class="pill warn">Ikke koblet til</span>' : klar ? '<span class="pill ' + (st.modus === 'live' ? 'ok' : 'info') + '">' + (st.modus === 'live' ? 'Live: tar ekte betaling' : 'Testmodus') + '</span>' : '<span class="pill warn">Nøkkel lagret, ikke synkronisert</span>';
+    return '<section class="panel"><div class="panel-h"><div><h3>Betaling med Stripe</h3><p class="small muted" style="margin:4px 0 0">Kundene betaler med kort i Stripe og får faktura med 25 % mva. på e-post. Abonnementet fornyes hver måned og oppdateres automatisk her.</p></div>' + pill + '</div>' +
+      '<ol class="steps small" style="margin:6px 0 14px"><li>Opprett konto på <a href="https://dashboard.stripe.com/register" target="_blank" rel="noopener">stripe.com</a> med Fjelluft AS sitt org.nr og bankkonto.</li><li>Gå til Utviklere → API-nøkler i Stripe og kopier <b>hemmelig nøkkel</b>. Start med testnøkkelen (sk_test_…).</li><li>Lim inn nøkkelen under og trykk Lagre. Trykk deretter «Koble til Stripe».</li><li>Test et kjøp med kortnummer 4242 4242 4242 4242, en fremtidig dato og valgfri CVC. Når alt virker: gjenta med live-nøkkelen (sk_live_…).</li></ol>' +
+      '<form id="stripeForm" class="row" style="gap:8px;flex-wrap:wrap" novalidate><input type="password" id="st-nokkel" autocomplete="off" placeholder="' + (st.nokkel ? 'Nøkkel lagret. Lim inn ny for å bytte' : 'sk_test_…') + '" style="flex:1;min-width:240px" aria-label="Stripe hemmelig nøkkel"><button class="btn" type="submit">Lagre nøkkel</button><button class="btn primary" type="button" data-act="stripe-oppsett"' + (st.nokkel ? '' : ' disabled') + '>' + (klar ? 'Synkroniser priser med Stripe' : 'Koble til Stripe') + '</button></form>' +
+      '<p class="small" id="st-err" role="alert" hidden style="color:var(--crit);margin:8px 0 0"></p>' +
+      (st.planer && st.planer.length ? '<dl class="kv" style="margin-top:12px">' + st.planer.map(function (p) { return '<dt>' + esc(p.navn) + '</dt><dd>' + kr(p.pris_mnd) + '/mnd ' + (p.stripe_price_id ? '<span class="pill ok">Klar for salg</span>' : '<span class="pill warn">Ikke i Stripe ennå</span>') + '</dd>'; }).join('') + '</dl>' : '') +
+      '<p class="small muted" style="margin:10px 0 0">Nøkkelen sjekkes mot Stripe og lagres i en lukket tabell som bare serveren kan lese. Den vises aldri igjen, verken for deg eller kundene.</p></section>';
+  }
+
+  function abonnementPanel(b) {
+    var kanKjope = S.planer.filter(function (p) { return p.kan_kjopes; });
+    var aktivtAbo = b.stripe_subscription_id && b.betaling_status && b.betaling_status !== 'avsluttet';
+    var kort = kanKjope.map(function (p) {
+      var dette = aktivtAbo && b.plan === p.kode;
+      return '<div class="plankort' + (dette ? ' valgt' : '') + '"><h4>' + esc(p.navn) + '</h4><div class="pris">' + kr(p.pris_mnd) + '<small> / mnd eks. mva.</small></div><p class="small muted">' + esc(p.beskrivelse || '') + '</p><p class="small">Inntil ' + p.maks_brukere + ' brukere</p>' +
+        (dette ? '<span class="pill ok">Nåværende plan</span>' : '<button class="btn' + (p.kode === 'proff' ? ' primary' : '') + '" type="button" data-act="velg-plan" data-plan="' + esc(p.kode) + '">' + (aktivtAbo ? 'Bytt til ' + esc(p.navn) : 'Velg ' + esc(p.navn)) + '</button>') + '</div>';
+    }).join('');
+    var tekst = aktivtAbo ? 'Abonnementet fornyes automatisk hver måned' + (b.abonnement_til ? ', neste gang ' + esc(datoKort(b.abonnement_til)) : '') + '. Bytter dere plan, regnes mellomlegget ut automatisk på neste faktura.' : b.plan === 'prove' ? 'Velg plan for å fortsette etter prøveperioden. Dere betaler med kort og får faktura med mva. på e-post. Ingen bindingstid, si opp når som helst.' : 'Dere har i dag en avtale med Fjelluft utenom nettbetaling. Ta kontakt med ' + KONTAKT + ' om dere vil endre den.';
+    return '<section class="panel" style="grid-column:1/-1"><div class="panel-h"><h3>Abonnement</h3>' + (b.betaling_status === 'feilet' ? '<span class="pill warn">Betaling feilet</span>' : '') + '</div><p class="small muted" style="margin:4px 0 14px">' + tekst + '</p>' +
+      (kanKjope.length && (aktivtAbo || b.plan === 'prove' || !b.plan) ? '<div class="plangrid">' + kort + '</div>' : '') +
+      (b.stripe_customer_id ? '<div class="row" style="margin-top:14px"><button class="btn" type="button" data-act="betalingsportal">Kort, fakturaer og oppsigelse</button></div>' : '') + '</section>';
   }
 
   function admBedrift() {
     var b = S.bedrift; if (!b) return '<div class="panel muted">Fant ikke bedriften.</div>';
     var s = bedriftStats(b);
     var pr = S.adm.prosjekter.filter(function (p) { return p.bedrift_id === b.id; });
-    return '<div class="grid2" style="align-items:start"><section class="panel"><div class="panel-h"><h3>' + esc(b.navn) + '</h3>' + statusPillB(b) + '</div><dl class="kv"><dt>Org.nr</dt><dd>' + esc(b.orgnr || '–') + '</dd><dt>Abonnement</dt><dd>' + esc(planNavn(b.plan)) + (planPris(b.plan) ? ', ' + kr(planPris(b.plan)) + ' per måned eks. mva.' : '') + '</dd>' + (b.prove_til ? '<dt>Prøveperiode til</dt><dd>' + esc(datoKort(b.prove_til)) + '</dd>' : '') + '<dt>Brukerplasser</dt><dd>' + s.aktive + ' av ' + b.maks_brukere + ' i bruk</dd><dt>Prosjekter</dt><dd>' + s.prosjekter + ' aktive, ' + (pr.length - s.prosjekter) + ' arkivert</dd><dt>Kontaktperson</dt><dd>' + esc([b.kontakt_navn, b.kontakt_epost, b.telefon].filter(Boolean).join(', ') || '–') + '</dd></dl><p class="small muted" style="margin:12px 0 0">Vil dere endre abonnement, få flere brukerplasser eller si opp? Kontakt ' + KONTAKT + '.</p></section>' +
-      '<section class="panel"><h3>Dataene deres</h3><p class="small muted" style="margin:8px 0 12px">Last ned alle prosjektene til bedriften som én fil, for eksempel som sikkerhetskopi eller før oppsigelse. Filen kan åpnes igjen i Fjelluft Vent.</p><button class="btn" type="button" data-act="eksport-alle">Last ned alle prosjekter (.json)</button></section></div>';
+    return '<div class="grid2" style="align-items:start"><section class="panel"><div class="panel-h"><h3>' + esc(b.navn) + '</h3>' + statusPillB(b) + '</div><dl class="kv"><dt>Org.nr</dt><dd>' + esc(b.orgnr || '–') + '</dd><dt>Abonnement</dt><dd>' + esc(planNavn(b.plan)) + (planPris(b.plan) ? ', ' + kr(planPris(b.plan)) + ' per måned eks. mva.' : '') + '</dd>' + (b.prove_til ? '<dt>Prøveperiode til</dt><dd>' + esc(datoKort(b.prove_til)) + '</dd>' : '') + '<dt>Brukerplasser</dt><dd>' + s.aktive + ' av ' + b.maks_brukere + ' i bruk</dd><dt>Prosjekter</dt><dd>' + s.prosjekter + ' aktive, ' + (pr.length - s.prosjekter) + ' arkivert</dd><dt>Kontaktperson</dt><dd>' + esc([b.kontakt_navn, b.kontakt_epost, b.telefon].filter(Boolean).join(', ') || '–') + '</dd></dl><p class="small muted" style="margin:12px 0 0">Spørsmål om abonnementet? Kontakt ' + KONTAKT + '.</p></section>' +
+      '<section class="panel"><h3>Dataene deres</h3><p class="small muted" style="margin:8px 0 12px">Last ned alle prosjektene til bedriften som én fil, for eksempel som sikkerhetskopi eller før oppsigelse. Filen kan åpnes igjen i Fjelluft Vent.</p><button class="btn" type="button" data-act="eksport-alle">Last ned alle prosjekter (.json)</button></section>' + (S.me.rolle === 'eier' || S.me.rolle === 'admin' ? abonnementPanel(b) : '') + '</div>';
   }
 
   // Dialoger
@@ -883,7 +978,7 @@
       '<label class="f"><span>Brukerplasser</span><input type="text" inputmode="numeric" id="bd-maks_brukere" value="' + esc(b.maks_brukere) + '"></label>' +
       '<label class="f"><span>Prøveperiode til</span><input type="date" id="bd-prove_til" value="' + esc(b.prove_til || (ny ? proveStd : '')) + '"></label>' +
       (ny ? '' : '<label class="f"><span>Status</span><select id="bd-status">' + Object.keys(STATUS_NAVN).map(function (k) { return '<option value="' + k + '"' + (b.status === k ? ' selected' : '') + '>' + STATUS_NAVN[k] + '</option>'; }).join('') + '</select></label>') +
-      '<label class="f" style="grid-column:1/-1"><span>Intern merknad</span><input type="text" id="bd-merknad" value="' + esc(b.merknad || '') + '"></label>' +
+      '<label class="f" style="grid-column:1/-1"><span>Intern merknad</span><input type="text" id="bd-merknad" value="' + esc((S.adm && S.adm.intern && S.adm.intern[b.id]) || '') + '"></label><p class="small muted" style="grid-column:1/-1;margin:-4px 0 0">Merknaden er bare synlig for Fjelluft, ikke for kunden.</p>' +
       (ny ? '<fieldset style="grid-column:1/-1;border:1px solid var(--line);border-radius:6px;padding:10px 12px;display:grid;gap:8px"><legend class="small muted">Første bruker (eier i bedriften), valgfritt</legend><div class="grid2"><label class="f"><span>E-post</span><input type="email" id="bd-u-epost"></label><label class="f"><span>Navn</span><input type="text" id="bd-u-navn"></label></div></fieldset>' : '') +
       '<p class="small" id="bd-err" role="alert" hidden style="grid-column:1/-1;color:var(--crit);margin:0"></p>' +
       '<div class="modal-actions" style="grid-column:1/-1"><button class="btn" type="button" data-act="modal-close">Avbryt</button><button class="btn primary" type="submit">' + (ny ? 'Opprett kunde' : 'Lagre') + '</button></div></form>', function (root) {
@@ -959,6 +1054,23 @@
       });
       return true;
     }
+    if (act === 'velg-plan') {
+      var kode = a.dataset.plan, pl = S.planer.find(function (x) { return x.kode === kode; });
+      a.disabled = true; var tekst0 = a.textContent; a.textContent = 'Åpner betaling…';
+      try {
+        var rk = await adminKall({ handling: 'kjop', plan: kode });
+        if (rk.url) { location.href = rk.url; return true; }
+        if (rk.byttet) { toast('Abonnementet er byttet til ' + (pl ? pl.navn : kode)); setTimeout(function () { S.adm = null; lastBruker(false).then(function () { S.side = 'admin'; S.atab = 'a-bedrift'; renderAll(); }); }, 2500); }
+      } catch (e) { toast(e.message); a.disabled = false; a.textContent = tekst0; }
+      return true;
+    }
+    if (act === 'betalingsportal') { a.disabled = true; try { var rp = await adminKall({ handling: 'portal' }); location.href = rp.url; } catch (e) { toast(e.message); a.disabled = false; } return true; }
+    if (act === 'stripe-oppsett') {
+      a.disabled = true; a.textContent = 'Kobler til…'; var se = $('#st-err'); se.hidden = true;
+      try { var ro = await adminKall({ handling: 'stripe_oppsett' }); S.adm.stripe = null; var rs = await adminKall({ handling: 'stripe_status' }); S.adm.stripe = rs; var rp2 = await sb.from('planer').select('*').order('sortering'); if (rp2.data) S.planer = rp2.data; renderMain(); toast(ro.rapport.length ? 'Stripe er klart (' + ro.modus + '): ' + ro.rapport.join(', ') : 'Stripe er allerede oppdatert'); }
+      catch (e) { se.textContent = e.message; se.hidden = false; a.disabled = false; a.textContent = 'Koble til Stripe'; }
+      return true;
+    }
     if (act === 'kopier-melding') { var t = $('#pwMelding'); try { await navigator.clipboard.writeText(t.value); toast('Meldingen er kopiert'); } catch (e) { t.select(); toast('Merk teksten og kopier den'); } return true; }
     if (act === 'nullstill') {
       var u = S.adm.brukere.find(function (x) { return x.id === a.dataset.id; });
@@ -993,6 +1105,15 @@
       return true;
     }
     return false;
+  }
+
+  async function stripeNokkelSubmit(form) {
+    var inp = form.querySelector('#st-nokkel'), err = $('#st-err'), k = inp.value.trim(); err.hidden = true;
+    if (!k) { err.textContent = 'Lim inn den hemmelige nøkkelen fra Stripe.'; err.hidden = false; return; }
+    if (/^pk_/.test(k)) { err.textContent = 'Dette er den publiserbare nøkkelen (pk_). Bruk den hemmelige nøkkelen som starter med sk_.'; err.hidden = false; return; }
+    var btn = form.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Sjekker…';
+    try { S.adm.stripe = await adminKall({ handling: 'stripe_lagre_nokkel', nokkel: k }); inp.value = ''; renderMain(); toast('Nøkkelen er godkjent av Stripe og lagret'); }
+    catch (e) { err.textContent = e.message; err.hidden = false; btn.disabled = false; btn.textContent = 'Lagre nøkkel'; }
   }
 
   // ---------- Tegning ----------
@@ -1812,6 +1933,9 @@
     if (a0) {
       var act0 = a0.dataset.act;
       if (act0 === 'logg-ut') { closeModal(); await loggUt(); return; }
+      if (act0 === 'vis-registrer' || act0 === 'vis-logginn') { e.preventDefault(); S.loginVisning = act0 === 'vis-registrer' ? 'registrer' : 'logginn'; renderMain(); var f0 = $(act0 === 'vis-registrer' ? '#rg-orgnr' : '#li-epost'); if (f0) f0.focus(); return; }
+      if (act0 === 'til-abonnement') { flushSave(); S.side = 'admin'; S.atab = 'a-bedrift'; S.adm = null; renderAll(); window.scrollTo(0, 0); return; }
+      if (act0 === 'betalingsportal' && S.side !== 'admin') { a0.disabled = true; try { var rp0 = await adminKall({ handling: 'portal' }); location.href = rp0.url; } catch (e5) { toast(e5.message); a0.disabled = false; } return; }
       if (act0 === 'side') { flushSave(); S.side = a0.dataset.side; if (S.side === 'admin') { S.adm = null; } if (S.side === 'prosjekt' && !S.pid) { await lastProsjekter(); return; } renderAll(); window.scrollTo(0, 0); return; }
       if (act0 === 'lagre-navn') { var nv0 = $('#pf-navn').value.trim(); var rr = await sb.rpc('oppdater_mitt_navn', { p_navn: nv0 }); if (rr.error) toast('Kunne ikke lagre navnet'); else { S.me.navn = nv0; renderHeader(); toast('Navnet er lagret'); } return; }
       if (act0 === 'konflikt-last') { closeModal(); S.konflikt = false; S.dirty = false; var p0 = S.pid; S.pid = null; await openProject(p0); toast('Siste versjon er lastet inn'); return; }
@@ -1950,6 +2074,25 @@
   document.addEventListener('dragleave', function (e) { var dz = e.target.closest && e.target.closest('#dropZone'); if (dz) dz.classList.remove('over'); });
   document.addEventListener('drop', function (e) { var dz = e.target.closest && e.target.closest('#dropZone'); if (dz) { e.preventDefault(); dz.classList.remove('over'); if (!S.canWrite) return; handleIfcFile(e.dataTransfer.files[0], 'import'); } });
   $('#newProjBtn').addEventListener('click', newProjectDialog);
+  var brregTimer = null, brregSist = '';
+  document.addEventListener('input', function (e) {
+    if (e.target.id !== 'rg-orgnr') return;
+    var o = e.target.value.replace(/\s/g, ''), info = $('#rg-brreg');
+    clearTimeout(brregTimer);
+    if (!/^\d{9}$/.test(o)) { info.textContent = ''; brregSist = ''; return; }
+    if (o === brregSist) return;
+    info.textContent = 'Slår opp i Enhetsregisteret…';
+    brregTimer = setTimeout(async function () {
+      brregSist = o;
+      try {
+        var r = await registrerKall({ handling: 'oppslag', orgnr: o });
+        if ($('#rg-orgnr').value.replace(/\s/g, '') !== o) return;
+        if (r.ukjent) { info.textContent = 'Fikk ikke svar fra Enhetsregisteret. Skriv inn bedriftsnavnet selv.'; return; }
+        info.textContent = r.konkurs ? 'Bedriften er registrert som slettet, konkurs eller under avvikling.' : '✓ ' + r.navn + (r.adresse ? ', ' + r.adresse : '');
+        if (!r.konkurs) { var bn = $('#rg-bedrift'); bn.value = r.navn; }
+      } catch (e3) { info.textContent = e3.message; }
+    }, 300);
+  });
   document.addEventListener('submit', async function (e) {
     if (e.target.id === 'loginForm') {
       e.preventDefault(); var err = $('#li-err'), btn = $('#li-btn'); err.hidden = true;
@@ -1958,6 +2101,21 @@
       btn.disabled = true; btn.textContent = 'Logger inn…';
       var feil = await login(ep, pw);
       if (feil) { S.mode = 'login'; renderAll(); var e2 = $('#li-err'); e2.textContent = feil; e2.hidden = false; $('#li-epost').value = ep; $('#li-pass').focus(); }
+      return;
+    }
+    if (e.target.id === 'stripeForm') { e.preventDefault(); await stripeNokkelSubmit(e.target); return; }
+    if (e.target.id === 'regForm') {
+      e.preventDefault(); var re = $('#rg-err'), rb = $('#rg-btn'); re.hidden = true;
+      var f = { orgnr: $('#rg-orgnr').value.replace(/\s/g, ''), bedrift: $('#rg-bedrift').value.trim(), navn: $('#rg-navn').value.trim(), epost: $('#rg-epost').value.trim(), telefon: $('#rg-telefon').value.trim(), passord: $('#rg-passord').value, nettside: $('#rg-nettside').value, vilkar: $('#rg-vilkar').checked };
+      var mangler = !/^\d{9}$/.test(f.orgnr) ? 'Skriv inn organisasjonsnummeret (9 siffer).' : !f.bedrift ? 'Skriv inn bedriftsnavnet.' : !f.navn ? 'Skriv inn navnet ditt.' : !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.epost) ? 'Skriv inn en gyldig e-postadresse.' : f.passord.length < 10 ? 'Passordet må ha minst 10 tegn.' : !f.vilkar ? 'Du må godta vilkårene for å fortsette.' : '';
+      if (mangler) { re.textContent = mangler; re.hidden = false; return; }
+      rb.disabled = true; rb.textContent = 'Oppretter kontoen…';
+      try {
+        await registrerKall(f);
+        var lf = await login(f.epost, f.passord);
+        if (lf) throw new Error('Kontoen er opprettet, men innloggingen feilet: ' + lf);
+        S.loginVisning = null; toast('Velkommen! Prøveperioden har startet.');
+      } catch (e4) { if (S.mode !== 'login') { S.mode = 'login'; renderAll(); } var re2 = $('#rg-err'); if (re2) { re2.textContent = e4.message; re2.hidden = false; } var rb2 = $('#rg-btn'); if (rb2) { rb2.disabled = false; rb2.textContent = 'Start prøveperioden'; } }
       return;
     }
     if (e.target.id === 'pwForm') {

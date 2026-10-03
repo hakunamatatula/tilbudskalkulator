@@ -197,6 +197,20 @@ img { max-width: 100%; }
 .login-pitch p { max-width: 54ch; } .login-pitch ul { padding-left: 18px; display: grid; gap: 4px; }
 .login-box { padding: 24px; display: grid; gap: 12px; box-shadow: var(--shadow); }
 .login-box input { width: 100%; padding: 9px 10px; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); } .pill.info { background: var(--supply-soft); color: var(--supply); }
+.hp { position: absolute !important; left: -9999px !important; width: 1px; height: 1px; overflow: hidden; }
+label.check input, .login-box label.check input { width: auto; flex: none; }
+label.check { display: flex; gap: 8px; align-items: flex-start; } label.check input { margin-top: 3px; }
+.banner .btn { margin-left: 8px; vertical-align: middle; }
+.plangrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.plankort { border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 6px; align-content: start; }
+.plankort.valgt { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok) inset; }
+.plankort h4 { margin: 0; font-size: 15px; } .plankort p { margin: 0; } .plankort .pris { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; } .plankort .pris small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.plankort .btn, .plankort .pill { justify-self: start; margin-top: 4px; }
+.onboard { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+.onboard li { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; }
+.ob-ikon { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+.onboard li.ferdig .ob-ikon { background: var(--ok); border-color: var(--ok); color: #fff; } .onboard li.ferdig b { color: var(--muted); text-decoration: line-through; }
 @media (max-width: 760px) { .login { grid-template-columns: minmax(0, 1fr); } .login-pitch { order: 2; } .uname { display: none; } }
 dl.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 10px 0 0; font-size: 13px; } dl.kv dt { color: var(--muted); } dl.kv dd { margin: 0; }
 input[type=email], input[type=password], input[type=date] { background: var(--sheet); border: 1px solid var(--line-strong); border-radius: 5px; padding: 6px 8px; min-width: 0; }
