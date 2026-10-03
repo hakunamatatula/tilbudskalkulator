@@ -285,7 +285,8 @@
     if (S.me && S.me.superadmin) ctxBox.innerHTML = '<select id="ctxSel" aria-label="Bedrift" title="Bedriften du ser prosjektene til">' + S.bedrifter.map(function (b) { return '<option value="' + esc(b.id) + '"' + (b.id === S.ctx ? ' selected' : '') + '>' + esc(b.navn) + '</option>'; }).join('') + '</select>';
     var navn = (S.me && (S.me.navn || S.me.epost)) || '';
     $('#userBox').innerHTML = (erAdmin() ? '<button class="btn sm' + (S.side === 'admin' ? ' primary' : '') + '" type="button" data-act="side" data-side="' + (S.side === 'admin' ? 'prosjekt' : 'admin') + '">' + (S.side === 'admin' ? 'Til prosjektene' : 'Administrasjon') + '</button>' : (S.side !== 'prosjekt' ? '<button class="btn sm" type="button" data-act="side" data-side="prosjekt">Til prosjektene</button>' : '')) +
-      '<button class="btn sm ghost user" type="button" data-act="side" data-side="profil" title="Min profil"><span class="avatar">' + esc(initialer(navn)) + '</span><span class="uname">' + esc(navn) + '<small>' + esc(S.bedrift ? S.bedrift.navn : '') + '</small></span></button>';
+      '<button class="btn sm ghost user" type="button" data-act="side" data-side="profil" title="Min profil"><span class="avatar">' + esc(initialer(navn)) + '</span><span class="uname">' + esc(navn) + '<small>' + esc(S.bedrift ? S.bedrift.navn : '') + '</small></span></button>' +
+      '<button class="btn sm ghost" type="button" data-act="logg-ut" title="Logg ut av Fjelluft Vent">Logg ut</button>';
   }
   function initialer(n) { var p = String(n || '?').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean); return ((p[0] || '?')[0] + (p[1] ? p[1][0] : '')).toUpperCase(); }
   function renderTabs() {
