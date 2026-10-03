@@ -1,5 +1,5 @@
 (function () {
-  var base = document.currentScript.src.replace(/[^/]*$/, ''), v = '769d618b85';
+  var base = document.currentScript.src.replace(/[^/]*$/, ''), v = '303b892cf7';
   var css = document.createElement('link'); css.rel = 'stylesheet'; css.href = base + 'app.css?v=' + v; document.head.appendChild(css);
   var list = [['https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'], [base + 'supabase.js?v=2.117.2'], [base + 'core.js?v=' + v, 'coreSrc'], [base + 'app.js?v=' + v]];
   function next() {

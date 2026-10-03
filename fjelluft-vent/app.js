@@ -380,7 +380,7 @@
       '<label class="f"><span>Telefon (valgfritt)</span><input type="text" inputmode="tel" id="rg-telefon" autocomplete="tel"></label>' +
       '<label class="f"><span>Velg passord (minst 10 tegn)</span><input type="password" id="rg-passord" autocomplete="new-password" minlength="10" required></label>' +
       '<label class="f hp" aria-hidden="true"><span>Nettside</span><input type="text" id="rg-nettside" tabindex="-1" autocomplete="off"></label>' +
-      '<label class="check small"><input type="checkbox" id="rg-vilkar"> <span>Jeg godtar <a href="https://fjelluft.no/vent-vilkar/" target="_blank" rel="noopener">vilkårene</a> og at Fjelluft behandler opplysningene i tråd med <a href="https://fjelluft.no/personvern/" target="_blank" rel="noopener">personvernerklæringen</a>.</span></label>' +
+      '<label class="check small"><input type="checkbox" id="rg-vilkar"> <span>Jeg godtar <a href="https://fjelluft.no/vent-vilkar/" target="_blank" rel="noopener">vilkårene</a> og at Fjelluft behandler opplysningene i tråd med <a href="https://fjelluft.no/personvern-og-eierskap/" target="_blank" rel="noopener">personvernerklæringen</a>.</span></label>' +
       '<p class="small" id="rg-err" role="alert" hidden style="color:var(--crit);margin:0"></p>' +
       '<button class="btn primary" type="submit" id="rg-btn">Start prøveperioden</button>' +
       '<p class="small" style="margin:0">Har dere konto allerede? <a href="#" data-act="vis-logginn">Logg inn</a>. Er bedriften registrert, be eieren legge deg til som bruker.</p></form></section>';
