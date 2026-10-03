@@ -1228,7 +1228,7 @@
       '<button class="btn sm" type="button" data-act="tg-png">Last ned tegning</button></div>';
     var hint = '';
     if (ed.underlag && !ed.underlag.kalibrert) hint = '<div class="banner" style="margin:0">Plantegningen har ikke målestokk ennå. Velg <b>Målestokk</b> og klikk på to punkter med kjent avstand, ellers blir lengder og arealer feil.</div>';
-    else if (!ed.underlag && !tgRomPolys(et).length && !tgElementer(et).length) hint = '<div class="banner info" style="margin:0">Last inn plantegningen for etasjen som PDF, PNG eller JPG. Har prosjektet rom fra IFC-filen, vises de her automatisk.</div>';
+    else if (!ed.underlag && !tgRomPolys(et).length && !tgElementer(et).length) hint = '<div class="banner info" style="margin:0">Dra plantegningen fra e-posten eller en mappe rett inn her, eller klikk «Last inn plantegning». PDF, PNG og JPG fungerer. Har prosjektet rom fra IFC-filen, vises de her automatisk.</div>';
     h += hint;
     h += '<div class="tg-main"><div class="tg-canvas" id="tgCanvas"><svg id="tgSvg" role="application" aria-label="Tegneflate for ' + esc(et) + '"><g id="tgWorld"></g><g id="tgOverlay"></g></svg><div class="tg-hint" id="tgHint"></div><div class="tg-scale" id="tgScale"></div></div>' +
       '<aside class="tg-panel" id="tgPanel"></aside></div></div>';
@@ -1590,7 +1590,7 @@
     try { var w = await (await fetch(PDFJS + 'pdf.worker.min.js')).text(); window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([w], { type: 'text/javascript' })); } catch (e) { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; }
     return window.pdfjsLib;
   }
-  function underlagDialog() {
+  function underlagDialog(forhandsfil) {
     modal('<h2>Plantegning for ' + esc(tgEt()) + '</h2><p class="small muted">PDF, PNG eller JPG. Tegninger fra arkitekt i PDF gir skarpest resultat.</p><form id="ulForm" class="stack" novalidate>' +
       '<label class="f"><span>Fil</span><input type="file" id="ul-fil" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"></label>' +
       '<div id="ul-pdf" hidden class="grid2"><label class="f"><span>Side i PDF-en</span><select id="ul-side"></select></label><label class="f"><span>Målestokk på tegningen</span><select id="ul-mal"><option value="">Vet ikke, settes etterpå</option><option value="20">1:20</option><option value="50">1:50</option><option value="100">1:100</option><option value="200">1:200</option><option value="500">1:500</option></select></label></div>' +
@@ -1610,6 +1610,10 @@
         } else info.textContent = 'Målestokken setter du etterpå ved å klikke på et kjent mål.';
         btn.disabled = false;
       });
+      if (forhandsfil) {
+        try { var dtf = new DataTransfer(); dtf.items.add(forhandsfil); fil.files = dtf.files; fil.dispatchEvent(new Event('change')); }
+        catch (x) { info.textContent = 'Kunne ikke ta imot filen direkte. Velg den med knappen over.'; }
+      }
       root.querySelector('#ulForm').addEventListener('submit', async function (ev) {
         ev.preventDefault(); var f = fil.files[0]; if (!f) return; btn.disabled = true; btn.textContent = 'Laster inn…'; err.hidden = true;
         try {
@@ -1765,6 +1769,36 @@
     if (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4') { g.side = ['tilluft', 'avtrekk', 'uteluft', 'avkast'][+e.key - 1]; var s = $('#tgSide'); if (s) s.value = g.side; tgOverlay(); return true; }
     return false;
   }
+
+  // ---------- Dra og slipp på tegneflaten ----------
+  function harFiler(e) { var t = e.dataTransfer && e.dataTransfer.types; return !!t && Array.prototype.indexOf.call(t, 'Files') >= 0; }
+  function tgDropAktiv(e) { return S.mode === 'app' && S.side === 'prosjekt' && S.tab === 'tegning' && S.data && e.target.closest && e.target.closest('.tg'); }
+  function tgDropVis(pa) {
+    var c = $('#tgCanvas'); if (!c) return;
+    clearTimeout(tgDropVis.t);
+    if (pa) { c.classList.add('drop'); tgDropVis.t = setTimeout(function () { c.classList.remove('drop'); }, 180); }
+    else c.classList.remove('drop');
+  }
+  document.addEventListener('dragover', function (e) {
+    if (!harFiler(e)) return;
+    e.preventDefault();
+    if (tgDropAktiv(e)) { e.dataTransfer.dropEffect = S.canWrite ? 'copy' : 'none'; tgDropVis(true); }
+    else if (!(e.target.closest && e.target.closest('#dropZone'))) e.dataTransfer.dropEffect = 'none';
+  });
+  document.addEventListener('drop', function (e) {
+    if (!harFiler(e)) return;
+    if (!tgDropAktiv(e)) { if (!(e.target.closest && e.target.closest('#dropZone'))) e.preventDefault(); return; }
+    e.preventDefault(); tgDropVis(false);
+    if (!S.canWrite) { toast('Du har ikke tilgang til å endre dette prosjektet.'); return; }
+    var filer = Array.prototype.slice.call(e.dataTransfer.files || []);
+    if (!filer.length) { toast('Fant ingen fil. Lagre vedlegget fra e-posten først, og dra det inn derfra.'); return; }
+    var ifc = filer.find(function (f) { return /\.ifc$/i.test(f.name); });
+    if (ifc) { $('#ifcFile').dataset.purpose = 'import'; handleIfcFile(ifc, 'import'); return; }
+    var plan = filer.find(function (f) { return /\.(pdf|png|jpe?g)$/i.test(f.name) || /^(application\/pdf|image\/(png|jpeg))$/.test(f.type); });
+    if (!plan) { toast('Filtypen støttes ikke. Bruk PDF, PNG, JPG eller IFC.'); return; }
+    if (filer.length > 1) toast('Flere filer ble sluppet. Leser inn ' + plan.name + ' for ' + tgEt() + '.');
+    underlagDialog(plan);
+  });
 
   // ---------- Hendelser ----------
   function findRoom(id) { return rom().find(function (r) { return r.id === id; }); }

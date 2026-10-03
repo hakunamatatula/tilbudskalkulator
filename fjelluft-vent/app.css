@@ -168,6 +168,7 @@ tr.sum td { font-weight: 600; background: var(--sheet-2); }
 .tg-hint { position: absolute; left: 10px; bottom: 10px; right: 160px; font-size: 12.5px; color: var(--muted); background: color-mix(in srgb, var(--sheet) 88%, transparent); padding: 4px 8px; border-radius: 4px; pointer-events: none; }
 .tg-scale { position: absolute; right: 12px; bottom: 12px; font: 12px var(--f-num); color: var(--ink); display: flex; align-items: center; gap: 6px; pointer-events: none; }
 .tg-scale span { display: inline-block; height: 6px; border: 1.5px solid var(--ink); border-top: 0; }
+.tg-canvas.drop::after { content: 'Slipp plantegningen her (PDF, PNG, JPG eller IFC)'; position: absolute; inset: 8px; display: grid; place-items: center; border: 2px dashed var(--supply); border-radius: 8px; background: color-mix(in srgb, var(--supply-soft) 88%, transparent); color: var(--supply); font-weight: 600; font-size: 16px; pointer-events: none; }
 .tg-panel { display: grid; gap: 12px; max-height: calc(100vh - 230px); overflow: auto; }
 .tg-img { opacity: .9; }
 .tg-rom { fill: color-mix(in srgb, var(--supply) 5%, transparent); stroke: var(--ink); stroke-width: 0.02; vector-effect: non-scaling-stroke; }
