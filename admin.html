@@ -168,6 +168,24 @@
         Leveringsstedet vises i vilkårspunkt 1 i kundetilbudet. Står feltet tomt, skrives «Varene utleveres til avtalt leveringsadresse».</p>
       </div>
     </section>
+    <section id="fane-avtaler" hidden>
+      <div class="kort">
+        <h3 style="margin-bottom:6px">Ny kundeavtale</h3>
+        <p class="hjelpetekst" style="margin-bottom:12px">Når selgeren velger kunden i tilbudskalkulatoren, fylles kontaktinfo ut og avtalt faktor eller fortjeneste brukes automatisk på alle posisjoner.</p>
+        <div class="grid3">
+          <div><label>Kundenavn *</label><input id="avt-navn" placeholder="f.eks. 90 Grader AS"></div>
+          <div><label>Faktorpåslag</label><input id="avt-faktor" type="number" step="0.01" min="0" placeholder="f.eks. 9"></div>
+          <div><label>Fortjeneste %</label><input id="avt-dekning" type="number" step="0.1" min="0" max="94" placeholder="f.eks. 30"></div>
+          <div><label>Kontaktperson</label><input id="avt-kontakt"></div>
+          <div><label>Adresse</label><input id="avt-adresse"></div>
+          <div><label>Mobil</label><input id="avt-mobil"></div>
+          <div><label>E-post</label><input id="avt-epost" type="email"></div>
+        </div>
+        <div style="margin-top:14px"><button class="btn" onclick="leggTilAvtale()">+ Legg til kunde</button></div>
+        <p class="hjelpetekst">Faktorpåslag = kundepris i NOK per EUR listepris fra fabrikk. Fortjeneste % er dekningen av salgsprisen (faktoren regnes da ut fra dagens kurs og fabrikkrabatt). Er begge fylt ut, brukes faktoren. Står begge tomme, gjelder standardinnstillingene.</p>
+      </div>
+      <div class="kort"><div id="avtale-liste"></div></div>
+    </section>
     <section id="fane-ordliste" hidden>
       <div class="kort">
         <h3 style="margin-bottom:12px">Legg til term</h3>
@@ -366,7 +384,7 @@ async function startApp(){
   vis('view-app');
 
   const erNora = minProfil.rolle==='nora_admin';
-  const faner = [...(erNora?[['kunder','Kunder']]:[]), ['brukere','Brukere'], ['innstillinger','Innstillinger'], ['ordliste','Ordliste'], ['regler','Standardregler'], ['logo','Logo i tilbud'], ['logg','Endringslogg']];
+  const faner = [...(erNora?[['kunder','Kunder']]:[]), ['brukere','Brukere'], ['innstillinger','Innstillinger'], ['avtaler','Kundeavtaler'], ['ordliste','Ordliste'], ['regler','Standardregler'], ['logo','Logo i tilbud'], ['logg','Endringslogg']];
   $('faner').innerHTML = faner.map(([id,navn])=>'<button id="fane-btn-'+id+'" onclick="byttFane(\''+id+'\')">'+navn+'</button>').join('');
   $('term-scope-rad').hidden = !erNora;
   if(erNora){
@@ -397,11 +415,11 @@ let aktivFane = null;
 function byttFane(id){
   aktivFane = id;
   const erNora = minProfil && minProfil.rolle==='nora_admin';
-  const scopedeFaner = ['innstillinger','ordliste','regler','logo','logg'];
+  const scopedeFaner = ['innstillinger','avtaler','ordliste','regler','logo','logg'];
   // Nora-admin uten valgt kunde på en kunde-fane: vis «Velg kunde»-kortet i fanen.
   // Alle faner er ALLTID synlige — ingenting dukker opp eller forsvinner.
   const trengerValg = erNora && !valgtKunde && scopedeFaner.includes(id);
-  ['kunder','brukere','innstillinger','ordliste','regler','logo','logg'].forEach(f=>{
+  ['kunder','brukere','innstillinger','avtaler','ordliste','regler','logo','logg'].forEach(f=>{
     const s=$('fane-'+f), b=$('fane-btn-'+f);
     if(s) s.hidden = (f!==id) || trengerValg;
     if(b) b.classList.toggle('aktiv', f===id);
@@ -429,7 +447,7 @@ function byttFane(id){
 }
 function velgKunde(id){ valgtKunde = id; byttFane(aktivFane); }
 function oppdaterAktivFane(){
-  ({kunder:visKunder, brukere:visBrukere, innstillinger:visInnstillinger, ordliste:visOrdliste, regler:lastRegler, logo:visLogo, logg:lastLogg})[aktivFane]?.();
+  ({kunder:visKunder, brukere:visBrukere, innstillinger:visInnstillinger, avtaler:visAvtaler, ordliste:visOrdliste, regler:lastRegler, logo:visLogo, logg:lastLogg})[aktivFane]?.();
 }
 
 // ── Kunder (kun nora_admin) ───────────────────────────────
@@ -643,6 +661,74 @@ async function lagreInnstillinger(){
     await api('/rest/v1/innstillinger?kunde_id=eq.'+valgtKunde, {method:'PATCH', body:JSON.stringify(b)});
     meld('app-melding','Innstillinger lagret — gjelder alle selgere hos kunden.');
   }catch(e){ meld('app-melding',e.message,'feil'); }
+}
+
+// ── Kundeavtaler (sluttkunder med avtalt faktor / fortjeneste) ─────────
+let redigererAvtaleId = null;
+const tallEllerNull = v => { const t = String(v ?? '').trim().replace(',', '.'); if (t === '') return null; const n = +t; return isFinite(n) ? n : NaN; };
+function sjekkAvtaleTall(faktor, dekning){
+  if (Number.isNaN(faktor) || (faktor !== null && faktor <= 0)) return 'Faktorpåslag må være et tall større enn 0';
+  if (Number.isNaN(dekning) || (dekning !== null && (dekning <= 0 || dekning >= 95))) return 'Fortjeneste % må være mellom 0 og 95';
+  return null;
+}
+async function visAvtaler(){
+  const liste = await api('/rest/v1/kundeavtaler?kunde_id=eq.'+valgtKunde+'&select=*&order=navn');
+  const fmt = v => v == null ? '<span style="color:var(--dim)">—</span>' : String(v).replace('.', ',');
+  const rad = a => {
+    if (redigererAvtaleId === a.id) {
+      const ph = {navn:'Kundenavn', kontakt:'Kontaktperson', faktor:'Faktor', dekning:'Fortjeneste %', adresse:'Adresse', mobil:'Mobil', epost:'E-post'};
+      const f = (id, v, t) => '<input id="ra-'+id+'-'+a.id+'" placeholder="'+ph[id]+'" value="'+esc(v ?? '')+'"'+(t?' type="'+t+'" step="any"':'')+'>';
+      return '<tr style="background:var(--bg)"><td>'+f('navn',a.navn)+'<div style="margin-top:6px">'+f('kontakt',a.kontaktperson)+'</div></td>'+
+        '<td>'+f('faktor',a.faktor,'number')+'</td><td>'+f('dekning',a.dekning_prosent,'number')+'</td>'+
+        '<td>'+f('adresse',a.adresse)+'<div style="margin-top:6px;display:flex;gap:6px">'+f('mobil',a.mobil)+f('epost',a.epost)+'</div></td>'+
+        '<td style="white-space:nowrap"><button class="btn btn-liten" onclick="lagreAvtale('+a.id+')">Lagre</button> '+
+        '<button class="btn btn-ghost btn-liten" onclick="redigererAvtaleId=null;visAvtaler()">Avbryt</button></td></tr>';
+    }
+    return '<tr style="'+(a.aktiv?'':'opacity:.5')+'"><td><strong>'+esc(a.navn)+'</strong>'+(a.kontaktperson?'<div class="hjelpetekst">'+esc(a.kontaktperson)+'</div>':'')+'</td>'+
+      '<td>'+fmt(a.faktor)+'</td><td>'+(a.dekning_prosent==null?fmt(null):fmt(a.dekning_prosent)+' %')+
+      (a.faktor!=null && a.dekning_prosent!=null ? '<div class="hjelpetekst">faktor brukes</div>' : '')+'</td>'+
+      '<td class="hjelpetekst">'+esc([a.adresse,a.mobil,a.epost].filter(Boolean).join(' · '))+'</td>'+
+      '<td style="white-space:nowrap"><button class="btn btn-ghost btn-liten" onclick="redigererAvtaleId='+a.id+';visAvtaler()">Endre</button> '+
+      '<button class="btn btn-ghost btn-liten" onclick="vekslAvtale('+a.id+','+(!a.aktiv)+')">'+(a.aktiv?'Deaktiver':'Aktiver')+'</button> '+
+      '<button class="btn btn-ghost btn-liten" onclick="slettAvtale('+a.id+')">Slett</button></td></tr>';
+  };
+  $('avtale-liste').innerHTML = liste && liste.length
+    ? '<table><tr><th>Kunde</th><th>Faktor</th><th>Fortjeneste</th><th>Kontaktinfo</th><th></th></tr>'+liste.map(rad).join('')+'</table>'
+    : '<p class="hjelpetekst">Ingen kundeavtaler ennå.</p>';
+}
+async function leggTilAvtale(){
+  const navn = $('avt-navn').value.trim();
+  if(!navn) return meld('app-melding','Kundenavn er påkrevd','feil');
+  const faktor = tallEllerNull($('avt-faktor').value), dekning = tallEllerNull($('avt-dekning').value);
+  const feil = sjekkAvtaleTall(faktor, dekning); if(feil) return meld('app-melding', feil, 'feil');
+  const b = { kunde_id: valgtKunde, navn, faktor, dekning_prosent: dekning,
+    kontaktperson: $('avt-kontakt').value.trim()||null, adresse: $('avt-adresse').value.trim()||null,
+    mobil: $('avt-mobil').value.trim()||null, epost: $('avt-epost').value.trim()||null };
+  try{
+    await api('/rest/v1/kundeavtaler', {method:'POST', body:JSON.stringify(b)});
+    ['avt-navn','avt-faktor','avt-dekning','avt-kontakt','avt-adresse','avt-mobil','avt-epost'].forEach(id=>$(id).value='');
+    meld('app-melding','Kundeavtale lagt til — gjelder nye tilbud for alle selgere.'); await visAvtaler();
+  }catch(e){ meld('app-melding', /duplicate|unik/i.test(e.message) ? 'Det finnes allerede en kunde med dette navnet' : e.message, 'feil'); }
+}
+async function lagreAvtale(id){
+  const v = k => $('ra-'+k+'-'+id).value.trim();
+  const navn = v('navn'); if(!navn) return meld('app-melding','Kundenavn er påkrevd','feil');
+  const faktor = tallEllerNull(v('faktor')), dekning = tallEllerNull(v('dekning'));
+  const feil = sjekkAvtaleTall(faktor, dekning); if(feil) return meld('app-melding', feil, 'feil');
+  try{
+    await api('/rest/v1/kundeavtaler?id=eq.'+id, {method:'PATCH', body:JSON.stringify({navn, faktor, dekning_prosent:dekning,
+      kontaktperson:v('kontakt')||null, adresse:v('adresse')||null, mobil:v('mobil')||null, epost:v('epost')||null})});
+    redigererAvtaleId = null; meld('app-melding','Kundeavtale oppdatert.'); await visAvtaler();
+  }catch(e){ meld('app-melding', /duplicate|unik/i.test(e.message) ? 'Det finnes allerede en kunde med dette navnet' : e.message, 'feil'); }
+}
+async function vekslAvtale(id, aktiv){
+  try{ await api('/rest/v1/kundeavtaler?id=eq.'+id, {method:'PATCH', body:JSON.stringify({aktiv})}); await visAvtaler(); }
+  catch(e){ meld('app-melding',e.message,'feil'); }
+}
+async function slettAvtale(id){
+  if(!confirm('Slette kundeavtalen? Tilbud som allerede er laget påvirkes ikke.')) return;
+  try{ await api('/rest/v1/kundeavtaler?id=eq.'+id, {method:'DELETE'}); await visAvtaler(); }
+  catch(e){ meld('app-melding',e.message,'feil'); }
 }
 
 // ── Ordliste ──────────────────────────────────────────────

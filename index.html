@@ -568,7 +568,19 @@
       <!-- Høyre -->
       <div>
         <div class="section-title">02 — Kundeinformasjon</div>
-        <div class="field"><div class="label">Kundenavn</div><input type="text" id="kunde-navn" placeholder="" /></div>
+        <div class="field">
+          <div class="label">Kundenavn</div>
+          <div class="datalist-wrap" style="position:relative;display:flex;">
+            <input type="text" id="kunde-navn" placeholder="Velg kunde eller skriv navn" autocomplete="off" style="flex:1;"
+              oninput="filterKundeavtale(this.value, false); oppdaterValgtAvtale()"
+              onfocus="filterKundeavtale(this.value, true)"
+              onblur="setTimeout(()=>{document.getElementById('kunde-dropdown').style.display='none'; oppdaterValgtAvtale();},150)" />
+            <button type="button" id="kunde-dd-btn" style="display:none;background:var(--bg3);border:2px solid var(--border);border-left:none;color:var(--muted);padding:0 12px;cursor:pointer;font-size:14px;border-radius:0 4px 4px 0;"
+              onmousedown="event.preventDefault(); const i=document.getElementById('kunde-navn'); i.focus(); filterKundeavtale('', true);">▾</button>
+            <div id="kunde-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;max-height:280px;overflow-y:auto;background:var(--bg2);border:2px solid var(--accent);z-index:100;border-radius:0 0 6px 6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);"></div>
+          </div>
+          <div id="kundeavtale-info" style="display:none;margin-top:6px;font-size:12px;color:var(--accent);"></div>
+        </div>
         <div class="field"><div class="label">Kontaktperson</div><input type="text" id="kunde-kontakt" placeholder="" /></div>
         <div class="field"><div class="label">Adresse</div><input type="text" id="kunde-adresse" placeholder="" /></div>
         <div class="field"><div class="label">Mobil</div><input type="text" id="kunde-mob" placeholder="" /></div>
@@ -625,6 +637,18 @@
       <div class="margin-item good"><div class="mi-label">Fortjeneste (kr)</div><div class="mi-val" id="mp-fortjeneste">—</div></div>
       <div class="margin-item good"><div class="mi-label">Fortjenestemargin</div><div class="mi-val" id="mp-margin">—</div></div>
     </div>
+    <div id="mp-faktor-rad" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+      <div>
+        <div class="mi-label" style="margin-bottom:4px;">Faktorpåslag, hele tilbudet</div>
+        <input type="text" id="mp-faktor" inputmode="decimal" style="width:110px;" oninput="mpFaktorEndret()" onkeydown="if(event.key==='Enter'){event.preventDefault();brukFaktorPaaAlle();}" />
+      </div>
+      <div>
+        <div class="mi-label" style="margin-bottom:4px;">Gir fortjeneste %</div>
+        <input type="text" id="mp-dekning" inputmode="decimal" style="width:90px;" oninput="mpDekningEndret()" onkeydown="if(event.key==='Enter'){event.preventDefault();brukFaktorPaaAlle();}" />
+      </div>
+      <button type="button" class="btn" style="width:auto;padding:9px 16px;margin:0;" onclick="brukFaktorPaaAlle()">Oppdater alle posisjoner</button>
+      <div id="mp-avtale" style="font-size:12px;color:var(--muted);flex-basis:100%;"></div>
+    </div>
     <div id="mp-extras-note" style="display:none;margin-top:10px;padding:8px 12px;background:#fffbe6;border:1px solid #e8c97a;border-radius:4px;font-size:11px;color:#7a5a00;line-height:1.5;">
       <strong>⚠ Tillegg fra fabrikk inkludert i kostpris:</strong>
       <span id="mp-extras-linjer"></span>
@@ -652,6 +676,8 @@
   let KUNDE_ID = null;          // innlogget brukers kunde (null for Nora AI-ansatte)
   let DEKNING_PROSENT = 30;     // hentes fra innstillinger-tabellen per kunde ved innlogging
   let STANDARD_FAKTOR = null;   // valgfri fast faktor fra kundens innstillinger
+  let KUNDEAVTALER = [];        // sluttkunder med avtalt faktor/fortjeneste (admin → Kundeavtaler)
+  const LS_AVTALER_CACHE = 'nora_kundeavtaler_cache';
 
   /** Brøkdel av salgspris som er kostpris ved ønsket dekning, f.eks. 30 % dekning -> 0.70. */
   function dekningsBrok() {
@@ -769,6 +795,22 @@
           oppdaterFabrikkHint();
         }
       } catch(e) { /* innstillinger-synk er ikke kritisk — default 30 % beholdes */ }
+
+      // Kundeavtaler: sluttkunder med avtalt faktor og/eller fortjeneste. RLS gir
+      // kun egen kundes liste. Caches lokalt, så nedtrekkslisten virker uten nett.
+      try {
+        const avtFilter = kid ? 'kunde_id=eq.' + kid + '&' : '';
+        const ar = await fetch(SB_URL + '/rest/v1/kundeavtaler?' + avtFilter + 'aktiv=eq.true&select=id,navn,kontaktperson,adresse,mobil,epost,faktor,dekning_prosent&order=navn', { headers: hdr });
+        const avt = await ar.json();
+        if (Array.isArray(avt)) {
+          KUNDEAVTALER = avt;
+          try { localStorage.setItem(LS_AVTALER_CACHE, JSON.stringify({ kid, avt })); } catch(e) {}
+        }
+      } catch(e) {
+        try { const c = JSON.parse(localStorage.getItem(LS_AVTALER_CACHE) || 'null'); if (c && c.kid === kid) KUNDEAVTALER = c.avt || []; } catch(_) {}
+      }
+      const ddBtn = document.getElementById('kunde-dd-btn');
+      if (ddBtn) ddBtn.style.display = KUNDEAVTALER.length ? '' : 'none';
 
       if (kid) {
         const kr = await fetch(SB_URL + '/rest/v1/kunder?id=eq.' + kid + '&select=navn,logo_url,aktiv', { headers: hdr });
@@ -1429,7 +1471,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-10-05-v57';
+  const APP_VERSION = '2026-10-05-v58';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -1635,6 +1677,8 @@ ${klon.outerHTML}
     selectedFile2 = null;
     faktor2Dirty = false;
     endringslogg = [];
+    window._kundeavtale = null;
+    { const ki = document.getElementById('kundeavtale-info'); if (ki) { ki.textContent = ''; ki.style.display = 'none'; } }
     dropzone.classList.remove('has-file');
     dropzone2.classList.remove('has-file');
     document.getElementById('drop-icon').textContent = '↑';
@@ -4629,6 +4673,17 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       const kundeEpost   = document.getElementById('kunde-epost').value;
       const prosjekt     = document.getElementById('prosjekt').value;
 
+      // Kundeavtale (admin → Kundeavtaler): avtalt faktor eller fortjeneste for
+      // denne sluttkunden overstyrer standardberegningen på alle posisjoner.
+      window._kundeavtale = null;
+      const avtale = finnKundeavtale(kundeNavn);
+      const fAvtale = avtaleFaktor(avtale, resFinal, valutakurs);
+      if (fAvtale > 0) {
+        normaliserPriser(resFinal, fAvtale);
+        window._faktorTilbud = fAvtale;
+        window._kundeavtale  = avtale;
+      }
+
       window._prosjektNavn = prosjekt;
       window._valutakurs   = valutakurs;
       window._tilbudsNr    = resFinal.t || '';
@@ -4645,6 +4700,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 
       (resFinal.p || resFinal.produkter || []).forEach((p, i) => initSkisseDragDrop(i));
       oppdaterMarginPanel();
+      fyllMpFaktor();
 
       visTilbudsfilStripe();
 
@@ -5170,6 +5226,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     const selger = document.getElementById('selger').value.trim() || 'Ukjent';
     const dato = new Date().toLocaleString('nb-NO');
     endringslogg.push({ dato, selger, produktNr, felt, fra, til });
+    if (window._sprerTekst || window._bulkEndring) return; // én beslutning = én rad i databasen
     lagreEndringIDB(produktNr, felt, fra, til); // asynkront, fire-and-forget
   }
 
@@ -5613,6 +5670,212 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       : '');
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // KUNDEAVTALER (v58) — sluttkunde med avtalt faktor og/eller fortjeneste %
+  // ══════════════════════════════════════════════════════════════════════════
+  function _escHtml(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function _tallTekst(n) { return String(n).replace('.', ','); }
+
+  function finnKundeavtale(navn) {
+    const n = String(navn || '').trim().toLowerCase();
+    if (!n) return null;
+    return KUNDEAVTALER.find(a => String(a.navn).trim().toLowerCase() === n) || null;
+  }
+  function beskrivAvtale(a) {
+    if (!a) return '';
+    if (a.faktor != null) return 'faktor ' + _tallTekst(+a.faktor);
+    if (a.dekning_prosent != null) return _tallTekst(+a.dekning_prosent) + ' % fortjeneste';
+    return 'standardinnstillinger';
+  }
+  function filterKundeavtale(val, visAlle) {
+    const dd = document.getElementById('kunde-dropdown');
+    if (!dd) return;
+    const q = String(val || '').trim().toLowerCase();
+    const treff = KUNDEAVTALER.filter(a => visAlle && !q ? true : (q && a.navn.toLowerCase().includes(q)));
+    if (!treff.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = treff.map(a =>
+      `<div style="padding:10px 14px;cursor:pointer;font-size:15px;color:var(--text);background:var(--bg2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:12px;"
+        onmousedown="velgKundeavtale(${a.id})" onmouseover="this.style.background='var(--accent-light)'" onmouseout="this.style.background='var(--bg2)'">
+        <span>${_escHtml(a.navn)}</span><span style="font-size:12px;color:var(--muted);white-space:nowrap;">${_escHtml(beskrivAvtale(a))}</span></div>`
+    ).join('');
+    dd.style.display = 'block';
+  }
+  function velgKundeavtale(id) {
+    const a = KUNDEAVTALER.find(x => x.id === id);
+    if (!a) return;
+    const sett = (elId, v) => { const el = document.getElementById(elId); if (el && v) el.value = v; };
+    document.getElementById('kunde-navn').value = a.navn;
+    sett('kunde-kontakt', a.kontaktperson);
+    sett('kunde-adresse', a.adresse);
+    sett('kunde-mob', a.mobil);
+    sett('kunde-epost', a.epost);
+    document.getElementById('kunde-dropdown').style.display = 'none';
+    oppdaterValgtAvtale();
+  }
+  function oppdaterValgtAvtale() {
+    const info = document.getElementById('kundeavtale-info');
+    if (!info) return;
+    const a = finnKundeavtale(document.getElementById('kunde-navn').value);
+    if (a && (a.faktor != null || a.dekning_prosent != null)) {
+      info.textContent = '✓ Kundeavtale: ' + beskrivAvtale(a) + ' brukes på alle posisjoner';
+      info.style.display = 'block';
+    } else { info.textContent = ''; info.style.display = 'none'; }
+  }
+  /** Faktor iht. kundeavtalen. Faktor vinner; ellers regnes faktor ut fra avtalt
+   *  fortjeneste med samme formel som standardberegningen:
+   *  faktor = (1 − fabrikkrabatt) / (1 − fortjeneste) × valutakurs. */
+  function avtaleFaktor(a, res, valutakurs) {
+    if (!a) return null;
+    if (a.faktor != null && +a.faktor > 0) return +a.faktor;
+    if (a.dekning_prosent != null && +a.dekning_prosent > 0 && +a.dekning_prosent < 95) {
+      const rab = (FABRIKK === 'hctc' ? (res.r != null ? +res.r : 35) : (+res.r || 0)) / 100;
+      return _r2((1 - rab) / (1 - a.dekning_prosent / 100) * valutakurs);
+    }
+    return null;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // FAKTORPÅSLAG FOR HELE TILBUDET (v58)
+  // ══════════════════════════════════════════════════════════════════════════
+  function _mpRabatt() { const p = (window._produkter || [])[0]; return ((p && p.rabatt) || 0) / 100; }
+  function _mpKurs() { return window._valutakurs || parseNum(document.getElementById('valutakurs').value) || 11.2; }
+  function faktorTilDekning(f) { return f > 0 ? (1 - (1 - _mpRabatt()) * _mpKurs() / f) * 100 : NaN; }
+  function dekningTilFaktor(d) { return (d > -1000 && d < 100) ? (1 - _mpRabatt()) * _mpKurs() / (1 - d / 100) : NaN; }
+  function mpFaktorEndret() {
+    const f = parseNum(document.getElementById('mp-faktor').value);
+    const d = faktorTilDekning(f);
+    document.getElementById('mp-dekning').value = isFinite(d) ? _tallTekst(Math.round(d * 10) / 10) : '';
+  }
+  function mpDekningEndret() {
+    const d = parseNum(document.getElementById('mp-dekning').value);
+    const f = dekningTilFaktor(d);
+    document.getElementById('mp-faktor').value = isFinite(f) && f > 0 ? _tallTekst(Math.round(f * 100) / 100) : '';
+  }
+  function fyllMpFaktor() {
+    const el = document.getElementById('mp-faktor');
+    if (!el) return;
+    const f = window._faktorTilbud;
+    el.value = f ? _tallTekst(Math.round(f * 10000) / 10000) : '';
+    mpFaktorEndret();
+    const av = document.getElementById('mp-avtale');
+    if (av) av.textContent = window._kundeavtale
+      ? 'Kundeavtale for ' + window._kundeavtale.navn + ': ' + beskrivAvtale(window._kundeavtale) + ' er brukt på alle posisjoner.'
+      : '';
+  }
+  async function brukFaktorPaaAlle() {
+    const f = Math.round(parseNum(document.getElementById('mp-faktor').value) * 10000) / 10000;
+    if (!(f > 0)) { document.getElementById('mp-faktor').focus(); return; }
+    const prods = window._produkter || [];
+    const ref = window._faktorTilbud;
+    // Posisjoner der selgeren allerede har satt egen faktor eller pris
+    const egne = prods.map((p, i) => i).filter(i => {
+      const el = document.getElementById('faktor_' + i);
+      if (!el) return false;
+      const v = parseNum(el.innerText.trim());
+      return ref && isFinite(v) && Math.abs(v - ref) > 0.00005;
+    });
+    let hvilke = prods.map((p, i) => i);
+    if (egne.length) {
+      const svar = await noraDialog({
+        tittel: 'Noen posisjoner har egen faktor',
+        tekst: `${egne.length} ${egne.length === 1 ? 'posisjon har' : 'posisjoner har'} fått egen faktor eller pris: ` +
+               egne.map(i => 'pos. ' + (i + 1)).join(', ') + '. Skal faktor ' + _tallTekst(f) + ' gjelde dem også?',
+        knapper: [ { tekst: 'Avbryt', verdi: null }, { tekst: 'Kun de øvrige', verdi: 'ovrige' }, { tekst: 'Alle posisjoner', verdi: 'alle', primar: true } ]
+      });
+      if (!svar) return;
+      if (svar === 'ovrige') hvilke = hvilke.filter(i => !egne.includes(i));
+    }
+    window._bulkEndring = true;
+    try {
+      hvilke.forEach(i => {
+        const el = document.getElementById('faktor_' + i);
+        if (!el) return;
+        el.innerText = _tallTekst(f);
+        oppdaterFaktor(i, el);
+      });
+    } finally { window._bulkEndring = false; }
+    // Én loggføring for hele operasjonen, ikke én per posisjon
+    logEndring('Alle posisjoner', 'Faktorpåslag (hele tilbudet)', ref ? String(ref) : '', String(f) + ' (' + hvilke.length + ' pos.)');
+    window._faktorTilbud = f; // posisjoner som avviker fra denne regnes som egne
+    lagreSelgerEndringerSnart();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DIALOG (v58) — liten modal som erstatter confirm() der vi trenger flere valg
+  // ══════════════════════════════════════════════════════════════════════════
+  function noraDialog({ tittel, tekst, html, knapper }) {
+    return new Promise(resolve => {
+      const bak = document.createElement('div');
+      bak.className = 'no-print';
+      bak.style.cssText = 'position:fixed;inset:0;background:rgba(10,14,30,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+      const boks = document.createElement('div');
+      boks.setAttribute('role', 'dialog'); boks.setAttribute('aria-modal', 'true');
+      boks.style.cssText = 'background:#fff;color:#1a2233;border-radius:10px;max-width:560px;width:100%;max-height:85vh;overflow:auto;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.35);font-size:14px;line-height:1.5;';
+      boks.innerHTML = `<div style="font-size:17px;font-weight:700;margin-bottom:10px;">${_escHtml(tittel)}</div>` +
+        (tekst ? `<div style="margin-bottom:12px;">${_escHtml(tekst)}</div>` : '') + (html || '') +
+        `<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;flex-wrap:wrap;"></div>`;
+      const rad = boks.lastElementChild;
+      const lukk = v => { document.removeEventListener('keydown', tast); bak.remove(); resolve(v); };
+      const tast = e => { if (e.key === 'Escape') lukk(null); };
+      knapper.forEach(k => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.textContent = k.tekst;
+        b.style.cssText = 'padding:9px 16px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600;' +
+          (k.primar ? 'background:#1a3a5c;color:#fff;border:1px solid #1a3a5c;' : 'background:#fff;color:#1a3a5c;border:1px solid #c5ccd8;');
+        b.onclick = () => lukk(typeof k.verdi === 'function' ? k.verdi(boks) : k.verdi);
+        rad.appendChild(b);
+      });
+      bak.appendChild(boks);
+      bak.addEventListener('mousedown', e => { if (e.target === bak) lukk(null); });
+      document.addEventListener('keydown', tast);
+      document.body.appendChild(bak);
+      const prim = rad.querySelector('button:last-child'); if (prim) prim.focus();
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SPRE TEKSTENDRING TIL IDENTISK TEKST I ANDRE POSISJONER (v58)
+  // Selgeren retter f.eks. Type i pos. 1. Finnes nøyaktig samme tekst i samme
+  // felt i andre posisjoner, spør vi før de endres. Kun spesifikasjonsfelt.
+  // ══════════════════════════════════════════════════════════════════════════
+  document.addEventListener('focusin', e => {
+    const t = e.target;
+    if (t && t.classList && t.classList.contains('spec-val') && t.isContentEditable) {
+      t.dataset.forRedigering = t.innerText.trim();
+    }
+  });
+  async function spreTekstendring(el, gammel, ny) {
+    const felt = el.getAttribute('data-felt');
+    const like = [...document.querySelectorAll('#offer-doc .spec-val.editable-val')].filter(o =>
+      o !== el && o.getAttribute('data-felt') === felt && o.innerText.trim() === gammel);
+    if (!like.length) return;
+    const pos = like.map(o => o.getAttribute('data-produkt'));
+    const html = `<div style="background:#f4f6fa;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:13px;">
+        <div style="color:#6b7a8d;">Fra</div><div style="text-decoration:line-through;color:#8a94a6;margin-bottom:6px;">${_escHtml(gammel)}</div>
+        <div style="color:#6b7a8d;">Til</div><div style="font-weight:600;">${_escHtml(ny)}</div></div>
+      <div style="margin-bottom:6px;">Samme tekst i «${_escHtml(felt)}» finnes i ${like.length} ${like.length === 1 ? 'annen posisjon' : 'andre posisjoner'}:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 14px;max-height:200px;overflow:auto;">` +
+      like.map((o, k) => `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" data-k="${k}" checked> Pos. ${_escHtml(pos[k])}</label>`).join('') + `</div>`;
+    const valgte = await noraDialog({
+      tittel: 'Endre samme tekst i flere posisjoner?', html,
+      knapper: [
+        { tekst: 'Bare denne posisjonen', verdi: null },
+        { tekst: 'Endre valgte', primar: true, verdi: boks => [...boks.querySelectorAll('input[data-k]:checked')].map(c => +c.dataset.k) }
+      ]
+    });
+    if (!valgte || !valgte.length) return;
+    window._sprerTekst = true;
+    try {
+      valgte.forEach(k => {
+        const o = like[k];
+        o.innerText = ny;
+        o.dataset.forRedigering = ny;
+        sjekkEndring(o);
+      });
+    } finally { window._sprerTekst = false; }
+  }
+
   function sjekkEndring(el) {
     const original = el.getAttribute('data-original');
     const ny = el.innerText.trim();
@@ -5630,6 +5893,13 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     } else if (ny === original) {
       el.removeAttribute('data-logged-from');
       if (markEl) markEl.style.display = 'none';
+    }
+    // Tilbudt spredning til identisk tekst i andre posisjoner (kun ved selgerens
+    // egen redigering, ikke når vi selv sprer — da ville den gått i ring).
+    const forRed = el.dataset ? el.dataset.forRedigering : undefined;
+    if (!window._sprerTekst && el.classList.contains('spec-val') && forRed != null && ny && forRed !== ny) {
+      el.dataset.forRedigering = ny;
+      spreTekstendring(el, forRed, ny);
     }
   }
 
