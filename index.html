@@ -1471,7 +1471,7 @@ ${klon.outerHTML}
   // Versjonsstyrt cache-rydding: rydder gammel rate-cache når app-versjon endres.
   // Forhindrer at nettleseren viser gammel fallback-kurs (11.20) etter kodeoppdatering.
   // Viktig: oppdater APP_VERSION ved hver ny deployment (f.eks. '2026-05-21-v1').
-  const APP_VERSION = '2026-10-05-v58';
+  const APP_VERSION = '2026-10-05-v59';
   try {
     if (localStorage.getItem('merkapital_app_version') !== APP_VERSION) {
       localStorage.removeItem(RATE_CACHE_KEY);
@@ -1769,7 +1769,7 @@ ${klon.outerHTML}
       // ("N (Xstk.)") eller V-anker (V1, V2 etc.) et sted under det på siden.
       // Tegningsetiketter (som "1","2" i V5-glassseksjoner) har ingen slike ankere under seg.
       const alleSluttAnkereTmp = items.filter(it =>
-        /^\d+\s*\(\d+\s*stk\.?\)$/i.test(it.str) && it.x < 0.40
+        /^\d+\s*\(\d+\s*(?:stk|pcs)\.?\)$/i.test(it.str) && it.x < 0.40
       );
       const alleVAnkereTmp = items.filter(it =>
         /^[VY][D]?\d+(?:\.\d+)?(?:\s*\+\s*\d+)*[a-z]?$/i.test(it.str) && it.x < 0.15
@@ -1807,12 +1807,13 @@ ${klon.outerHTML}
       // Finn slutt-ankere: "N (Xstk.)" — x < 0.35, passer mønsteret
       const alleSluttAnkere = items.filter(it => {
         // Matcher "1 (1stk.)", "2 (3stk.)", "3 (1stk.)" etc.
-        return /^\d+\s*\(\d+\s*stk\.?\)$/i.test(it.str) && it.x < 0.35;
+        return /^\d+\s*\(\d+\s*(?:stk|pcs)\.?\)$/i.test(it.str) && it.x < 0.35;
       });
 
       // Spec-labels brukes til å finne høyre grense per produkt (beregnes per produkt nedenfor)
       const specLabels = ['Type', 'Tresort', 'Glass', 'Malingfarge', 'Rammer', 'Sprosser',
-                          'Bunnglasslist', 'Pakninger', 'Glassforsegling', 'Håndtak', 'Hengsler', 'Beslag'];
+                          'Bunnglasslist', 'Pakninger', 'Glassforsegling', 'Håndtak', 'Hengsler', 'Beslag',
+                          'Wood', 'Color', 'Frames/hardware', 'Glazing bars', 'Bottomframe', 'Gaskets', 'Glass sealing'];
       const specItemsSide = items.filter(it =>
         it.x > 0.15 && specLabels.some(l => it.str === l || it.str === l + ':' ||
           it.str.startsWith(l + ':') || it.str.startsWith(l + ' '))
@@ -2273,9 +2274,9 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       if (!kadr     && (r = ln.match(/^(?:Address|Adresse):\s*(.+)/i)))   kadr = r[1].trim();
       if (!mob      && (r = ln.match(/^(?:Mobile|Mob)\.?:\s*(.+)/i)))     mob = r[1].trim().replace(/^\+47\s*/, '');
       if (!epost    && (r = ln.match(/^E-?mail:\s*(.+)/i)))              epost = r[1].trim();
-      if ((r = ln.match(/Rabatt[,\s%]+(\d+(?:[.,]\d+)?)\s*%/i)))        rabatt = Math.round(parseFloat(r[1].replace(',','.')));
-      if ((r = ln.match(/Gjennomsnittlig U-verdi[^:]*:\s*([\d.]+)/i)))  uvVal = parseFloat(r[1]);
-      if ((r = ln.match(/Total vekt:\s*([\d\s]+)\s*kg/i)))              vektVal = parseInt(r[1].replace(/\s/g,''));
+      if ((r = ln.match(/(?:Rabatt|Discount)[,\s%]+(\d+(?:[.,]\d+)?)\s*%/i)))        rabatt = Math.round(parseFloat(r[1].replace(',','.')));
+      if ((r = ln.match(/(?:Gjennomsnittlig U-verdi|Average U-value)[^:]*:\s*([\d.]+)/i)))  uvVal = parseFloat(r[1]);
+      if ((r = ln.match(/(?:Total vekt|Total weight):\s*([\d\s]+)\s*kg/i)))              vektVal = parseInt(r[1].replace(/\s/g,''));
     }
 
     // ── FINN PRODUKTBLOKKER ──────────────────────────────────────────────────
@@ -2568,7 +2569,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     // Etikettene finnes i to språkvarianter fra fabrikken. De norske må stå FØR de
     // kortere norske i alternasjonen (Glassforsegling før Glass, Gjennomgående
     // sprosse bredder før Sprosser), ellers spiser det korte navnet det lange.
-    const LBL = '(Glass\\s+sealing|Glassforsegling|Glazing\\s+bars|Continuous\\s+bar\\s+widths|Gjennomg\u00e5ende\\s+sprosse\\s+bredder|Sprosser|Type|Wood|Tresort|Color|Malingfarge|Glass|Frames\\s*\\/\\s*hardware|Rammer\\s*\\/\\s*beslag|Bottomframe|Bunnglasslist|Gaskets|Pakninger|Lining\\s+groove|Not\\s+for\\s+foringer|Bottom\\s+groove|Spor\\s+i\\s+underkant|ventilasjon|D\u00f8rterskel)';
+    const LBL = '(Glass\\s+sealing|Glassforsegling|Glazing\\s+bars|Continuous\\s+bar\\s+widths|Gjennomg\u00e5ende\\s+sprosse\\s+bredder|Sprosser|Type|Wood|Tresort|Color|Malingfarge|Glass|Frames\\s*\\/\\s*hardware|Rammer\\s*\\/\\s*beslag|Bottomframe|Bunnglasslist|Gaskets|Pakninger|Lining\\s+groove|Not\\s+for\\s+foringer|Bottom\\s+groove|Spor\\s+i\\s+underkant|ventilasjon|D\u00f8rterskel|Door\\s+sill)';
     const FIELD_RE      = new RegExp('^' + LBL + '\\s*:', 'i');
     // Same labels, unforankret — for å plukke ut felt-etiketter midt i en linje
     const FIELD_EMBED   = new RegExp('(?:^|\\s)' + LBL + '\\s*:', 'i');
@@ -2585,6 +2586,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       'glassforsegling': 'glass sealing',
       'not for foringer': 'lining groove',
       'spor i underkant': 'bottom groove',
+      'door sill': 'd\u00f8rterskel',
     };
     const kanonisk = (l) => LABEL_ALIAS[l] || l;
 
@@ -2632,14 +2634,14 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     // derfor sammen til én linje. Skrelles prefikset ikke av, lekker det inn i
     // spesifikasjonene: "Pakninger: Grå V12", "Åpningsretning: ... sølv kroker".
     // Observert i norske fabrikktilbud.
-    const SETT_FRA_RE  = /^Sett fra\s+[^,]+,\s*sl(?:år\s+\S+|\S*)/i;
-    const SETT_FRA_ALT = /^Sett fra\s+\S+/i;
+    const SETT_FRA_RE  = /^(?:Sett fra\s+[^,]+,\s*sl(?:år\s+\S+|\S*)|Seen from\s+[^,]+,\s*opens(?:\s+(?:inward|outward)\b)?)/i;
+    const SETT_FRA_ALT = /^(?:Sett fra|Seen from)\s+\S+/i;
     const skrellVenstre = (ln) => {
       let s = ln, endret = true;
       while (endret && s) {
         endret = false;
         let m;
-        if ((m = s.match(/^\d+\s*\(\d+\s*stk\.?\)\s*/i))) {
+        if ((m = s.match(/^\d+\s*\(\d+\s*(?:stk|pcs)\.?\)\s*/i))) {
           s = s.slice(m[0].length); endret = true;
         } else if ((m = s.match(SETT_FRA_RE) || s.match(SETT_FRA_ALT))) {
           if (!rf['seen_from']) rf['seen_from'] = m[0].trim();
@@ -2653,7 +2655,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       }
       return s.trim();
     };
-    const NOISE_RE = /^(Price, EUR|Pris, EUR|Qty|Antall|Sum, EUR|Weight|Vekt\b|Uw <=|\d{6,}|\d+ \/ \d+|Alle priser|Vilkår|Villkår|Manager|Qty\.:|m2:|stk\.:|Total ekskl|Totalt inkl|Totalsum|Rabatt|Gjennomsnittlig|Total vekt|Leveringsadresse|Kunde:|Kontaktperson:|Prosjekt|Adresse:|Mob\.|E-?mail:|TILBUD Nr)/i;
+    const NOISE_RE = /^(Price, EUR|Pris, EUR|Qty|Antall|Sum, EUR|Weight|Vekt\b|Uw <=|\d{6,}|\d+ \/ \d+|Alle priser|Vilkår|Villkår|Manager|Qty\.:|m2:|stk\.:|Total ekskl|Totalt inkl|Totalsum|Rabatt|Gjennomsnittlig|Total vekt|Leveringsadresse|Kunde:|Kontaktperson:|Prosjekt|Adresse:|Mob\.|E-?mail:|TILBUD Nr|Delivery address|Customer:|Contact:|Project|Address:|Mobile|Offer\s+\d|Total excl|Total incl|Grand total|Discount|Average U-value|Total weight|All prices|Terms and)/i;
     // Fabrikkens interne produksjonsmerknader. De står på engelsk i et ellers
     // norsk tilbud, gjelder fabrikkens egne forbehold, og skal IKKE ut til
     // sluttkunde. Uten dette filteret ble de hengt bakpå forrige spesifikasjon
@@ -2663,7 +2665,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     // aldri denne funksjonen. I det engelske formatet er "Painted hinges RAL9010"
     // derimot en ekte hengselspesifikasjon, som filteret ville slettet.
     const FABRIKKNOTAT_RE = /^(Sash(es)? (is|are) too high|Sash(es)? (is|are) too small|Changed opening type|Window is too small|Frame in the top|Sashes? too high|-{5,})/i;
-    const STK_RE   = /^\d+\s*\(\d+\s*stk\.?\)/i;
+    const STK_RE   = /^\d+\s*\(\d+\s*(?:stk|pcs)\.?\)/i;
 
     // Fix 1: Fjern posisjons-nr fra første linje: "1 Type: VALUE" → "Type: VALUE"
     const processedLines = blockLines.map((ln, i) =>
@@ -2924,7 +2926,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     // Dørtilbud samler beslag, hengsler, håndtak og lås i én lang linje. Uten egne
     // brytepunkter for hengsler/lås havnet alt sammen i Håndtak-feltet på engelsk.
     const parts = raw
-      .split(/(?=\d+\s*x\s+|Painted hinges|Door hinges|ZINI|Friction brake|Brake via handle|(?<!window\s)Handle\s+[A-Z\d]|Ingarö\s+window\s+handle|(?<!Ingarö\s)Window\s+handle|Child\s+safety\s+device|WH-TT\d+|WH-BP\d+|Concealed\s+hinges|hengselhetter|Dekorative\s+hjørner|låsekasse|Handle set|ASSA handle|Lift-and-slide handle|Kick plate|White hooks?|Telescopic ventilation|Routing|M\d{4}\b|\d\s*[-\s]?point lock|Pattern only|Lakkerte\s+(?:dør\s+)?hengsler|ZINI\s+hengsler|sølv\s+kroker|hvite\s+kroker|Brems via håndtak|Friksjonsstay|Lås:|Håndtak\s|ASSA\s+Espagnolette|Clickvent|Teleskopventil)/i)
+      .split(/(?=\d+\s*x\s+|Painted hinges|Door hinges|ZINI|Friction brake|Brake via handle|(?<!window\s)Handle\s+[A-Z\d]|Ingarö\s+window\s+handle|(?<!Ingarö\s)Window\s+handle|Child\s+safety\s+device|WH-TT\d+|WH-BP\d+|Concealed\s+hinges|hengselhetter|Dekorative\s+hjørner|låsekasse|Handle set|ASSA handle|Lift-and-slide handle|Kick plate|White hooks?|Telescopic ventilation|Routing|M\d{4}\b|\d\s*[-\s]?point lock|Pattern only|Lakkerte\s+(?:dør\s+)?hengsler|ZINI\s+hengsler|sølv\s+kroker|hvite\s+kroker|Brems via håndtak|Friksjonsstay|Lås:|Håndtak\s|ASSA\s+Espagnolette|Clickvent|Teleskopventil|Hinge\s+caps|Decorative\s+corners|Lock\s+case|Silver\s+hooks|Handles\s+on\s+both\s+sides)/i)
       .map(p => p.trim()).filter(p => p);
     const beslagItems = [];
     const leggTil = (felt, v) => { if (v) res[felt] = res[felt] ? res[felt] + ', ' + v : v; };
@@ -2951,6 +2953,18 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       }
       if (/^Concealed\s+hinges/i.test(part)) { leggTil('hengsler', part.replace(/^Concealed\s+hinges/i, 'Skjulte hengsler').trim()); continue; }
       if (/^Dekorative\s+hjørner/i.test(part)) { beslagItems.push(part.trim()); continue; }
+      // Engelske varianter av de samme delene (helt engelske fabrikktilbud, v59)
+      if (/^Hinge\s+caps/i.test(part)) {
+        leggTil('hengsler', part.replace(/^Hinge\s+caps\s*:?\s*/i, 'Hengselhetter: ').replace(/\bwhite\b/i, 'hvit').trim());
+        continue;
+      }
+      if (/^Decorative\s+corners/i.test(part)) {
+        beslagItems.push(part.replace(/^Decorative\s+corners/i, 'Dekorative hjørner').replace(/\bpainted\b/i, 'malt').replace(/\s{2,}/g, ' ').trim());
+        continue;
+      }
+      if (/^Lock\s+case/i.test(part)) { leggTil('las', part.replace(/^Lock\s+case/i, 'Låsekasse').trim()); continue; }
+      if (/^Silver\s+hooks/i.test(part)) { leggTil('hengsler', 'Sølv kroker'); continue; }
+      if (/^Handles\s+on\s+both\s+sides/i.test(part)) { leggTil('handtak', 'På begge sider'); continue; }
       if (/^låsekasse/i.test(part)) { leggTil('las', part.replace(/^låsekasse/i, 'Låsekasse').trim()); continue; }
       // ── Norske brytepunkter (fabrikkens norske tilbudsformat) ──────────
       if (/^Lakkerte\s+(?:dør\s+)?hengsler/i.test(part) || /^ZINI\s+hengsler/i.test(part)) {
