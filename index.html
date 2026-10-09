@@ -670,6 +670,7 @@
   // brukersesjon. De gamle ?key=&ghtoken=&ghrepo=-parametrene er utfaset.
   const SB_URL = 'https://nykvylfvouwmoclraxqu.supabase.co';
   const SB_KEY = 'sb_publishable_x-8Q-9gRRnw144STE1QCwA_zHfrE9_P';
+  const NORA_MAKS_SESJON_MS = 12 * 60 * 60 * 1000; // maks levetid for en innlogging
   const NORA_SESS_KEY = 'nora_sesjon'; // delt med admin.html — én innlogging gjelder begge
 
   let NORA_SESJON = null; // {access_token, refresh_token, expires_at, epost, rolle}
@@ -698,6 +699,12 @@
   async function noraGyldigToken() {
     if (!NORA_SESJON) noraLastSesjon();
     if (!NORA_SESJON || !NORA_SESJON.refresh_token) return null;
+    // Innlogging varer maks 12 timer, deretter må brukeren logge inn på nytt.
+    if (!NORA_SESJON.innlogget_at || Date.now() - NORA_SESJON.innlogget_at > NORA_MAKS_SESJON_MS) {
+      try { localStorage.removeItem(NORA_SESS_KEY); } catch(e) {}
+      NORA_SESJON = null;
+      return null;
+    }
     if (Date.now() / 1000 < (NORA_SESJON.expires_at || 0) - 60) return NORA_SESJON.access_token;
     try {
       const r = await fetch(SB_URL + '/auth/v1/token?grant_type=refresh_token', {
@@ -6544,7 +6551,8 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       refresh_token: d.refresh_token,
       expires_at:    Math.floor(Date.now() / 1000) + (d.expires_in || 3600),
       epost:         (d.user && d.user.email) || epost,
-      rolle:         'bruker'
+      rolle:         'bruker',
+      innlogget_at:  Date.now()
     };
 
     try {

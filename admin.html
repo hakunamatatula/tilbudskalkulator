@@ -305,6 +305,8 @@ async function auth(path, body, token){
 
 async function gyldigSesjon(){
   if(!sesjon) return null;
+  // Innlogging varer maks 12 timer (delt med kalkulatoren)
+  if(!sesjon.innlogget_at || Date.now() - sesjon.innlogget_at > 12*60*60*1000){ loggUt(); return null; }
   if(Date.now()/1000 < sesjon.expires_at - 60) return sesjon;
   try{
     const d = await auth('/token?grant_type=refresh_token', {refresh_token: sesjon.refresh_token});
@@ -334,7 +336,7 @@ async function api(path, opts={}){
 async function loggInn(){
   try{
     const d = await auth('/token?grant_type=password', {email:$('inn-epost').value.trim(), password:$('inn-passord').value});
-    settSesjon(d); await startApp();
+    sesjon = {innlogget_at: Date.now()}; settSesjon(d); await startApp();
   }catch(e){ meld('inn-melding','Innlogging feilet: '+e.message,'feil'); }
 }
 
@@ -987,7 +989,7 @@ function visLogg(){
   const hash = new URLSearchParams(location.hash.slice(1));
   if(hash.get('access_token') && ['invite','recovery','signup'].includes(hash.get('type'))){
     sesjon = {access_token:hash.get('access_token'), refresh_token:hash.get('refresh_token'),
-              expires_at: Math.floor(Date.now()/1000)+3600};
+              expires_at: Math.floor(Date.now()/1000)+3600, innlogget_at: Date.now()};
     localStorage.setItem(LAGER, JSON.stringify(sesjon));
     return vis('view-passord');
   }
