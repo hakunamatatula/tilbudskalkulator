@@ -485,6 +485,11 @@
   <div class="login-box">
     <div class="login-logo">Nora AI</div>
     <div class="login-sub">Tilbudskalkulator — Logg inn</div>
+    <div id="kjop-ok-banner" style="display:none;background:#e8f5ec;border:1px solid #9fd3ae;color:#1d5a30;border-radius:8px;padding:14px;margin-bottom:14px;font-size:13px;line-height:1.6;">
+      <strong>Takk for kjøpet!</strong><br>
+      Vi har sendt en e-post med en lenke der du velger passord. Sjekk innboksen (og søppelpost) hos deg. Har du allerede satt passord, logger du bare inn under.
+      Får du ikke e-posten innen noen minutter, send en melding til <a href="mailto:nora@noraai.no" style="color:#1d5a30;">nora@noraai.no</a>, så hjelper vi deg.
+    </div>
     <div class="field"><div class="label">E-post</div>
       <input type="email" id="login-email" placeholder="din@epost.no" autocomplete="username"
         onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()" /></div>
@@ -514,6 +519,24 @@
     <span id="innlogget-info" style="font-size:12px;color:var(--dim);"></span>
     <button onclick="loggUt()" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:0.06em;text-transform:uppercase;">Logg ut</button>
     <span style="font-size:10px;color:var(--dim);opacity:0.7;">v3</span>
+  </div>
+</div>
+
+<div class="no-print" id="kom-i-gang" style="display:none;max-width:980px;margin:16px auto 0;padding:0 16px;">
+  <div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;">
+    <button onclick="lukkKomIGang()" title="Skjul" aria-label="Skjul" style="position:absolute;top:10px;right:12px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;">×</button>
+    <div style="font-weight:700;font-size:16px;margin-bottom:4px;">Velkommen til Nora AI. Kom i gang på 4 steg</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Mål: du har ditt første ferdige tilbud i løpet av 15 minutter.</div>
+    <ol style="margin:0 0 12px 18px;padding:0;font-size:14px;line-height:1.8;">
+      <li>Last opp prislisten eller tilbudet du har fra leverandøren (PDF).</li>
+      <li>Kontroller linjene Nora har lest ut, og rett det som ikke stemmer.</li>
+      <li>Legg inn påslag og frakt, og se salgsprisen.</li>
+      <li>Last ned tilbudet som PDF og send det til kunden.</li>
+    </ol>
+    <div style="font-size:13px;color:var(--muted);line-height:1.6;">
+      <strong>Tips:</strong> Start med en fil du kjenner svaret på, så ser du raskt at tallene stemmer.
+      Trenger du hjelp? <a href="https://meetings-eu1.hubspot.com/marius-nielsen2" target="_blank" rel="noopener" style="color:var(--accent);">Book en gratis oppstartssamtale</a> eller skriv til <a href="mailto:nora@noraai.no" style="color:var(--accent);">nora@noraai.no</a>.
+    </div>
   </div>
 </div>
 
@@ -6586,6 +6609,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
 
     await synkKundeKontekst();
     oppdaterLogoPreview();
+    visKomIGang();
   }
 
   /** Logg ut: slett sesjon og vis login-overlay. */
@@ -6638,6 +6662,29 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
     oppdaterLogoPreview();
   }
 
+  /** Velkomstløype: vises til brukeren skjuler den. */
+  function visKomIGang() {
+    const el = document.getElementById('kom-i-gang');
+    if (!el) return;
+    let skjult = false;
+    try { skjult = localStorage.getItem('nora_kom_i_gang_skjult') === '1'; } catch(e) {}
+    el.style.display = skjult ? 'none' : 'block';
+  }
+  function lukkKomIGang() {
+    try { localStorage.setItem('nora_kom_i_gang_skjult', '1'); } catch(e) {}
+    const el = document.getElementById('kom-i-gang');
+    if (el) el.style.display = 'none';
+  }
+  // Takk-banner etter kjøp (success_url ...?kjop=ok)
+  (function() {
+    try {
+      if (new URLSearchParams(location.search).get('kjop') === 'ok') {
+        const b = document.getElementById('kjop-ok-banner');
+        if (b) b.style.display = 'block';
+      }
+    } catch(e) {}
+  })();
+
   /** Sjekk innlogging ved sideinnlasting (Supabase-sesjon). */
   (async function sjekkInnlogging() {
     // Recovery-/invitasjonslenke fra e-post? Send videre til sett-passord-siden
@@ -6680,6 +6727,7 @@ Svar KUN med kompakt JSON (ingen mellomrom/linjeskift i strenger):
       const innloggetEl = document.getElementById('innlogget-info');
       if (innloggetEl) innloggetEl.textContent = `${NORA_SESJON.epost} (${NORA_SESJON.rolle || 'bruker'})`;
       oppdaterLogoPreview();
+      visKomIGang();
       return;
     }
     if (overlay) { overlay.style.display = 'flex'; overlay.classList.add('show'); }
