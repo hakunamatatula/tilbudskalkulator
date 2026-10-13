@@ -30,6 +30,12 @@
   .kort{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;margin-bottom:18px}
   .melding{padding:10px 14px;border-radius:8px;margin:10px 0;font-size:14px;display:none}
   .melding.ok{display:block;background:#EAF6EC;color:#2d6a4f}
+  .melding.grense{display:block;background:#FFF8E6;color:#4a3b00;border:1px solid #F0D58A;border-left:5px solid #E0A800;padding:16px 18px;white-space:normal}
+  .melding.grense h4{margin:0 0 6px;font-size:15px;color:#4a3b00}
+  .melding.grense p{margin:0 0 12px;font-size:14px;line-height:1.55}
+  .melding.grense .grense-knapper{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .melding.grense a.btn{text-decoration:none;display:inline-block}
+  .melding.grense .lukk{background:none;border:none;color:#4a3b00;text-decoration:underline;cursor:pointer;font-size:13px;padding:0}
   .melding.feil{display:block;background:#FDECEA;color:#B3261E;white-space:pre-wrap;word-break:break-word}
   table{width:100%;border-collapse:collapse;font-size:13.5px}
   th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);text-align:left;padding:8px 10px;border-bottom:2px solid var(--border)}
@@ -290,6 +296,20 @@ function lesFabrikkBokser(klasse){
 // ── Hjelpere ──────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 function vis(id){ ['view-login','view-passord','view-app'].forEach(v => $(v).hidden = v!==id); }
+function visGrenseKort(){
+  const el = $('app-melding');
+  el.className = 'melding grense';
+  el.innerHTML =
+    '<h4>Alle brukerplassene er i bruk</h4>'+
+    '<p>Abonnementet ditt har plass til det antallet brukere dere betaler for, og alle plassene er tatt. '+
+    'Legg til en ekstra bruker i kundeportalen, så kan du invitere kollegaen din med en gang.</p>'+
+    '<div class="grense-knapper">'+
+    '<a class="btn" href="https://billing.stripe.com/p/login/bJe6oB5xGeET2D09ob7Zu00" target="_blank" rel="noopener">Legg til brukere</a>'+
+    '<a class="btn btn-ghost" href="mailto:nora@noraai.no?subject=Flere%20brukere%20i%20Tilbudskalkulatoren">Spør oss om hjelp</a>'+
+    '<button type="button" class="lukk" onclick="document.getElementById(\'app-melding\').className=\'melding\'">Lukk</button>'+
+    '</div>';
+  el.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
 function meld(id, tekst, type){ const el=$(id); el.textContent=tekst; el.className='melding '+(type||'ok'); if(type!=='feil') setTimeout(()=>{el.className='melding'},4000); }
 function esc(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function jwtSub(t){ try{ return JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).sub; }catch{ return null; } }
@@ -329,7 +349,13 @@ async function api(path, opts={}){
     Prefer:'return=representation', ...(opts.headers||{})
   }});
   if(r.status===401){ loggUt(); throw new Error('Sesjonen er utløpt — logg inn på nytt'); }
-  if(!r.ok) throw new Error(await r.text());
+  if(!r.ok){
+    const tekst = await r.text();
+    let d = null; try{ d = JSON.parse(tekst); }catch(_){}
+    const err = new Error((d && (d.error || d.message || d.msg)) || tekst || ('Ukjent feil ('+r.status+')'));
+    if(d && d.grense_naadd) err.grense = true;
+    throw err;
+  }
   const t = await r.text(); return t ? JSON.parse(t) : null;
 }
 
@@ -595,7 +621,7 @@ async function inviterBruker(){
     visInviteLenke(epost, r.invite_lenke||'', !!r.epost_sendt, r.epost_feil||'');
     if(r.epost_sendt) meld('app-melding','Invitasjon sendt til '+epost+'.');
     else meld('app-melding','Brukeren er opprettet, men e-posten gikk ikke ut. Send lenken under til '+epost+'.','feil');
-  }catch(e){ meld('app-melding',e.message,'feil'); }
+  }catch(e){ if(e.grense) visGrenseKort(); else meld('app-melding',e.message,'feil'); }
 }
 
 // ── Invitasjonslenke ──────────────────────────────────────────────────────
