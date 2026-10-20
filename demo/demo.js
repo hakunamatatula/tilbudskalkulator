@@ -8,6 +8,7 @@
   var EKS = BASE + 'Eksempeltilbud-Produsent.pdf';
   var RABATT = 0.35;
   var faktor = 11.5, utenPriser = false;
+  var kurs = null, kursDato = '', kursKilde = '', modus = 'faktor';
 
   var LOGO = 'data:image/svg+xml;utf8,' + encodeURIComponent(
     "<svg xmlns='http://www.w3.org/2000/svg' width='220' height='60' viewBox='0 0 220 60'><rect x='2' y='8' width='40' height='44' rx='3' fill='none' stroke='#1a3a5c' stroke-width='4'/><line x1='22' y1='8' x2='22' y2='52' stroke='#1a3a5c' stroke-width='3'/><line x1='2' y1='30' x2='42' y2='30' stroke='#1a3a5c' stroke-width='3'/><text x='54' y='28' font-family='Arial,sans-serif' font-size='19' font-weight='700' fill='#1a3a5c'>Eksempel</text><text x='54' y='48' font-family='Arial,sans-serif' font-size='19' fill='#1a3a5c'>Vinduer AS</text></svg>");
@@ -109,18 +110,22 @@
 
   // Kontroller
   var st = document.createElement('style');
-  st.textContent = '.dk-bar{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end;background:#faf8f5;border:1px solid #e3ddd6;border-radius:14px;padding:16px 18px;margin:16px 0}.dk-g{display:flex;flex-direction:column;gap:5px}.dk-g label,.dk-l{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.75}.dk-g input{width:90px;font-size:16px;padding:9px 10px;border:1px solid #b9b2a8;border-radius:8px;background:#fff}.dk-seg{display:inline-flex;border:1px solid #21263e;border-radius:999px;overflow:hidden}.dk-seg button{border:0;background:#fff;color:#21263e;padding:11px 18px;font-size:15px;font-weight:700;cursor:pointer}.dk-seg button.on{background:#21263e;color:#fff}.dk-pr{background:#e0654f;color:#fff;border:0;border-radius:999px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer}.dk-pr:hover{background:#c9533e}.dk-tip{flex:1 1 100%;font-size:14px;opacity:.85;margin:0}.dk-ramme{border:1px solid #e3ddd6;border-radius:14px;overflow:hidden;background:#fff}.dk-ramme iframe{display:block;width:100%;border:0;min-height:200px}.dk-cta{background:#fff5f2;border:1px solid #f0c9c0;border-radius:14px;padding:18px 20px;margin-top:14px}.dk-cta p{margin:0 0 12px}.dk-cta .knapp{margin:0 10px 8px 0}@media(max-width:600px){.dk-seg button{padding:10px 12px;font-size:14px}}';
+  st.textContent = '.dk-bar{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end;background:#faf8f5;border:1px solid #e3ddd6;border-radius:14px;padding:16px 18px;margin:16px 0}.dk-g{display:flex;flex-direction:column;gap:5px}.dk-g label,.dk-l{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.75}.dk-g input{width:90px;font-size:16px;padding:9px 10px;border:1px solid #b9b2a8;border-radius:8px;background:#fff}.dk-seg{display:inline-flex;border:1px solid #21263e;border-radius:999px;overflow:hidden}.dk-seg button{border:0;background:#fff;color:#21263e;padding:11px 18px;font-size:15px;font-weight:700;cursor:pointer}.dk-seg button.on{background:#21263e;color:#fff}.dk-pr{background:#e0654f;color:#fff;border:0;border-radius:999px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer}.dk-pr:hover{background:#c9533e}.dk-tip{flex:1 1 100%;font-size:14px;opacity:.85;margin:0}.dk-hint{font-size:12px;opacity:.75;max-width:200px}.dk-kurs{flex:1 1 100%;font-size:14px;margin:0;padding-top:12px;border-top:1px solid #e3ddd6}.dk-kurs span{display:block;font-size:13px;opacity:.75;margin-top:3px}.dk-seg button:disabled{opacity:.4;cursor:not-allowed}.dk-ramme{border:1px solid #e3ddd6;border-radius:14px;overflow:hidden;background:#fff}.dk-ramme iframe{display:block;width:100%;border:0;min-height:200px}.dk-cta{background:#fff5f2;border:1px solid #f0c9c0;border-radius:14px;padding:18px 20px;margin-top:14px}.dk-cta p{margin:0 0 12px}.dk-cta .knapp{margin:0 10px 8px 0}@media(max-width:600px){.dk-seg button{padding:10px 12px;font-size:14px}}';
   document.head.appendChild(st);
 
   function el(t, c, x) { var e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; }
   var bar = el('div', 'dk-bar');
+  var gM = el('div', 'dk-g'); gM.appendChild(el('span', 'dk-l', 'Beregn med'));
+  var segM = el('div', 'dk-seg'); var m1 = el('button', 'on', 'Faktor'), m2 = el('button', null, 'Fortjeneste %'); m1.type = m2.type = 'button'; segM.appendChild(m1); segM.appendChild(m2); gM.appendChild(segM);
   var gF = el('div', 'dk-g'); var lf = el('label', null, 'Faktor'); lf.setAttribute('for', 'dk-faktor');
   var inp = el('input'); inp.id = 'dk-faktor'; inp.type = 'text'; inp.inputMode = 'decimal'; inp.value = '11,5'; gF.appendChild(lf); gF.appendChild(inp);
+  var hint = el('span', 'dk-hint'); gF.appendChild(hint);
   var gV = el('div', 'dk-g'); gV.appendChild(el('span', 'dk-l', 'Visning'));
   var seg = el('div', 'dk-seg'); var b1 = el('button', 'on', 'Med priser'), b2 = el('button', null, 'Uten priser'); b1.type = b2.type = 'button'; seg.appendChild(b1); seg.appendChild(b2); gV.appendChild(seg);
   var pr = el('button', 'dk-pr', 'Skriv ut / Lagre som PDF'); pr.type = 'button';
-  var tip = el('p', 'dk-tip', 'Prøv selv: endre faktoren og se prisene regnes om med en gang. Er du forhandler eller montør, velger du «Uten priser» når tilbudet skal til sluttkunden. Da skjules alle priser og summer, men spesifikasjonene står igjen.');
-  bar.appendChild(gF); bar.appendChild(gV); bar.appendChild(pr); bar.appendChild(tip);
+  var tip = el('p', 'dk-tip', 'Prøv selv: endre faktoren, eller velg i stedet hvor stor fortjeneste du vil ha, og se prisene regnes om med en gang. Er du forhandler eller montør, velger du «Uten priser» når tilbudet skal til sluttkunden. Da skjules alle priser og summer, men spesifikasjonene står igjen.');
+  var kursP = el('p', 'dk-kurs', 'Henter dagens kurs ...');
+  bar.appendChild(gM); bar.appendChild(gF); bar.appendChild(gV); bar.appendChild(pr); bar.appendChild(kursP); bar.appendChild(tip);
   var ramme = el('div', 'dk-ramme'); var fr = document.createElement('iframe'); fr.title = 'Eksempel på ferdig tilbud'; ramme.appendChild(fr);
   var lenke = el('p', 'dm-note'); lenke.appendChild(document.createTextNode('Slik så leverandørtilbudet ut (engelsk, euro): '));
   var a = el('a', null, 'åpne eksempeltilbudet som PDF'); a.href = EKS; a.target = '_blank'; a.rel = 'noopener'; lenke.appendChild(a);
@@ -149,9 +154,42 @@
   function sett(u) { utenPriser = u; b1.className = u ? '' : 'on'; b2.className = u ? 'on' : ''; tegn(); }
   b1.addEventListener('click', function () { sett(false); });
   b2.addEventListener('click', function () { sett(true); });
+  function tall(n, d) { return n.toLocaleString('nb-NO', { minimumFractionDigits: 0, maximumFractionDigits: d }); }
+  function datoNo(iso) { var p = String(iso).split('-'); return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : ''; }
+  // Fortjeneste i prosent av salgspris, slik den vises i den fulle appen: (salg - kost) / salg
+  function oppdaterHint() {
+    if (!kurs) { hint.textContent = ''; return; }
+    hint.textContent = modus === 'faktor'
+      ? 'Gir fortjeneste ' + tall(100 * (1 - kurs / faktor), 1) + ' % av salgsprisen'
+      : 'Tilsvarer faktor ' + tall(faktor, 2);
+  }
+  function settModus(m) {
+    if (m === 'fortjeneste' && !kurs) return;
+    modus = m; m1.className = m === 'faktor' ? 'on' : ''; m2.className = m === 'fortjeneste' ? 'on' : '';
+    lf.textContent = m === 'faktor' ? 'Faktor' : 'Fortjeneste i %';
+    inp.value = m === 'faktor' ? tall(faktor, 2) : tall(100 * (1 - kurs / faktor), 1);
+    oppdaterHint();
+  }
+  m1.addEventListener('click', function () { settModus('faktor'); });
+  m2.addEventListener('click', function () { settModus('fortjeneste'); });
+  m2.disabled = true;
   inp.addEventListener('input', function () {
     var v = parseFloat(String(inp.value).replace(',', '.'));
-    if (isFinite(v) && v > 0 && v < 100) { faktor = v; tegn(); }
+    if (!isFinite(v)) return;
+    if (modus === 'faktor') { if (v > 0 && v < 100) faktor = v; else return; }
+    else { if (v >= 0 && v < 90) faktor = kurs / (1 - v / 100); else return; }
+    oppdaterHint(); tegn();
+  });
+  fetch('https://app.noraai.no/rate.json?' + new Date().toISOString().slice(0, 10)).then(function (r) { return r.json(); }).then(function (j) {
+    var r = parseFloat(j.rate);
+    if (!isFinite(r) || r < 5 || r > 30) throw new Error('ugyldig kurs');
+    kurs = r; kursDato = j.date || ''; kursKilde = j.source === 'norges-bank' ? 'Norges Bank' : '';
+    kursP.textContent = '';
+    kursP.appendChild(document.createTextNode('Dagens valutakurs: 1 euro = ' + tall(kurs, 4) + ' kr' + (kursKilde || kursDato ? ' (' + [kursKilde, datoNo(kursDato)].filter(Boolean).join(', ') + ')' : '') + '. Fortjenesten regnes mot denne kursen.'));
+    kursP.appendChild(el('span', null, 'Eksempelet er i euro. I den fulle versjonen kan du velge en annen valuta, men det er ikke mulig i testversjonen.'));
+    m2.disabled = false; oppdaterHint();
+  }).catch(function () {
+    kursP.textContent = 'Dagens kurs kunne ikke hentes akkurat nå, så valget Fortjeneste % er ikke tilgjengelig. Eksempelet er i euro. I den fulle versjonen kan du velge en annen valuta, men det er ikke mulig i testversjonen.';
   });
   pr.addEventListener('click', function () { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { window.print(); } });
 })();
